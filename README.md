@@ -86,41 +86,25 @@ Identity, in this system, is the pattern that emerges from recorded data — not
 ## Architecture
 
 ```
-Vegapunk Kernel (vegapunk.js)
-├── routes/auth.js       — JWT auth, sessions, multi-tenant
-├── routes/books.js      — CRUD, messages, search, export
-├── routes/inpipe.js     — WhatsApp + LINE + Telegram inpipe (channel-agnostic)
-└── routes/nyan-ai.js    — AI playground, audit, Psi-EMA, diagnostics
-
-lib/channels/
-├── base.js              — Abstract channel interface
-├── twilio.js            — WhatsApp (reply-capable)
-├── line.js              — LINE OA (listen-only)
-└── telegram.js          — Telegram Bot API (reply-capable, /start JOINCODE deep-link join)
+Vegapunk Kernel
+├── Auth           — JWT auth, sessions, multi-tenant
+├── Books          — CRUD, messages, search, export
+├── Inpipe         — WhatsApp + LINE + Telegram (channel-agnostic)
+└── AI             — Playground, audit, Psi-EMA, diagnostics
 
 Discord Bots (4 specialized, least-privilege):
-├── hermes-bot.js        — Thread creation + message relay (write)
-├── thoth-bot.js         — Message mirroring to ledger threads (write)
-├── idris-bot.js         — AI audit write (write)
-└── horus-bot.js         — AI audit read (read)
+├── Hermes         — Thread creation + message relay (write)
+├── Thoth          — Message mirroring to ledger threads (write)
+├── Idris          — AI audit write (write)
+└── Horus          — AI audit read (read)
 ```
 
 Each bot holds only the permissions its role requires.
 Hermes and Thoth write. Idris writes audit entries. Horus reads. Compromise one — the others remain clean.
 
-### Internals
+Adding a new messaging channel or a new tool requires one file. Drop it in, restart. That's it.
 
-| Layer | Count | Highlights |
-|-------|-------|------------|
-| `utils/` | 10 modules | Capsule builder, IPFS pinner, AI pipeline (7-stage), Seed Metric, language detection |
-| `lib/tools/` | 9 tools | Auto-discovered registry — Brave, DDG, URL fetcher, GitHub reader, PDF, entity extraction, geo, forex, language |
-| `lib/outpipes/` | 4 modules | Discord, email, webhook (HMAC-SHA256), parallel router |
-| `lib/fetch-cache.js` | 1 | TTL-based cache (3min / 5min / 10min per source) |
-
-Adding a new inpipe channel: one file in `lib/channels/`, two lines in `routes/inpipe.js`.
-Adding a new tool: one `.js` file in `lib/tools/` — auto-discovered on startup.
-
-> Full file inventory → [`RUNBOOK (LOGOS).md`](RUNBOOK%20(LOGOS).md)
+> Full file inventory and architecture internals → [`RUNBOOK (LOGOS).md`](RUNBOOK%20(LOGOS).md)
 
 ---
 
@@ -264,27 +248,11 @@ Set `PINATA_JWT` to enable automatic IPFS pinning via Pinata (free 1GB tier). Th
 ### Playground (public, no login)
 - Multimodal: text + images + documents
 - Document parsing: PDF, Excel, DOCX
-- DDG dialectic enrichment (default-on, free, no API key — external antithesis to training data)
-- Brave Search premium tier (optional — set `PLAYGROUND_BRAVE_API` for richer results)
-- Temporal volatility classifier — tells the LLM how much to trust training data vs external sources
+- Web-grounded AI — answers are checked against live web data (free, no API key needed)
+- Optional premium search available (set `PLAYGROUND_BRAVE_API` for richer results)
 - Powered by Groq Llama 3.3 70B
 
-#### Search Architecture
-
-The AI pipeline uses a three-layer dialectic with a unified search cascade (`lib/tools/search-cascade.js`):
-
-| Layer | Role | Cost |
-|-------|------|------|
-| **DDG enrichment** (external dialectic) | Grounds every general query against live web data *before* the LLM reasons. DDG instant-answer API (Wikipedia pipe) — free, no key, ~200ms. | $0 |
-| **Brave fallback** (premium tier) | If DDG returns nothing, cascades to Brave Search for richer web results. Requires `PLAYGROUND_BRAVE_API`. | Free tier available |
-| **Temporal volatility** (weighting signal) | Classifies query freshness needs: HIGH (sports, prices — external overrides training), MEDIUM (politics, leadership — cross-reference), LOW (philosophy, history — training data reliable, search enriches). | $0 |
-| **Two-pass audit** (internal dialectic) | LLM self-checks its own answer (S2→S3). Catches hallucination via confidence scoring. | Included in LLM calls |
-
-**For fork operators:**
-- DuckDuckGo (DDG) is auto-plugged — your fork gets web-grounded answers out of the box.
-- Brave is optional: set `PLAYGROUND_BRAVE_API` in Secrets to enable the premium search tier. If the key is missing, the pipeline gracefully falls back to DDG-only.
-- Philosophy/history queries get DDG enrichment for historical and cultural context (who/when/where/what tradition). Only pure math exercises, creative writing, and code debugging skip search.
-- New search providers plug into `lib/tools/search-cascade.js` with zero orchestrator changes.
+**For fork operators:** Your fork gets web-grounded answers out of the box. See the [Runbook](RUNBOOK%20(LOGOS).md) for search architecture details.
 
 ### Dashboard Audit (authenticated)
 - 4-stage hallucination correction pipeline (S0–S3)
