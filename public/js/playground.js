@@ -625,73 +625,94 @@ function createAuditBadge(auditData) {
 // ── Sources footer helpers ────────────────────────────────────────────────────
 
 /**
- * Split content into body + sources block.
- * Detects two formats:
- *   1. Orchestrator-injected:  📚 **Sources:** item1, [Title](URL), item2
- *   2. LLM bullet list:        **Sources:**\n* [Title](URL)\n* ...
- * Returns { body, sources, format } — format is 'inline' | 'bullets' | null.
+ * Split content into body + sources string.
+ * KEY: regexes are NON-GREEDY on the sources capture so they don't swallow
+ * the 🔥 nyan~ signature or anything after the sources block.
+ *
+ * Format 1 (orchestrator): "📚 **Sources:** item, [Title](URL), item"  — single line
+ * Format 2 (LLM bullets):  "**Sources:**\n* [Title](URL)\n* ..."       — consecutive bullet lines
+ *
+ * Returns { body, sources, format } — format: 'inline' | 'bullets' | null.
+ * body always includes the signature (tail after sources block).
  */
 function extractSources(content) {
-    // Format 1: 📚 **Sources:** (inline, comma-separated)
-    const m1 = content.match(/(?:\n\n|\n)📚\s*\*\*Sources:\*\*\s*([\s\S]*)$/);
-    if (m1) return { body: content.slice(0, m1.index), sources: m1[1].trim(), format: 'inline' };
+    // Format 1: 📚 **Sources:** — capture only the single line (stop at \n)
+    const m1 = content.match(/\n(?:📚\s*)?\*\*Sources:\*\*[ \t]*([^\n]*)/);
+    if (m1) {
+        return {
+            body:    content.slice(0, m1.index) + content.slice(m1.index + m1[0].length),
+            sources: m1[1].trim(),
+            format:  'inline'
+        };
+    }
 
-    // Format 2: **Sources:** bullet list (LLM / Brave Search output)
-    const m2 = content.match(/\n\n\*\*Sources:\*\*\n([\s\S]*)$/);
-    if (m2) return { body: content.slice(0, m2.index), sources: m2[1].trim(), format: 'bullets' };
+    // Format 2: **Sources:** bullet list — only capture consecutive * / - lines
+    const m2 = content.match(/\n\n\*\*Sources:\*\*\n((?:[ \t]*[*\-][^\n]*\n?)+)/);
+    if (m2) {
+        return {
+            body:    content.slice(0, m2.index) + content.slice(m2.index + m2[0].length),
+            sources: m2[1].trim(),
+            format:  'bullets'
+        };
+    }
 
     return { body: content, sources: null, format: null };
 }
 
 /**
  * Extract a short brand/site name from a link title + URL.
- * Strategy: split on " | " or " - " and take the last segment.
  *   "Chelsea Scores, Stats and Highlights - ESPN"  → "ESPN"
  *   "Chelsea Results List & Next Game | LiveScore" → "LiveScore"
- * Fallback: clean hostname without www/TLD.
+ *   "Luka Doncic scores 60... - Los Angeles Times" → "Los Angeles Times"
+ * Fallback: capitalised root domain (espn.com → Espn).
  */
 function extractSourceLabel(title, url) {
-    // Split on " | " or " – " / " - " and grab the last non-empty segment
-    const parts = title.split(/\s*\|\s*|\s+[–—-]\s+/);
+    const parts = title.split(/\s*\|\s*|\s+[–—]\s+|\s+-\s+/);
     if (parts.length > 1) {
         const last = parts[parts.length - 1].trim();
         if (last.length > 0 && last.length <= 40) return last;
     }
-    // Fallback: extract root domain, strip TLD, capitalise
     try {
         const host = new URL(url).hostname.replace(/^www\./, '');
         const root = host.split('.')[0];
         return root.charAt(0).toUpperCase() + root.slice(1);
     } catch {
-        return title.slice(0, 30);
+        return title.slice(0, 25);
     }
 }
 
 /**
- * Parse a sources block into typed items.
- * Handles both inline (comma-separated) and bullet-list formats.
- * Link labels are shortened via extractSourceLabel.
+ * Shorten inline body links: [Full Page Title](URL) → [Brand](URL).
+ * Applied to the body markdown BEFORE marked.parse so inline citations
+ * render as compact clickable names instead of long blue titles.
+ */
+function shortenInlineLinks(markdown) {
+    return markdown.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, title, url) =>
+        `[${extractSourceLabel(title, url)}](${url})`
+    );
+}
+
+/**
+ * Parse a sources block into { type, label, url } items.
+ * Handles bullet-list and inline (comma-separated) formats.
  */
 function parseSourceItems(sourcesStr, format) {
     const items = [];
     const linkRe = /\[([^\]]+)\]\(([^)]+)\)/g;
 
     if (format === 'bullets') {
-        // Each line may be "* [Title](URL)" or "- [Title](URL)" or plain text
         sourcesStr.split('\n').forEach(line => {
-            const stripped = line.replace(/^[\*\-]\s*/, '').trim();
+            const stripped = line.replace(/^[ \t]*[*\-]\s*/, '').trim();
             if (!stripped) return;
             const m = /^\[([^\]]+)\]\(([^)]+)\)/.exec(stripped);
             if (m) {
                 items.push({ type: 'link', label: extractSourceLabel(m[1].trim(), m[2].trim()), url: m[2].trim() });
-            } else {
+            } else if (stripped) {
                 items.push({ type: 'text', label: stripped });
             }
         });
     } else {
-        // Inline: comma-separated, markdown links interspersed
-        let lastIndex = 0;
-        let m;
+        let lastIndex = 0, m;
         while ((m = linkRe.exec(sourcesStr)) !== null) {
             const before = sourcesStr.slice(lastIndex, m.index);
             before.split(',').forEach(s => { s = s.trim(); if (s) items.push({ type: 'text', label: s }); });
@@ -700,14 +721,14 @@ function parseSourceItems(sourcesStr, format) {
         }
         sourcesStr.slice(lastIndex).split(',').forEach(s => { s = s.trim(); if (s) items.push({ type: 'text', label: s }); });
     }
-
     return items;
 }
 
 /**
- * Build the sources footer element.
- * Link items → compact blue pill anchors (brand name, easy-to-tap).
- * Text items → muted chip spans.
+ * Build the sources footer as a prose line:
+ *   📚 Sources — ESPN · Los Angeles Times · Sofascore
+ * Links are clickable, plain text is muted.
+ * Returned element is appended OUTSIDE .content (sibling) to avoid copy-btn overlap.
  */
 function renderSourcesFooter(sourcesStr, format) {
     const items = parseSourceItems(sourcesStr, format);
@@ -721,10 +742,21 @@ function renderSourcesFooter(sourcesStr, format) {
     lbl.textContent = '📚 Sources';
     footer.appendChild(lbl);
 
-    items.forEach(item => {
+    const sep0 = document.createElement('span');
+    sep0.className = 'sources-sep';
+    sep0.textContent = '—';
+    footer.appendChild(sep0);
+
+    items.forEach((item, i) => {
+        if (i > 0) {
+            const dot = document.createElement('span');
+            dot.className = 'sources-sep';
+            dot.textContent = '·';
+            footer.appendChild(dot);
+        }
         if (item.type === 'link') {
             const a = document.createElement('a');
-            a.className = 'source-pill source-link';
+            a.className = 'source-link';
             a.href = item.url;
             a.target = '_blank';
             a.rel = 'noopener noreferrer';
@@ -733,7 +765,7 @@ function renderSourcesFooter(sourcesStr, format) {
             footer.appendChild(a);
         } else {
             const span = document.createElement('span');
-            span.className = 'source-pill source-chip';
+            span.className = 'source-chip';
             span.textContent = item.label;
             footer.appendChild(span);
         }
@@ -744,24 +776,26 @@ function renderSourcesFooter(sourcesStr, format) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * Render assistant message markdown content.
+ * Returns { contentEl, sourcesEl } — append both to the message element,
+ * keeping sources OUTSIDE .content so the absolute copy-btn doesn't overlap.
+ */
 function renderMarkdownContent(content) {
-    const contentDiv = document.createElement('div');
-    contentDiv.className = 'content';
-
-    // Split off the Sources block so it renders as styled pills, not raw prose
     const { body, sources, format } = extractSources(content);
     const markdownBody = sources !== null ? body : content;
 
+    const contentDiv = document.createElement('div');
+    contentDiv.className = 'content';
+
     if (typeof marked !== 'undefined') {
         try {
-            const safeContent = markdownBody.replace(/nyan~/g, 'nyan\\~');
-            let renderedMarkdown = marked.parse(safeContent, {
-                breaks: true,
-                gfm: true
-            });
+            const shortened = shortenInlineLinks(markdownBody);
+            const safeContent = shortened.replace(/nyan~/g, 'nyan\\~');
+            let renderedMarkdown = marked.parse(safeContent, { breaks: true, gfm: true });
             if (typeof DOMPurify !== 'undefined') {
                 renderedMarkdown = DOMPurify.sanitize(renderedMarkdown, {
-                    ALLOWED_TAGS: ['p', 'br', 'strong', 'em', 'b', 'i', 'u', 'code', 'pre', 'blockquote', 
+                    ALLOWED_TAGS: ['p', 'br', 'strong', 'em', 'b', 'i', 'u', 'code', 'pre', 'blockquote',
                                    'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'li', 'a', 'hr',
                                    'table', 'thead', 'tbody', 'tr', 'th', 'td', 'div', 'span', 'del'],
                     ALLOWED_ATTR: ['href', 'title', 'target', 'rel', 'class'],
@@ -770,9 +804,7 @@ function renderMarkdownContent(content) {
             }
             const parser = new DOMParser();
             const doc = parser.parseFromString(renderedMarkdown, 'text/html');
-            while (doc.body.firstChild) {
-                contentDiv.appendChild(doc.body.firstChild);
-            }
+            while (doc.body.firstChild) contentDiv.appendChild(doc.body.firstChild);
         } catch (err) {
             console.error('Markdown parse error:', err);
             contentDiv.textContent = markdownBody;
@@ -781,12 +813,8 @@ function renderMarkdownContent(content) {
         contentDiv.textContent = markdownBody;
     }
 
-    if (sources !== null) {
-        const footer = renderSourcesFooter(sources, format);
-        if (footer) contentDiv.appendChild(footer);
-    }
-
-    return contentDiv;
+    const sourcesEl = sources !== null ? renderSourcesFooter(sources, format) : null;
+    return { contentEl: contentDiv, sourcesEl };
 }
 
 function addMessage(role, content, messageAttachments = [], auditData = null) {
@@ -815,7 +843,9 @@ function addMessage(role, content, messageAttachments = [], auditData = null) {
     }
     
     if (role === 'assistant') {
-        msgEl.appendChild(renderMarkdownContent(content));
+        const { contentEl, sourcesEl } = renderMarkdownContent(content);
+        msgEl.appendChild(contentEl);
+        if (sourcesEl) msgEl.appendChild(sourcesEl);
     } else {
         const contentDiv = document.createElement('div');
         contentDiv.className = 'content';
@@ -1060,39 +1090,15 @@ function finalizeStreamingMessage(fullContent, auditData) {
     
     const contentEl = streamingEl.querySelector('.streaming-content');
     contentEl.replaceChildren();
-    
-    if (contentEl) {
-        const { body: streamBody, sources: streamSources, format: streamFormat } = extractSources(fullContent);
-        const markdownBody = streamSources !== null ? streamBody : fullContent;
-        if (typeof marked !== 'undefined') {
-            try {
-                const safeContent = markdownBody.replace(/nyan~/g, 'nyan\\~');
-                let renderedMarkdown = marked.parse(safeContent, { breaks: true, gfm: true });
-                if (typeof DOMPurify !== 'undefined') {
-                    renderedMarkdown = DOMPurify.sanitize(renderedMarkdown, {
-                        ALLOWED_TAGS: ['p', 'br', 'strong', 'em', 'b', 'i', 'u', 'code', 'pre', 'blockquote', 
-                                       'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'li', 'a', 'hr',
-                                       'table', 'thead', 'tbody', 'tr', 'th', 'td', 'div', 'span', 'del'],
-                        ALLOWED_ATTR: ['href', 'title', 'target', 'rel', 'class'],
-                        ALLOW_DATA_ATTR: false
-                    });
-                }
-                const parser = new DOMParser();
-                const doc = parser.parseFromString(renderedMarkdown, 'text/html');
-                while (doc.body.firstChild) {
-                    contentEl.appendChild(doc.body.firstChild);
-                }
-            } catch (err) {
-                contentEl.textContent = markdownBody;
-            }
-        } else {
-            contentEl.textContent = markdownBody;
-        }
-        if (streamSources !== null) {
-            const footer = renderSourcesFooter(streamSources, streamFormat);
-            if (footer) contentEl.appendChild(footer);
-        }
-    }
+
+    // Delegate to shared renderer — handles shortenInlineLinks + sources split
+    const { contentEl: renderedContent, sourcesEl } = renderMarkdownContent(fullContent);
+    while (renderedContent.firstChild) contentEl.appendChild(renderedContent.firstChild);
+
+    // Remove any stale sources footer from a previous finalize, then append fresh
+    const oldFooter = streamingEl.querySelector('.sources-footer');
+    if (oldFooter) oldFooter.remove();
+    if (sourcesEl) contentEl.insertAdjacentElement('afterend', sourcesEl);
     
     if (auditData) {
         const badgePlaceholder = streamingEl.querySelector('.audit-badge-placeholder');
