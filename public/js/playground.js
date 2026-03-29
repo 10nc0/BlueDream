@@ -682,14 +682,41 @@ function extractSourceLabel(title, url) {
 }
 
 /**
- * Shorten inline body links: [Full Page Title](URL) → [Brand](URL).
- * Applied to the body markdown BEFORE marked.parse so inline citations
- * render as compact clickable names instead of long blue titles.
+ * Shorten inline body links. Two passes:
+ *
+ * Pass 1 — List items with **Entity**: pattern
+ *   "1. **LiveScore**: prose ... Visit [url](url) for info."
+ *   → "1. **[LiveScore](url)**: prose ... Visit livescore.com for info."
+ *   The entity name becomes the link; raw inline URLs become plain domain text.
+ *
+ * Pass 2 — All remaining [Title](URL) links
+ *   "[Chelsea Scores – ESPN](url)" → "[ESPN](url)"
  */
 function shortenInlineLinks(markdown) {
-    return markdown.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, title, url) =>
+    // Pass 1: list items that start with **Entity**:
+    let out = markdown.replace(
+        /^([ \t]*(?:\d+\.|-|\*)\s+)\*\*([^*\n]+)\*\*(\s*:)([^\n]*)/gm,
+        (match, bullet, entity, colon, rest) => {
+            const urlRe = /\[([^\]]*)\]\((https?:\/\/[^)]+)\)/g;
+            let firstUrl = null;
+            const newRest = rest.replace(urlRe, (_, _title, url) => {
+                if (!firstUrl) firstUrl = url;
+                try {
+                    // Replace with plain domain text (not a link) as a subtle hint
+                    return new URL(url).hostname.replace(/^www\./, '');
+                } catch { return ''; }
+            }).replace(/\s{2,}/g, ' ').trim();
+            if (!firstUrl) return match;
+            return `${bullet}**[${entity}](${firstUrl})**${colon} ${newRest}`;
+        }
+    );
+
+    // Pass 2: any remaining [title](url) — shorten to brand name
+    out = out.replace(/\[([^\]]*)\]\((https?:\/\/[^)]+)\)/g, (_, title, url) =>
         `[${extractSourceLabel(title, url)}](${url})`
     );
+
+    return out;
 }
 
 /**
