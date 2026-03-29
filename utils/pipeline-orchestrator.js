@@ -696,10 +696,10 @@ class PipelineOrchestrator {
         const _vol = classifyTemporalVolatility(input.query, state.preflight?.mode);
         state.searchVolatility = _vol; // reused by stepContextBuild — avoids double classification
         const _volInstruction = _vol === 'high'
-          ? 'Search results are your PRIMARY source for this query — training data is likely stale (changes in minutes/hours). Report quantitative facts (scores, prices, dates, counts) exactly as found — cite the source. For qualitative claims, synthesise across sources.'
+          ? 'Search results are your PRIMARY source for this query — training data is likely stale (changes in minutes/hours). Report quantitative facts (scores, prices, exact measurements) exactly as found and cite each one inline as [domain.com](full-url). For qualitative claims, synthesise across sources in your own words — no inline citations for prose.'
           : _vol === 'medium'
-          ? 'Balance search results and training knowledge. Report specific numbers and dates directly from search; synthesise qualitative analysis in your own words.'
-          : 'Training knowledge is RELIABLE for this topic. Use search only for recent facts or specifics absent from training. Report quantitative data directly; synthesise qualitative claims.';
+          ? 'Balance search results and training knowledge. Report specific scores, prices, and measurements directly from search with inline citations [domain.com](url). Synthesise qualitative analysis in your own words without inline citations.'
+          : 'Training knowledge is RELIABLE for this topic — write an authoritative narrative. Do NOT add inline citations to any sentence. The footer handles all source attribution.';
 
         state.searchContext = `[REAL-TIME WEB SEARCH RESULTS — EVIDENCE LAYER]
 ${cascadeResult.result}
@@ -707,8 +707,8 @@ ${cascadeResult.result}
 SYNTHESIS INSTRUCTIONS:
 1. ${_volInstruction}
 2. If the search results include recent dates or timestamps, incorporate them explicitly.
-3. QUANTA vs QUALITY — quantitative facts (numbers, scores, prices, dates) are atomic truths: report them directly and cite the source inline using the Source: URLs visible in the search results above. Format inline citations as [domain.com](full-url) — display text must be ONLY the hostname without https:// and without www. (e.g. [espn.com](https://www.espn.com/...), NOT [https://espn.com](url)). Qualitative claims (analysis, descriptions, opinions) must be synthesised in your own words — never stitch sentences from different sources, never two consecutive sentences each from a different source.
-4. Deliver a DIRECT answer. For quantitative data: report and cite. For qualitative analysis: synthesise. Do NOT redirect the user to another website. Only flag uncertainty if two sources give actively contradictory numbers.
+3. INLINE CITATIONS — only for HIGH/MEDIUM volatility and only for bare quantitative data (a match score, a price, an exact measurement). Format: [domain.com](full-url) — display text is ONLY the hostname, no https://, no www. (e.g. [espn.com](https://www.espn.com/...)). NEVER add source names, reference tags, or plain-text endnotes (e.g. "Britannica" or "Royal") after sentences — this is stitching. Qualitative narrative has NO inline citations.
+4. Deliver a DIRECT answer in coherent prose. Do NOT redirect the user to another website. Only flag uncertainty if two sources give actively contradictory numbers.
 5. Do NOT write a sources footer — the system injects canonical 📚 Sources attribution automatically.
 6. Do NOT explain your data sources, search mechanics, or temporal volatility to the user — these are operational context, not user-facing output.`;
         state.searchSourceUrls = [...cascadeResult.result.matchAll(/^   Source:\s*(https?:\/\/\S+)/gm)].map(m => m[1]);
