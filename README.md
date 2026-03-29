@@ -430,6 +430,8 @@ MIT License. Fork freely. Scribe faithfully.
 
 ---
 
+**Truth is what remains queryable after every false positive named**
+
 nyan~ 
 ♡ 🜁 ◯
   🜃 
