@@ -37,6 +37,7 @@ const genesisCounter = require('./server/genesis-counter');
 const { extractTextFromDocument, getDocumentPrompt } = require('./utils/document-parser');
 const { identifyFileType, executeExtractionCascade, formatJSONForGroq, getFinancialPhysicsSeed, intelligentChunking, buildMultiDocContext } = require('./utils/attachment-cascade');
 const CONSTANTS = require('./config/constants');
+const { modelIdToLabel } = require('./prompts/pharma-analysis');
 const { getLegalAnalysisSeed, detectLegalDocument, LEGAL_KEYWORDS_REGEX } = require('./prompts/legal-analysis');
 const { formatAuditBadge, runAuditPass } = require('./utils/two-pass-verification');
 const { preflightRouter } = require('./utils/preflight-router');
@@ -68,7 +69,7 @@ const criticalSecrets = {
     SESSION_SECRET: 'Session encryption key',
     FRACTAL_SALT: 'Secure book ID generation (crypto salt)',
     NYANBOOK_WEBHOOK_URL: 'Discord Ledger #01 (output book)',
-    PLAYGROUND_AI_KEY: 'AI Playground reasoning (Groq Llama 3.3)'
+    PLAYGROUND_AI_KEY: `AI Playground reasoning (${modelIdToLabel(CONSTANTS.getLLMBackend().model)})`
 };
 
 const missingCriticalSecrets = Object.entries(criticalSecrets).filter(([key]) => !process.env[key]);

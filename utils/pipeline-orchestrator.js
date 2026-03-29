@@ -35,7 +35,8 @@
 const logger = require('../lib/logger');
 const { preflightRouter, buildSystemContext } = require('./preflight-router');
 const { extractContext, extractContextWithMemory, mergeContextForTickerDetection, isSessionFirstQuery, markSessionNyanBooted } = require('./context-extractor');
-const { NYAN_PROTOCOL_SYSTEM_PROMPT, NYAN_PROTOCOL_COMPRESSED } = require('../prompts/nyan-protocol');
+const { NYAN_PROTOCOL_SYSTEM_PROMPT, NYAN_PROTOCOL_COMPRESSED, getNyanProtocolPrompt, getNyanProtocolCompressed } = require('../prompts/nyan-protocol');
+const { modelIdToLabel } = require('../prompts/pharma-analysis');
 const { runAuditPass } = require('./two-pass-verification');
 const { isFalseDichotomy } = require('../prompts/audit-protocol');
 const { detectPathogens, generateClinicalReport, generatePhysicalAuditDisclaimer } = require('./psi-EMA');
@@ -715,9 +716,10 @@ MANDATORY INSTRUCTIONS:
     // NYAN Boot Optimization: Full protocol on first query, compressed on subsequent
     // Saves ~1350 tokens per query after session boot
     // NOTE: isFirstQuery is set at start of run(), boot flag is set AFTER successful completion
-    const nyanMessages = buildSystemContext(state.preflight, NYAN_PROTOCOL_SYSTEM_PROMPT, {
+    const _nyanModelLabel = modelIdToLabel(getLLMBackend().model);
+    const nyanMessages = buildSystemContext(state.preflight, getNyanProtocolPrompt(_nyanModelLabel), {
       isFirstQuery: state.isFirstQuery,
-      nyanCompressed: NYAN_PROTOCOL_COMPRESSED
+      nyanCompressed: getNyanProtocolCompressed(_nyanModelLabel)
     });
     
     // Temporal awareness comes FIRST, then NYAN protocol
@@ -1495,7 +1497,7 @@ Rules:
     // ── Coda: LLM voice layer ────────────────────────────────────────────────
     let coda = '';
     try {
-      const codaSystemPrompt = `${NYAN_PROTOCOL_SYSTEM_PROMPT}
+      const codaSystemPrompt = `${getNyanProtocolPrompt(modelIdToLabel(getLLMBackend().model))}
 
 You are given a Seed Metric table (income = average single earner; price = built residential where available, land as fallback).
 Write a coda: 2–3 sentences about what these specific numbers reveal about the people living in these specific cities.
@@ -2003,7 +2005,7 @@ Output ONLY the corrected table and summary lines:`;
       else if (state.seedMetricDirectOutput) sourceLabel = 'Brave Search — live $/sqm triangulation';
       else if (state.mode === 'forex')     sourceLabel = 'fawazahmed0 — live FX rates';
       else if (state.didSearch)            sourceLabel = 'Brave Search (live web)';
-      else                                 sourceLabel = 'Llama 3.3 70B training data';
+      else                                 sourceLabel = `${modelIdToLabel(getLLMBackend().model)} training data`;
 
       // Splice before the 🔥 signature block, or append if signature not found
       const sigIdx = state.finalAnswer.search(/\n\n🔥/);
