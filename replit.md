@@ -35,6 +35,7 @@ A 7-stage state machine orchestrates AI interactions, featuring:
 -   **AuditCapsule:** Manages session-scoped entity extraction and tally caching.
 -   **Executive Formatter:** Post-processes audit responses.
 -   **Nyan Protocol:** Defines canonical identity and epistemic rules for all AI paths.
+-   **Source Ascriber (`utils/source-ascriber.js`):** Single canonical authority for 📚 Sources attribution. Exports `stripLLMSources()`, `ascribeSource()`, `injectSourceLine()`. Orchestrator delegates here at S5; LLM never writes its own sources line.
 -   **Walk-the-Dog:** A seed metric path using Groq's tool-calling API to drive Brave searches for data triangulation.
 
 **Messaging:**
