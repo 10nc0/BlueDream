@@ -261,7 +261,7 @@ Each channel is independent. Deploy first (Deploy → Autoscale) to get a persis
 
 ## Inpipe: Activating a Book
 
-Each "Book" is a routing destination. To route messages to a book:
+Each "Book" is a routing address. To route messages to a book:
 
 1. Create a book in the dashboard
 2. Get the join code (e.g. `MyBook-a1b2c3`)
