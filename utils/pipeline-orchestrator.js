@@ -37,6 +37,7 @@ const { preflightRouter, buildSystemContext } = require('./preflight-router');
 const { extractContext, extractContextWithMemory, mergeContextForTickerDetection, isSessionFirstQuery, markSessionNyanBooted } = require('./context-extractor');
 const { NYAN_PROTOCOL_SYSTEM_PROMPT, NYAN_PROTOCOL_COMPRESSED, getNyanProtocolPrompt, getNyanProtocolCompressed } = require('../prompts/nyan-protocol');
 const { modelIdToLabel } = require('../prompts/pharma-analysis');
+const { injectSourceLine } = require('./source-ascriber');
 const { runAuditPass } = require('./two-pass-verification');
 const { isFalseDichotomy } = require('../prompts/audit-protocol');
 const { detectPathogens, generateClinicalReport, generatePhysicalAuditDisclaimer } = require('./psi-EMA');
@@ -1996,32 +1997,14 @@ Output ONLY the corrected table and summary lines:`;
         console.warn('⚠️ Personality: Verdict alignment check');
     }
 
-    // SOURCE ATTRIBUTION — single canonical injection point
-    // The orchestrator is the SOLE authority for the 📚 Sources line.
-    // LLM-generated source lines (often garbage like "En") are stripped first;
-    // then we inject the deterministic label based on pipeline flags.
+    // SOURCE ATTRIBUTION — delegated to source-ascriber (single canonical point)
     if (!state.fastPath) {
-      // Strip any LLM-generated sources (inline or bullet list)
-      state.finalAnswer = state.finalAnswer
-        .replace(/\n+📚?\s*\*\*Sources?:?\*\*[^\n]*/gi, '')
-        .replace(/\n\n\*\*Sources?:?\*\*\n(?:[ \t]*[*\-][^\n]*\n?)*/gi, '')
-        .replace(/\n{3,}/g, '\n\n');
-
-      let sourceLabel;
-      if (state.psiEmaDirectOutput)        sourceLabel = 'yfinance + SEC EDGAR (live data)';
-      else if (state.seedMetricDirectOutput) sourceLabel = 'Brave Search — live $/sqm triangulation';
-      else if (state.mode === 'forex')     sourceLabel = 'fawazahmed0 — live FX rates';
-      else if (state.didSearch)            sourceLabel = 'Brave Search (live web)';
-      else                                 sourceLabel = `${modelIdToLabel(getLLMBackend().model)} training data`;
-
-      // Splice before the 🔥 signature block, or append if signature not found
-      const sigIdx = state.finalAnswer.search(/\n\n🔥/);
-      const sourceLine = `\n\n📚 **Sources:** ${sourceLabel}`;
-      if (sigIdx !== -1) {
-        state.finalAnswer = state.finalAnswer.slice(0, sigIdx) + sourceLine + state.finalAnswer.slice(sigIdx);
-      } else {
-        state.finalAnswer = state.finalAnswer.trimEnd() + sourceLine;
-      }
+      state.finalAnswer = injectSourceLine(state.finalAnswer, {
+        psiEmaDirectOutput:  state.psiEmaDirectOutput,
+        seedMetricDirectOutput: state.seedMetricDirectOutput,
+        mode:    state.mode,
+        didSearch: state.didSearch
+      });
     }
     
     // WRITE to DataPackage: Stage S5 personality result
