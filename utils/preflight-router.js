@@ -38,71 +38,64 @@ const PSI_EMA_IDENTITY_PATTERNS = [
  * Cascade: DDG → Brave (following existing pattern)
  */
 const REALTIME_INTENT_PATTERNS = [
-  // Sports — named leagues / competitions
   /\b(epl|premier\s*league|nfl|nba|mlb|mls|nhl|nrl|afl|ufc|champions\s*league|europa\s*league|world\s*cup|la\s*liga|bundesliga|serie\s*a|ligue\s*1|eredivisie|super\s*lig)\b/i,
   /\b(formula[\s\-]*1|formula[\s\-]*2|f1|f2|motogp|moto2|indycar|nascar|wrc|dtm|fe|formula[\s\-]*e|grand[\s\-]*prix)\b/i,
-
-  // Sports — class words that are always about current data (no time word needed)
   /\b(standings|championship\s+standings|points\s+table|drivers?\s+championship|constructors?\s+championship)\b/i,
   /\b(race\s+calendar|race\s+schedule|season\s+schedule|this\s+season|current\s+season|2025\s+season|2026\s+season)\b/i,
   /\b(who\s+(leads?|is\s+leading|won|is\s+winning)\s+the\s+(championship|league|season|race|title))\b/i,
-
-  // Sports — "latest/recent + game/match/score/result" without needing a time word
-  // Catches: "Lakers latest game", "latest score", "recent match result", etc.
   /\b(latest|recent|new|current)\s+(game|match|score|result|fixture|win|loss|draw|performance)\b/i,
-
-  // NBA team names — any mention of an NBA team is sports-context and needs live data
   /\b(lakers|pistons|warriors|celtics|bulls|heat|knicks|nets|spurs|clippers|nuggets|bucks|sixers|76ers|suns|hawks|hornets|cavaliers|pacers|raptors|wizards|magic|grizzlies|pelicans|thunder|jazz|timberwolves|blazers|trail\s*blazers|kings|mavericks|rockets)\b/i,
-
-  // Sports — schedule/score with time word
   /\b(match|game|fixture|score|schedule|standings|results?)\s+(today|tonight|tomorrow|this\s*week|next\s*week|this\s*month|next\s*month|upcoming)\b/i,
   /\b(upcoming|next|today'?s?|tonight'?s?|this\s*week'?s?|this\s*month'?s?)\s+(match|game|fixture|schedule|results?|race)\b/i,
-  
-  // News & Current Events
   /\b(latest|breaking|recent|current|today'?s?)\s+(news|headlines|events?|updates?|developments?)\b/i,
   /\bwhat\s+(?:is\s+)?happen(?:ing|ed)\s+(today|now|recently|this\s*week|this\s*month)\b/i,
-  
-  // Weather
   /\b(weather|forecast|temperature|rain|snow|sunny|cloudy)\s+(today|tomorrow|this\s*week|in\s+\w+)\b/i,
   /\b(today'?s?|tomorrow'?s?|current)\s+(weather|forecast|temperature)\b/i,
-  
-  // Time-sensitive queries
   /\b(when\s+is|what\s+time|schedule\s+for|upcoming)\b/i,
   /\b(live|real[\s\-]?time|right\s*now|currently)\b/i,
-  
-  // Explicit web search requests
   /\b(search|google|look\s*up|find\s+(?:me\s+)?(?:the\s+)?(?:latest|current|recent))\b/i,
   /\b(what\s+is\s+the\s+(?:latest|current|recent))\b/i,
-
-  // Factual identity queries — "who is the president/PM/CEO" — time-sensitive, training data goes stale
   /\b(who\s+is|who'?s)\s+(?:the\s+)?(?:current\s+)?(?:president|prime[\s\-]minister|chancellor|ceo|mayor|governor|king|queen|leader|minister|secretary|general|director|chairman|head\s+of)\b/i,
-
-  // Non-English "who is" signal words (Indonesian, Spanish, French, German, Italian, etc.)
   /\b(siapa|quien|qui\s+est|wer\s+ist|chi\s+è|hvem\s+er)\b/i,
-
-  // Non-English political title words — "presiden Amerika" would match here
   /\b(presiden|presidente|président|premier[\s\-]?ministre|primer[\s\-]?ministro|bundeskanzler|perdana\s+menteri)\b/i,
-
-  // Indonesian realtime intent — schedule / current / latest / today / this week / this month
   /\b(jadwal|pertandingan|klasemen|hasil\s+pertandingan|siaran\s+langsung|skor)\b/i,
   /\b(hari\s+ini|minggu\s+ini|bulan\s+ini|tahun\s+ini|malam\s+ini|besok)\b/i,
   /\b(terkini|terbaru|sekarang|saat\s+ini|live\s+score)\b/i,
-
-  // Malay realtime intent (overlaps with Indonesian, same roots)
   /\b(jadual|keputusan|perlawanan|minggu\s+depan|bulan\s+depan)\b/i,
-
-  // Chinese realtime intent — 今天/今晚/本周/本月/最新/直播/赛程/比赛/赛果/下周/下月
   /今天|今晚|今日|本周|本月|本年|下周|下月|明天|最新|直播|赛程|比赛|赛果|积分榜|战报|球队|日程/,
 ];
 
-/**
- * Detect if query needs real-time web search
- * @param {string} query
- * @returns {boolean}
- */
+const ABSTRACT_TOPIC_PATTERNS = [
+  /\b(tetralemma|nagarjuna|catuskoti|sunyata|śūnyatā|nyan\s*protocol)\b/i,
+  /\b(ontolog|epistemolog|metaphysic|phenomenolog|existentiali|nihilis|solipsis)\b/i,
+  /\b(prove\s+that|proof\s+of|theorem|lemma|corollary|axiom|postulate|QED)\b/i,
+  /\b(integral|derivative|eigenvalue|eigenvector|determinant|matrix\s+multiplication|polynomial\s+division)\b/i,
+  /\b(solve\s+for\s+[xyz]|factor|simplif|expand\s+the\s+expression|evaluate\s+the\s+(limit|sum|integral))\b/i,
+  /\b(write\s+(?:me\s+)?(?:a\s+)?(?:poem|song|story|essay|haiku|limerick|sonnet|novel|script|screenplay))\b/i,
+  /\b(imagine|creative\s+writing|fictional|roleplay|pretend|hypothetical\s+scenario)\b/i,
+  /\b(meaning\s+of\s+life|free\s+will|determinism|consciousness|qualia|hard\s+problem|mind[\s\-]body)\b/i,
+  /\b(hello|hi|hey|good\s+(morning|afternoon|evening)|how\s+are\s+you|what'?s?\s+up|thanks|thank\s+you)\b/i,
+  /\b(explain\s+(?:this|my)\s+code|debug|refactor|code\s+review|syntax\s+error|stack\s+trace)\b/i,
+  /\b(translate|convert)\s+(?:this|the\s+following)\s+(?:to|into)\b/i,
+  /\b(summarize|summarise|tldr|tl;dr)\b/i,
+];
+
 function detectRealtimeIntent(query) {
   if (!query || typeof query !== 'string') return false;
   return REALTIME_INTENT_PATTERNS.some(pattern => pattern.test(query));
+}
+
+function detectAbstractTopic(query) {
+  if (!query || typeof query !== 'string') return false;
+  return ABSTRACT_TOPIC_PATTERNS.some(pattern => pattern.test(query));
+}
+
+function shouldSearchDDG(query) {
+  if (!query || typeof query !== 'string') return false;
+  if (detectRealtimeIntent(query)) return true;
+  if (detectAbstractTopic(query)) return false;
+  if (query.trim().split(/\s+/).length < 3) return false;
+  return true;
 }
 
 /**
@@ -763,14 +756,16 @@ async function preflightRouter(options) {
   }
   
   // ========================================
-  // REAL-TIME INTENT DETECTION (applies to general mode)
-  // Triggers DDG → Brave cascade for sports, news, weather, etc.
-  // searchStrategy stays 'duckduckgo' (primary), cascade tracked via routingFlags
+  // DDG DIALECTIC ENRICHMENT (applies to general mode)
+  // Default-on: DDG-first for all general queries as external antithesis (H₀).
+  // Opt-out: abstract/philosophical/math/code/creative/greeting queries skip search.
+  // Realtime-intent patterns always force search regardless of opt-out.
   // ========================================
-  if (result.mode === 'general' && detectRealtimeIntent(classificationQuery)) {
+  if (result.mode === 'general' && shouldSearchDDG(classificationQuery)) {
     result.routingFlags.needsRealtimeSearch = true;
     result.searchStrategy = 'duckduckgo';
-    logger.debug(`🔍 Preflight: Real-time intent detected → DDG→Brave cascade enabled`);
+    const isRealtime = detectRealtimeIntent(classificationQuery);
+    logger.debug(`🔍 Preflight: DDG enrichment enabled (realtime=${isRealtime}) → DDG→Brave cascade`);
   }
   
   logger.debug(`🚦 Preflight: mode=${result.mode}, ticker=${result.ticker || 'none'}, search=${result.searchStrategy}, realtime=${result.routingFlags.needsRealtimeSearch}`);
@@ -1143,5 +1138,8 @@ module.exports = {
   preflightRouter,
   buildSystemContext,
   detectCompoundQuery,
+  detectRealtimeIntent,
+  detectAbstractTopic,
+  shouldSearchDDG,
   safeFixed
 };

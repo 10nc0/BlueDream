@@ -11,12 +11,13 @@ function stripLLMSources(text) {
 }
 
 function ascribeSource(flags = {}) {
-  const { psiEmaDirectOutput, seedMetricDirectOutput, mode, didSearch } = flags;
+  const { psiEmaDirectOutput, seedMetricDirectOutput, mode, didSearch, searchProvider } = flags;
 
   if (psiEmaDirectOutput)        return 'yfinance + SEC EDGAR (live data)';
   if (seedMetricDirectOutput)    return 'Brave Search — live $/sqm triangulation';
   if (mode === 'forex')          return 'fawazahmed0 — live FX rates';
-  if (didSearch)                 return 'Brave Search (live web)';
+  if (didSearch && searchProvider === 'brave') return 'Brave Search (live web)';
+  if (didSearch)                 return 'DuckDuckGo (live web)';
   return `${modelIdToLabel(getLLMBackend().model)} training data`;
 }
 

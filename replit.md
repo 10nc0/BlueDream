@@ -30,12 +30,12 @@ A vanilla JavaScript Single Page Application (SPA) utilizing `Nyan.StateService`
 
 **AI Pipeline:**
 A 7-stage state machine orchestrates AI interactions, featuring:
--   **Preflight Router:** Classifies queries into specific modes (e.g., `forex`, `seed-metric`, `psi-ema`).
+-   **Preflight Router:** Classifies queries into specific modes (e.g., `forex`, `seed-metric`, `psi-ema`). DDG dialectic enrichment is default-on for `mode === 'general'` (inverted gate: opt-out via `ABSTRACT_TOPIC_PATTERNS` for philosophy/math/creative/code/greetings; queries < 3 words also skip). `shouldSearchDDG()` is the unified entry point; `detectRealtimeIntent()` remains for explicit realtime patterns.
 -   **Mode Registry:** Plug-and-play configuration for different AI modes.
 -   **AuditCapsule:** Manages session-scoped entity extraction and tally caching.
 -   **Executive Formatter:** Post-processes audit responses.
 -   **Nyan Protocol:** Defines canonical identity and epistemic rules for all AI paths.
--   **Source Ascriber (`utils/source-ascriber.js`):** Single canonical authority for 📚 Sources attribution. Exports `stripLLMSources()`, `ascribeSource()`, `injectSourceLine()`. Orchestrator delegates here at S5; LLM never writes its own sources line.
+-   **Source Ascriber (`utils/source-ascriber.js`):** Single canonical authority for 📚 Sources attribution. Exports `stripLLMSources()`, `ascribeSource()`, `injectSourceLine()`. Orchestrator delegates here at S5; LLM never writes its own sources line. Labels distinguish DDG-only (`DuckDuckGo (live web)`) from Brave (`Brave Search (live web)`).
 -   **Walk-the-Dog:** A seed metric path using Groq's tool-calling API to drive Brave searches for data triangulation.
 
 **Messaging:**

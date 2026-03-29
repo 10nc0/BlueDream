@@ -412,6 +412,7 @@ class PipelineOrchestrator {
                     `\n### 🔍 Image Identification (Web Search):\n${searchResult}`
                   );
                   state.didSearch = true;
+                  state.searchProvider = state.searchProvider || 'brave';
                   logger.info(`✅ S-1: Vision search enrichment complete (${searchResult.length} chars)`);
                 } else {
                   logger.warn(`⚠️ S-1: Vision search returned no results for "${keyTerms}"`);
@@ -614,6 +615,7 @@ class PipelineOrchestrator {
         audit: { confidence: state.auditResult?.confidence ?? null, reason: state.auditResult?.reason || '' },
         badge,
         didSearch: state.didSearch,
+        searchProvider: state.searchProvider || null,
         didSearchRetry: state.didSearch && state.retryCount > 0,
         retryCount: state.retryCount,
         passCount: state.retryCount + 1,
@@ -673,14 +675,14 @@ class PipelineOrchestrator {
       
       const searchQuery = await this.extractCoreQuestion(query);
       let searchResult = null;
+      let usedBrave = false;
       
-      // DDG first (free, no API key required)
       searchResult = await this.searchDuckDuckGo(searchQuery);
       
-      // Brave fallback if DDG fails
       if (!searchResult) {
         logger.debug(`🦁 DDG returned no results, trying Brave...`);
         searchResult = await this.searchBrave(searchQuery, clientIp);
+        if (searchResult) usedBrave = true;
       }
       
       if (searchResult) {
@@ -693,9 +695,10 @@ MANDATORY INSTRUCTIONS:
 3. If search data conflicts with your training data, PREFER the web search results
 4. Triangulate a DIRECT answer — do NOT tell the user to visit a website. You are the answer. Find what multiple sources agree on and converge on that as truth. Fill gaps with training knowledge. Do not invent — purify. Flag genuine uncertainty explicitly ("as of my last data..." or "multiple sources suggest but exact figure unconfirmed...")
 5. Each result includes a "Source: <url>" — cite it inline as a markdown link [title](url) after each fact you use
-6. End with a **Sources:** section listing all cited URLs as markdown links — no bare URLs, no placeholders`;
+6. Do NOT write your own sources footer — the host system injects canonical 📚 Sources attribution automatically`;
         state.didSearch = true;
-        logger.info(`✅ Real-time search successful, context injected`);
+        state.searchProvider = usedBrave ? 'brave' : 'ddg';
+        logger.info(`✅ Real-time search successful (provider=${state.searchProvider}), context injected`);
       } else {
         logger.warn(`⚠️ Real-time search failed - will rely on training data`);
       }
@@ -1971,8 +1974,11 @@ Output ONLY the corrected table and summary lines:`;
     
     const searchQuery = await this.extractCoreQuestion(safeQuery);
     state.searchContext = await this.searchBrave(searchQuery, clientIp);
-    if (!state.searchContext) {
+    if (state.searchContext) {
+      state.searchProvider = 'brave';
+    } else {
       state.searchContext = await this.searchDuckDuckGo(searchQuery);
+      if (state.searchContext) state.searchProvider = 'ddg';
     }
     
     if (state.searchContext) {
@@ -2003,7 +2009,8 @@ Output ONLY the corrected table and summary lines:`;
         psiEmaDirectOutput:  state.psiEmaDirectOutput,
         seedMetricDirectOutput: state.seedMetricDirectOutput,
         mode:    state.mode,
-        didSearch: state.didSearch
+        didSearch: state.didSearch,
+        searchProvider: state.searchProvider || null
       });
     }
     
