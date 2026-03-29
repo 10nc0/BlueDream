@@ -16,6 +16,7 @@ const { detectStockTicker, detectPsiEMAKeys, smartDetectTicker, fetchStockPrices
 const { getPsiEMAContext, PsiEMADashboard, PSI_EMA_DOCUMENTATION } = require('./psi-EMA');
 const { getFinancialPhysicsSeed } = require('./financial-physics');
 const { getLegalAnalysisSeed, LEGAL_KEYWORDS_REGEX } = require('../prompts/legal-analysis');
+const { getChemistryAnalysisSeed, CHEMISTRY_KEYWORDS_REGEX } = require('../prompts/pharma-analysis');
 const { detectForexPair, isForexQuery, fetchForexRate, buildForexContext } = require('./forex-fetcher');
 const { getSeedMetricProxy, detectSeedMetricIntent, buildSearchQueries, buildFallbackSearchQueries } = require('../prompts/seed-metric');
 const { detectCodeMode, getLanguageFromExtension } = require('../lib/mode-registry');
@@ -705,6 +706,12 @@ async function preflightRouter(options) {
         attachments.some(a => LEGAL_KEYWORDS_REGEX?.test(a.name || ''))) {
       result.routingFlags.usesLegalAnalysis = true;
     }
+
+    // Check for chemistry / compound queries — fires on text too, not just attachments.
+    // Cascades gracefully: attachment pipeline adds compound-specific enrichment on top.
+    if (CHEMISTRY_KEYWORDS_REGEX.test(classificationQuery)) {
+      result.routingFlags.usesChemistryAnalysis = true;
+    }
     
     // Check for code files (HIGH PRIORITY - overrides general AND forex when code files uploaded)
     // Code audit from attachments takes precedence over ambient mode detection
@@ -952,6 +959,10 @@ function buildSystemContext(preflight, nyanProtocolPrompt, options = {}) {
   if (preflight.routingFlags.usesLegalAnalysis) {
     messages.push({ role: 'system', content: getLegalAnalysisSeed() });
   }
+
+  if (preflight.routingFlags.usesChemistryAnalysis) {
+    messages.push({ role: 'system', content: getChemistryAnalysisSeed() });
+  }
   
   // Ψ-EMA identity context (H0 ground truth for "what is psi ema" queries)
   if (preflight.routingFlags.isPsiEmaIdentity && preflight.psiEmaIdentityContext) {
@@ -1072,6 +1083,7 @@ function detectCompoundQuery(query, hasPhotos = false, hasDocuments = false) {
     if (isForexQuery(text) || detectForexPair(text)) return 'Forex Analysis';
     if (detectSeedMetricIntent(text)) return 'Real Estate Analysis';
     if (LEGAL_KEYWORDS_REGEX && LEGAL_KEYWORDS_REGEX.test(text)) return 'Legal Analysis';
+    if (CHEMISTRY_KEYWORDS_REGEX && CHEMISTRY_KEYWORDS_REGEX.test(text)) return 'Chemistry Analysis';
     return 'General Query';
   }
 
