@@ -178,7 +178,13 @@ function registerInpipeRoutes(app, deps) {
         }
     }).catch(err => logger.error({ err }, 'TelegramChannel init failed'));
 
-    const channelRegistry = { twilio: twilioChannel, line: lineChannel, email: emailChannel, telegram: telegramChannel };
+    const webhookChannel = {
+        downloadMedia: () => null,
+        sendReply: () => Promise.resolve(),
+        getEmptyResponse: () => ({ body: '' }),
+        isConfigured: () => true
+    };
+    const channelRegistry = { twilio: twilioChannel, line: lineChannel, email: emailChannel, telegram: telegramChannel, webhook: webhookChannel };
     startQueueProcessor({ ...deps, channelRegistry });
     
     setInterval(() => cleanupIdempotencyCache(pool, logger), 60 * 1000);
@@ -496,72 +502,43 @@ function registerInpipeRoutes(app, deps) {
             if (!VALID_SCHEMA_PATTERN.test(tenantSchema)) {
                 return res.status(400).json({ error: 'Invalid tenant schema' });
             }
-            const client = await pool.connect();
-            try {
-                await client.query('BEGIN');
-                const bookResult = await client.query(
-                    format(`SELECT id, fractal_id, name, output_01_url, output_0n_url, output_credentials, outpipes_user FROM %I.books WHERE fractal_id = $1`, tenantSchema),
-                    [fractalIdParam]
-                );
-                if (bookResult.rows.length === 0) {
-                    await client.query('ROLLBACK');
-                    client.release();
-                    return res.status(404).json({ error: 'Book not found' });
-                }
-                const book = bookResult.rows[0];
-                if (book && typeof book.output_credentials === 'string') {
-                    try {
-                        book.output_credentials = JSON.parse(book.output_credentials);
-                    } catch (jsonError) {
-                        logger.error({ bookId: fractalIdParam, err: jsonError }, 'Corrupted output_credentials for book');
-                        book.output_credentials = {};
-                    }
-                }
-                const senderName = username || phone || email || 'External';
-                const discordPayload = {
-                    username: senderName,
-                    avatar_url: avatar_url || 'https://cdn.discordapp.com/embed/avatars/0.png',
-                    content: text || '',
-                    embeds: []
-                };
-                if (media_url) {
-                    discordPayload.embeds.push({ image: { url: media_url } });
-                }
-                const threadName = book.output_credentials?.thread_name;
-                const threadId = book.output_credentials?.thread_id;
-                const sendToLedger = helpers?.sendToLedger;
-                if (sendToLedger) {
-                    await sendToLedger(discordPayload, {
-                        isMedia: !!media_url,
-                        threadName,
-                        threadId
-                    }, book);
-                }
-                const capsule = {
-                    sender: senderName,
-                    text: text || '',
-                    media_url: media_url || null,
-                    avatar_url: avatar_url || null,
-                    book_name: book.name || null,
-                    timestamp: new Date().toISOString()
-                };
-                await routeUserOutput(capsule, { isMedia: !!media_url }, book);
-                await client.query('COMMIT');
-                client.release();
-                logger.info({ sender: senderName, bookId: fractalIdParam }, 'Webhook: forwarded message to book');
-                res.json({ success: true, message: 'Message forwarded to Webhook' });
-            } catch (error) {
-                try {
-                    await client.query('ROLLBACK');
-                } catch (rollbackError) {
-                    logger.error({ err: rollbackError }, 'ROLLBACK failed (connection likely broken)');
-                } finally {
-                    client.release();
-                }
-                throw error;
+
+            const bookCheck = await pool.query(
+                format(`SELECT id FROM %I.books WHERE fractal_id = $1`, tenantSchema),
+                [fractalIdParam]
+            );
+            if (bookCheck.rows.length === 0) {
+                return res.status(404).json({ error: 'Book not found' });
             }
+
+            if (await totalQueueDepth() >= MAX_QUEUE_SIZE) {
+                logger.warn({ queueSize: _cachedDepth }, 'Queue full — rejecting webhook message');
+                return res.status(503).json({ error: 'Server busy, please retry' });
+            }
+
+            const senderName = username || phone || email || 'External';
+            await enqueueItem({
+                msg: {
+                    fractalId: fractalIdParam,
+                    tenantSchema,
+                    body: text || '',
+                    senderName,
+                    avatar_url: avatar_url || null,
+                    media_url: media_url || null,
+                    phone: phone || null,
+                    email: email || null,
+                    hasMedia: !!media_url
+                },
+                rawPayload: payloadResult.data,
+                channel: 'webhook',
+                messageSid: `wh_${Date.now()}_${fractalIdParam.slice(-8)}`,
+                queuedAt: Date.now()
+            });
+
+            logger.info({ sender: senderName, bookId: fractalIdParam, queueDepth: _cachedDepth }, 'Webhook: message queued');
+            res.json({ success: true, message: 'Message accepted' });
         } catch (error) {
-            logger.error({ err: error }, 'Webhook: error processing request');
+            logger.error({ err: error }, 'Webhook: error queuing message');
             res.status(500).json({ error: error.message });
         }
     });
@@ -625,10 +602,23 @@ function registerInpipeRoutes(app, deps) {
             }
 
             if (!thothBot || !thothBot.client || !thothBot.ready) {
-                return res.status(503).json({ error: 'Message reader not ready' });
+                res.set('Retry-After', '5');
+                return res.status(503).json({ error: 'Message reader not ready, retry shortly' });
             }
 
-            const thread = await thothBot.client.channels.fetch(outputData.thread_id);
+            let thread;
+            try {
+                thread = await thothBot.client.channels.fetch(outputData.thread_id);
+            } catch (fetchErr) {
+                await sleep(1000);
+                try {
+                    thread = await thothBot.client.channels.fetch(outputData.thread_id);
+                } catch (retryErr) {
+                    logger.warn({ err: retryErr.message, threadId: outputData.thread_id }, 'Webhook read: thread fetch failed after retry');
+                    res.set('Retry-After', '5');
+                    return res.status(503).json({ error: 'Message source temporarily unavailable' });
+                }
+            }
             if (!thread) {
                 return res.json({ messages: [], total: 0, hasMore: false, note: 'Thread not found' });
             }
@@ -651,7 +641,19 @@ function registerInpipeRoutes(app, deps) {
             if (after) options.after = after;
             else if (before) options.before = before;
 
-            const discordMessages = await thread.messages.fetch(options);
+            let discordMessages;
+            try {
+                discordMessages = await thread.messages.fetch(options);
+            } catch (msgErr) {
+                await sleep(1000);
+                try {
+                    discordMessages = await thread.messages.fetch(options);
+                } catch (retryErr) {
+                    logger.warn({ err: retryErr.message, threadId: outputData.thread_id }, 'Webhook read: messages fetch failed after retry');
+                    res.set('Retry-After', '5');
+                    return res.status(503).json({ error: 'Message source temporarily unavailable' });
+                }
+            }
 
             const messages = Array.from(discordMessages.values())
                 .filter(msg => msg.createdAt >= bookCreatedAt)
@@ -697,7 +699,8 @@ function registerInpipeRoutes(app, deps) {
             logger.info({ bookId: fractalIdParam, count: messages.length }, 'Webhook read: messages fetched');
         } catch (error) {
             logger.error({ err: error }, 'Webhook read: error fetching messages');
-            res.status(500).json({ error: 'Failed to fetch messages' });
+            res.set('Retry-After', '5');
+            res.status(503).json({ error: 'Failed to fetch messages, retry shortly' });
         }
     });
     registeredRoutes.push('GET /api/webhook/:fractalId/messages');
@@ -749,7 +752,7 @@ function startQueueProcessor(deps) {
 
             let processed = false;
             try {
-                await processQueuedMessage(item.msg, item.rawPayload, channel, deps);
+                await processQueuedMessage(item.msg, item.rawPayload, channel, deps, item.channel);
                 processed = true;
             } catch (error) {
                 const newStatus = await markQueueRetry(item._queueId).catch(() => 'unknown');
@@ -787,8 +790,13 @@ function startQueueProcessor(deps) {
 }
 
 // Process a single queued message
-async function processQueuedMessage(msg, rawPayload, channel, deps) {
+async function processQueuedMessage(msg, rawPayload, channel, deps, channelName) {
     const { pool, logger } = deps;
+
+    if (channelName === 'webhook') {
+        await processWebhookMessage(msg, rawPayload, deps);
+        return;
+    }
     
     const routingResult = await routeMessage(pool, msg, logger);
     
@@ -810,6 +818,64 @@ async function processQueuedMessage(msg, rawPayload, channel, deps) {
     }
     
     logger.warn({ status: bookRecord.status, fractalId: bookRecord.fractal_id }, 'Unknown book status');
+}
+
+async function processWebhookMessage(msg, rawPayload, deps) {
+    const { pool, helpers, logger } = deps;
+    const tenantSchema = msg.tenantSchema;
+
+    if (!VALID_SCHEMA_PATTERN.test(tenantSchema)) {
+        logger.error({ tenantSchema }, 'Webhook queue: invalid tenant schema');
+        return;
+    }
+
+    const bookResult = await pool.query(
+        format(`SELECT id, fractal_id, name, output_01_url, output_0n_url, output_credentials, outpipes_user FROM %I.books WHERE fractal_id = $1`, tenantSchema),
+        [msg.fractalId]
+    );
+    if (bookResult.rows.length === 0) {
+        logger.warn({ fractalId: msg.fractalId }, 'Webhook queue: book deleted between enqueue and processing — message dropped (not retriable)');
+        return;
+    }
+
+    const book = bookResult.rows[0];
+    if (book && typeof book.output_credentials === 'string') {
+        try { book.output_credentials = JSON.parse(book.output_credentials); }
+        catch { book.output_credentials = {}; }
+    }
+
+    const discordPayload = {
+        username: msg.senderName,
+        avatar_url: msg.avatar_url || 'https://cdn.discordapp.com/embed/avatars/0.png',
+        content: msg.body || '',
+        embeds: []
+    };
+    if (msg.media_url) {
+        discordPayload.embeds.push({ image: { url: msg.media_url } });
+    }
+
+    const sendToLedger = helpers?.sendToLedger;
+    if (sendToLedger) {
+        const threadName = book.output_credentials?.thread_name;
+        const threadId = book.output_credentials?.thread_id;
+        await sendToLedger(discordPayload, {
+            isMedia: !!msg.media_url,
+            threadName,
+            threadId
+        }, book);
+    }
+
+    const capsule = {
+        sender: msg.senderName,
+        text: msg.body || '',
+        media_url: msg.media_url || null,
+        avatar_url: msg.avatar_url || null,
+        book_name: book.name || null,
+        timestamp: new Date().toISOString()
+    };
+    await routeUserOutput(capsule, { isMedia: !!msg.media_url }, book, { pool, tenantSchema });
+
+    logger.info({ sender: msg.senderName, bookId: msg.fractalId }, 'Webhook queue: message processed');
 }
 
 // Cleanup old idempotency entries from DB (DELETE rows older than TTL window)
