@@ -665,7 +665,10 @@ app.listen(PORT, '0.0.0.0', async () => {
             capacityManager.initReputationTable(),
             initUsageTable()
         ]);
-        await usageTracker.loadTodayUsageFromDb();
+        await Promise.all([
+            capacityManager.hydrateAllCircuitBreakers(),
+            usageTracker.loadTodayUsageFromDb()
+        ]);
     };
 
     await Promise.all([initBots(), initDb()]);

@@ -280,8 +280,9 @@ function recordAbuseEvent(ip) {
     // If threshold exceeded (5), activate circuit breaker
     if (count >= CIRCUIT_BREAKER_THRESHOLD) {
         breaker.blockedUntil = now + CIRCUIT_BREAKER_COOLDOWN_MS;
-        breaker.abuseEvents = []; // Reset events after blocking
+        breaker.abuseEvents = [];
         logger.warn('🔌 Circuit breaker activated for IP (30 min cooldown)');
+        persistCircuitBreaker(ip, breaker.blockedUntil);
         return { blocked: true, warning: null, count };
     }
     
@@ -304,8 +305,35 @@ function recordAbuseEvent(ip) {
     return { blocked: false, warning: null, count };
 }
 
+function persistCircuitBreaker(ip, blockedUntil) {
+    if (!dbPool) return;
+    const ipHash = hashIP(ip);
+    dbPool.query(
+        `UPDATE core.playground_reputation SET blocked_until = $1 WHERE ip_hash = $2`,
+        [new Date(blockedUntil), ipHash]
+    ).catch(err => logger.warn({ err: err.message }, '⚠️ Failed to persist circuit breaker'));
+}
+
+async function hydrateAllCircuitBreakers() {
+    if (!dbPool) return;
+    try {
+        const result = await dbPool.query(
+            `SELECT ip_hash, blocked_until FROM core.playground_reputation WHERE blocked_until > NOW()`
+        );
+        for (const row of result.rows) {
+            const blockedUntil = new Date(row.blocked_until).getTime();
+            circuitBreakers.set(row.ip_hash, { abuseEvents: [], blockedUntil, lastAbuse: 0 });
+        }
+        if (result.rows.length > 0) {
+            logger.info({ count: result.rows.length }, '🔌 Hydrated active circuit breakers from DB');
+        }
+    } catch (err) {
+        logger.warn({ err: err.message }, '⚠️ Failed to hydrate circuit breakers');
+    }
+}
+
 function isCircuitBreakerActive(ip) {
-    const breaker = circuitBreakers.get(ip);
+    const breaker = circuitBreakers.get(ip) || circuitBreakers.get(hashIP(ip));
     if (!breaker) return { active: false };
     
     const now = Date.now();
@@ -440,9 +468,14 @@ async function initReputationTable() {
                 ip_hash VARCHAR(32) PRIMARY KEY,
                 first_seen TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
                 total_queries INTEGER DEFAULT 0,
-                last_seen TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+                last_seen TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                blocked_until TIMESTAMP WITH TIME ZONE DEFAULT NULL
             )
         `);
+        await dbPool.query(`
+            ALTER TABLE core.playground_reputation
+            ADD COLUMN IF NOT EXISTS blocked_until TIMESTAMP WITH TIME ZONE DEFAULT NULL
+        `).catch(() => {});
         logger.info('✅ Playground reputation table initialized');
         return true;
     } catch (error) {
@@ -507,6 +540,7 @@ module.exports = {
     setDbPool,
     isExempt,
     initReputationTable,
+    hydrateAllCircuitBreakers,
     getReputationMultiplier,
     isCircuitBreakerActive,
     getNyanRestMessage,

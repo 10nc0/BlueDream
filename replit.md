@@ -180,7 +180,7 @@ The invite token flow (`/api/invites`, `generateInviteToken`, `validateInviteTok
 - `user_settings` queries: schema-qualified (`${tenantSchema}.user_settings`) — prevents cross-tenant reads via default search_path
 - `+62` country code default: RUNBOOK comment added documenting Indonesia assumption, mitigation path for other regions
 - Book activation atomicity: `handlePendingBookAsync` two UPDATEs (core.book_registry + tenant.books) wrapped in BEGIN/COMMIT transaction
-- `playground-capacity.js`: `crypto` require hoisted to top-level; `dbQueryLimiter` cleanup added to stale-IP sweep interval
+- `playground-capacity.js`: `crypto` require hoisted to top-level; `dbQueryLimiter` cleanup added to stale-IP sweep interval; circuit breaker state persisted to `core.playground_reputation.blocked_until` column — survives restarts via `hydrateAllCircuitBreakers()` on startup
 - `isAudioRecordingSupported()`: inverted condition fixed (`!== 'function'` → `=== 'function'`)
 - `localStorage.clear()` in playground: replaced with surgical `removeItem('nyan_history')` — no longer nukes unrelated origin data
 - Warm-up retry loop: capped at 3 retries (was infinite)
@@ -189,5 +189,6 @@ The invite token flow (`/api/invites`, `generateInviteToken`, `validateInviteTok
 `npm run migrate` → `lib/migration-runner.js` — fail-fast migration system.
 - Core migrations: `migrations/core/*.sql` (applied to `core` schema)
 - Tenant migrations: `migrations/tenant/*.sql` (applied to each `tenant_<id>` schema)
-- Tracks applied migrations in `core.migrations_applied` table.
+- **Fast-path skip**: on startup, a single query checks if the latest tenant migration file has been applied to all tenants. If yes, the per-tenant loop is skipped entirely — startup cost goes from O(N tenants) queries to O(1).
+- Tracks applied migrations in `core.migrations` and `core.tenant_migrations` tables.
 - Baseline: `001_baseline.sql` for both core and tenant schemas.
