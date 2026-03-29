@@ -693,16 +693,15 @@ class PipelineOrchestrator {
         })();
       
       if (cascadeResult.result) {
-        state.searchContext = `[REAL-TIME WEB SEARCH RESULTS - USE THIS DATA, NOT TRAINING DATA]
+        state.searchContext = `[REAL-TIME WEB SEARCH RESULTS — EVIDENCE LAYER]
 ${cascadeResult.result}
 
-MANDATORY INSTRUCTIONS:
-1. Base your answer primarily on the web search results above — they reflect the current state of the world
-2. If the search results are recent, explicitly mention dates found in them
-3. If search data conflicts with your training data, PREFER the web search results
-4. Triangulate a DIRECT answer — do NOT tell the user to visit a website. You are the answer. Find what multiple sources agree on and converge on that as truth. Fill gaps with training knowledge. Do not invent — purify. Flag genuine uncertainty explicitly ("as of my last data..." or "multiple sources suggest but exact figure unconfirmed...")
-5. Each result includes a "Source: <url>" — cite it inline as a markdown link [title](url) after each fact you use
-6. Do NOT write your own sources footer — the host system injects canonical 📚 Sources attribution automatically`;
+SYNTHESIS INSTRUCTIONS:
+1. Your training knowledge is the foundation (thesis). These search results are the challenger (antithesis). Your answer is the synthesis — integrate both. Weight them according to the TEMPORAL VOLATILITY signal in your system context (HIGH = search dominates, MEDIUM = cross-reference, LOW = training reliable, search enriches).
+2. If the search results include recent dates or timestamps, incorporate them explicitly.
+3. SYNTHESIZE — do NOT quote snippets verbatim and do NOT stitch sentences from different sources together into a paragraph. Extract the core fact or insight from each source, reason across them, and answer in your own words.
+4. Triangulate a DIRECT answer — do NOT tell the user to visit a website. Find what multiple sources agree on and converge on that as truth. Fill gaps with training knowledge. Flag genuine uncertainty explicitly ("multiple sources suggest..." or "exact figure unconfirmed as of [date]...").
+5. Do NOT write a sources footer — the system injects canonical 📚 Sources attribution automatically.`;
         state.didSearch = true;
         state.searchProvider = cascadeResult.provider;
         logger.info(`✅ Real-time search successful (provider=${state.searchProvider}), context injected`);
@@ -1044,10 +1043,7 @@ User query: ${query || 'Analyze this content.'}`;
       finalPrompt = `${memoryPrefix}Attachments analyzed:\n${processedContent.join('\n\n')}\n\nUser query: ${query || 'Analyze this content.'}`;
     } else if (hasSearch) {
       // Search only (general queries with web augmentation)
-      finalPrompt = `${memoryPrefix}REAL-TIME WEB SEARCH RESULTS (USE THIS DATA):
-${state.searchContext}
-
-INSTRUCTION: Extract relevant facts from search results. Do NOT mention knowledge cutoff.
+      finalPrompt = `${memoryPrefix}${state.searchContext}
 
 User query: ${query}`;
     } else if (hasMemory) {
