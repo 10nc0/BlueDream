@@ -83,6 +83,23 @@ Identity, in this system, is the pattern that emerges from recorded data — not
 
 ---
 
+## Lineage — Information + Protocol
+
+Nyanbook continues a 50-year stack:
+
+- **TCP/IP** — packets that need no permission from the wire
+- **HTTP** — documents that need no permission from the server
+- **Bitcoin** — transactions that need no permission from the bank
+- **IPFS** — content that needs no permission from location
+
+**Nyanbook (2026)** — messages + gaps that need no permission from the platform.
+
+The sovereignty guarantee lives in the hash and the structure, never in the intermediary.
+
+> Full lineage → [`LINEAGE (ETHOS).md`](LINEAGE%20(ETHOS).md)
+
+---
+
 ## Architecture
 
 ```
@@ -127,6 +144,30 @@ Every inpipe message is assigned a `message_fractal_id` (derived from content + 
 | IPFS via Pinata | Sovereign anchor — content-addressed, platform-independent | Free 1GB tier |
 
 Set `PINATA_JWT` and every inpipe message is automatically pinned to IPFS on arrival. The ledger is complete without IPFS. IPFS makes it sovereign.
+
+---
+
+## Agent Integration (OpenClaw, Ollama, etc.)
+
+Per-book bearer tokens make external agent integration clean and secure. Generate, rotate, or revoke tokens from the dashboard — each book gets its own.
+
+**Two endpoints, one loop:**
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /api/webhook/:fractalId/messages` | Pull conversation context (paginated, with `limit`, `after`, `before`) |
+| `POST /api/webhook/:fractalId` | Post a reply back into the ledger (queue-backed, crash-recoverable) |
+
+**Four interaction models — you choose:**
+
+| Model | Description |
+|---|---|
+| **(a) Polling** | Agent pulls new messages on its own schedule via the read API |
+| **(b) Push** | BlueDream forwards every new message to your agent's webhook via outpipe |
+| **(c) Trigger** | Agent responds only to specific patterns (e.g. `/ask`, `//`, keywords) |
+| **(d) Fully custom** | Any logic you want — batching, confidence thresholds, multi-model routing |
+
+All orchestration lives on your agent side. A Mac Mini running Ollama, a cloud function on Groq, an OpenClaw gateway — any HTTP client works. BlueDream doesn't decide when or whether to think. It only records and serves.
 
 ---
 
