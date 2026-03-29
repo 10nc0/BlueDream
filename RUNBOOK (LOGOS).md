@@ -166,7 +166,7 @@ WHERE fractal_id = '<fractal-id>';
 
 ### Message Queue (`lib/packet-queue.js` → `core.message_queue`)
 
-Durable inpipe queue. Every inbound message (WhatsApp, LINE, Telegram, email, agent write) is atomically enqueued before the webhook ACKs. A single continuous async loop dequeues and dispatches — no polling interval.
+Durable inbound message queue. Every inbound message (WhatsApp, LINE, Telegram, email, agent write) is atomically enqueued before the webhook ACKs. A single continuous async loop dequeues and dispatches — no polling interval.
 
 | Property | Value |
 |---|---|
@@ -175,7 +175,7 @@ Durable inpipe queue. Every inbound message (WhatsApp, LINE, Telegram, email, ag
 | Dequeue | `FOR UPDATE SKIP LOCKED` — crash-safe, no duplicate processing |
 | Retry | Up to 3 attempts; `last_error` stored on row at failure |
 | Gap | 500ms normal / 200ms burst (queue depth > 5) |
-| Consumers | `routes/inpipe.js` only — agent write path included |
+| Consumers | `routes/pipe.js` only — agent write path included |
 
 **Re-queue failed messages:**
 ```sql
@@ -188,7 +188,7 @@ WHERE status = 'failed';
 - `📥 Recovered N in-flight messages back to pending` → crash recovery on boot
 - `Queued message permanently failed (max retries)` → check `last_error` column
 
-> **Future:** `packet-queue.js` currently bundles queue primitives + inpipe-specific async handlers. If another system needs queue semantics, split into `lib/queue-core.js` (pure primitives, zero deps) + `lib/inpipe-handlers.js`.
+> **Future:** `packet-queue.js` currently bundles queue primitives + pipe-specific async handlers. If another system needs queue semantics, split into `lib/queue-core.js` (pure primitives, zero deps) + `lib/pipe-handlers.js`.
 
 ---
 
@@ -232,7 +232,7 @@ CIDs are content-addressed and provider-agnostic. Any CID pinned via Pinata can 
 
 No Grafana/Prometheus. The observability stack:
 
-- **Discord threads** — every inpipe message is a timestamped audit trail. Gaps are visible.
+- **Discord threads** — every inbound message is a timestamped audit trail. Gaps are visible.
 - **Server logs** — pino JSON. Background tasks, heal events, bot lifecycle all logged with context.
 - **`core.book_registry`** — `heal_status`, `heal_attempts`, `heal_error`, `next_heal_at` are queryable.
 
