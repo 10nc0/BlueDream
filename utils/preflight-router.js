@@ -94,7 +94,7 @@ function shouldSearchDDG(query) {
   if (!query || typeof query !== 'string') return false;
   if (detectRealtimeIntent(query)) return true;
   if (detectAbstractTopic(query)) return false;
-  if (query.trim().split(/\s+/).length < 3) return false;
+  if (query.trim().split(/\s+/).length < 2) return false;
   return true;
 }
 

@@ -30,7 +30,7 @@ A vanilla JavaScript Single Page Application (SPA) utilizing `Nyan.StateService`
 
 **AI Pipeline:**
 A 7-stage state machine orchestrates AI interactions, featuring:
--   **Preflight Router:** Classifies queries into specific modes (e.g., `forex`, `seed-metric`, `psi-ema`). DDG dialectic enrichment is default-on for `mode === 'general'` (inverted gate: opt-out via `ABSTRACT_TOPIC_PATTERNS` for philosophy/math/creative/code/greetings; queries < 3 words also skip). `shouldSearchDDG()` is the unified entry point; `detectRealtimeIntent()` remains for explicit realtime patterns.
+-   **Preflight Router:** Classifies queries into specific modes (e.g., `forex`, `seed-metric`, `psi-ema`). DDG dialectic enrichment is default-on for `mode === 'general'` (inverted gate: opt-out via `ABSTRACT_TOPIC_PATTERNS` for philosophy/math/creative/code/greetings; single-word queries also skip). `shouldSearchDDG()` is the unified entry point; `detectRealtimeIntent()` remains for explicit realtime patterns.
 -   **Mode Registry:** Plug-and-play configuration for different AI modes.
 -   **AuditCapsule:** Manages session-scoped entity extraction and tally caching.
 -   **Executive Formatter:** Post-processes audit responses.
