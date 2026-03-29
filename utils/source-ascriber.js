@@ -6,7 +6,9 @@ const { REGISTRY_VERSION } = require('../prompts/nyan-identity');
 
 function stripLLMSources(text) {
   return text
+    // multi-line bullet block (LLM-generated, with or without 📚)
     .replace(/\n+📚?\s*\*\*Sources?:?\*\*\n(?:[ \t]*[-*][^\n]*\n?)*/gi, '')
+    // single-line format (orchestrator canonical)
     .replace(/\n+📚?\s*\*\*Sources?:?\*\*[^\n]*/gi, '')
     .replace(/\n{3,}/g, '\n\n');
 }
@@ -22,11 +24,14 @@ function ascribeSource(flags = {}) {
 
   if (didSearch) {
     const urls = Array.isArray(searchSourceUrls) ? searchSourceUrls : [];
-    const domainBullets = urls.slice(0, 5).map(u => {
-      try { return `- [${new URL(u).hostname}](${u})`; } catch { return null; }
+    const parts = urls.slice(0, 5).map(u => {
+      try {
+        const host = new URL(u).hostname.replace(/^www\./, '');
+        return `[${host}](${u})`;
+      } catch { return null; }
     }).filter(Boolean);
-    domainBullets.push(`- ${model} training data`);
-    return domainBullets.join('\n');
+    parts.push(`${model} training data`);
+    return parts.join(', ');
   }
 
   return `${model} training data`;
@@ -35,14 +40,12 @@ function ascribeSource(flags = {}) {
 function injectSourceLine(text, flags) {
   const cleaned = stripLLMSources(text);
   const label   = ascribeSource(flags);
-  const block   = label.includes('\n')
-    ? `\n\n📚 **Sources:**\n${label}`
-    : `\n\n📚 **Sources:** ${label}`;
+  const line    = `\n\n📚 **Sources:** ${label}`;
   const sigIdx  = cleaned.search(/\n\n🔥/);
   if (sigIdx !== -1) {
-    return cleaned.slice(0, sigIdx) + block + cleaned.slice(sigIdx);
+    return cleaned.slice(0, sigIdx) + line + cleaned.slice(sigIdx);
   }
-  return cleaned.trimEnd() + block;
+  return cleaned.trimEnd() + line;
 }
 
 module.exports = { stripLLMSources, ascribeSource, injectSourceLine };

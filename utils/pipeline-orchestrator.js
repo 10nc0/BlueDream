@@ -707,7 +707,7 @@ ${cascadeResult.result}
 SYNTHESIS INSTRUCTIONS:
 1. ${_volInstruction}
 2. If the search results include recent dates or timestamps, incorporate them explicitly.
-3. QUANTA vs QUALITY — quantitative facts (numbers, scores, prices, dates) are atomic truths: report them directly and cite the specific source inline as [domain.com](url) using the Source: URLs visible in the search results above. Qualitative claims (analysis, descriptions, opinions) must be synthesised in your own words — never stitch sentences from different sources, never two consecutive sentences each from a different source.
+3. QUANTA vs QUALITY — quantitative facts (numbers, scores, prices, dates) are atomic truths: report them directly and cite the source inline using the Source: URLs visible in the search results above. Format inline citations as [domain.com](full-url) — display text must be ONLY the hostname without https:// and without www. (e.g. [espn.com](https://www.espn.com/...), NOT [https://espn.com](url)). Qualitative claims (analysis, descriptions, opinions) must be synthesised in your own words — never stitch sentences from different sources, never two consecutive sentences each from a different source.
 4. Deliver a DIRECT answer. For quantitative data: report and cite. For qualitative analysis: synthesise. Do NOT redirect the user to another website. Only flag uncertainty if two sources give actively contradictory numbers.
 5. Do NOT write a sources footer — the system injects canonical 📚 Sources attribution automatically.
 6. Do NOT explain your data sources, search mechanics, or temporal volatility to the user — these are operational context, not user-facing output.`;
