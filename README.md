@@ -5,13 +5,15 @@ Nyanbook.io is a post-folder information protocol.
 
 Instead of messy folders and hierarchies, you send screenshot messages / attachments — via WhatsApp, LINE, or any SNS. Nyanbook.io save and sort them by time. 
 
-A versatile AI endpoint is provided to make your data queryable & interactive.
+A versatile AI endpoint is provided to make your data queryable & interactive. **OpenClaw** and other Agents are supported via **agent tokens** within book.
 
 **Before**: Receipt → Fill Reimbursement Forms for Receipt → Create folder "2026/Taxes" → Rename file → Wrong Input in Forms → Forget where you saved it → ...
 
 **After**:  WhatsApp screenshot / photo / video to Nyanbook.io (no need Forms) → Auto-sorted by date → Search "receipt" or use AI queries → Interact with your files
 
 **Try it first:** → [nyanbook.io](https://nyanbook.io) — see the ledger, ask the AI. Sovereignty is a choice, not a requirement.
+
+Each "Book" is a routing address.
 
 <a href="playground-ui.png"><img src="playground-ui.png" width="400" alt="Playground UI"></a>
 <a href="nyanbook-ui.png"><img src="nyanbook-ui.png" width="400" alt="Nyanbook UI"></a>
@@ -131,7 +133,7 @@ Discord is the bootstrap layer, not the sovereignty layer.
 
 > ***Discord is not permanent. Books are ownership. Webhooks are escape hatches.***
 
-Nyanbook.io is built for the $7/day earner — the household, the mutual aid network, the small business that has never had a scribe. Free infrastructure (Discord threads, Pinata's 1GB IPFS tier, Supabase's free PostgreSQL) is what makes that accessible. This is a deliberate architectural choice.
+Nyanbook.io is built for the $7/day earner, the small business that has never had a scribe. Free infrastructure (Discord threads, Pinata's 1GB IPFS tier, Supabase's free PostgreSQL) is what makes that accessible. This is a deliberate architectural choice.
 
 The sovereignty guarantee is not the URL. It is the hash.
 
@@ -167,7 +169,9 @@ Per-book bearer tokens make external agent integration clean and secure. Generat
 | **(c) Trigger** | Agent responds only to specific patterns (e.g. `/ask`, `//`, keywords) |
 | **(d) Fully custom** | Any logic you want — batching, confidence thresholds, multi-model routing |
 
-All orchestration lives on your agent side. A Mac Mini running Ollama, a cloud function on Groq, an OpenClaw gateway — any HTTP client works. BlueDream doesn't decide when or whether to think. It only records and serves.
+All orchestration lives on your agent side. A Mac Mini running Ollama, a cloud function on Groq, an OpenClaw gateway — any HTTP client works. 
+
+BlueDream doesn't decide when or whether to think. It only records and serves.
 
 ---
 
@@ -293,7 +297,7 @@ Set `PINATA_JWT` to enable automatic IPFS pinning via Pinata (free 1GB tier). Th
 - Optional premium search available (set `PLAYGROUND_BRAVE_API` for richer results)
 - Powered by Groq Llama 3.3 70B
 
-**For fork operators:** Your fork gets web-grounded answers out of the box. See the [Runbook](RUNBOOK%20(LOGOS).md) for search architecture details.
+**For fork operators:** See the [Runbook](RUNBOOK%20(LOGOS).md) for search architecture details.
 
 ### Dashboard Audit (authenticated)
 - Hallucination correction — the AI checks its own answers before you see them
@@ -312,19 +316,6 @@ No P/I ratio fallback. N/A is the honest answer when data is unavailable.
 
 ---
 
-## Security
-
-- JWT authentication with role-based access
-- Multi-tenant schema isolation (complete data separation)
-- The 4-bot separation means compromise of one credential does not compromise the ledger
-- Twilio webhook signature validation
-- LINE webhook HMAC validation
-- Session management with audit logging
-- XSS prevention, CSP compliance
-- Sybil attack prevention on book activation
-
----
-
 ## Testing
 
 | Suite | Command | Covers |
@@ -334,16 +325,6 @@ No P/I ratio fallback. N/A is the honest answer when data is unavailable.
 | **BooksModule (browser)** | `Nyan.BooksModuleTests.runTests()` in console | Book deduplication, selection, API loading logic |
 
 Discord threads are the observability layer — every inpipe message is a timestamped, human-readable audit trail. No Grafana required.
-
----
-
-## Fork Operator Notes
-
-- Provision a Supabase (or any PostgreSQL) instance and set `DATABASE_URL`
-- Create your own Discord bots (the 4-bot separation is architectural, not cosmetic)
-- Provision a Pinata account for IPFS — or skip it (the ledger remains complete)
-- The `SESSION_SECRET` in `.env.example` is a placeholder — change it before production
-- `NYAN_OUTBOUND_API` and `NYAN_OUTBOUND_API_DEV` gate the internal Nyan API v1 — generate your own random strings (min 32 chars)
 
 ---
 
