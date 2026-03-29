@@ -707,13 +707,14 @@ ${cascadeResult.result}
 SYNTHESIS INSTRUCTIONS:
 1. ${_volInstruction}
 2. If the search results include recent dates or timestamps, incorporate them explicitly.
-3. QUANTA vs QUALITY — quantitative facts (numbers, scores, prices, dates) are atomic truths: report them directly and cite the source. Qualitative claims (analysis, descriptions, opinions) must be synthesised in your own words — never stitch sentences from different sources, never two consecutive sentences each from a different source.
+3. QUANTA vs QUALITY — quantitative facts (numbers, scores, prices, dates) are atomic truths: report them directly and cite the specific source inline as [domain.com](url) using the Source: URLs visible in the search results above. Qualitative claims (analysis, descriptions, opinions) must be synthesised in your own words — never stitch sentences from different sources, never two consecutive sentences each from a different source.
 4. Deliver a DIRECT answer. For quantitative data: report and cite. For qualitative analysis: synthesise. Do NOT redirect the user to another website. Only flag uncertainty if two sources give actively contradictory numbers.
 5. Do NOT write a sources footer — the system injects canonical 📚 Sources attribution automatically.
 6. Do NOT explain your data sources, search mechanics, or temporal volatility to the user — these are operational context, not user-facing output.`;
+        state.searchSourceUrls = [...cascadeResult.result.matchAll(/^   Source:\s*(https?:\/\/\S+)/gm)].map(m => m[1]);
         state.didSearch = true;
         state.searchProvider = cascadeResult.provider;
-        logger.info(`✅ Real-time search successful (provider=${state.searchProvider}), context injected`);
+        logger.info(`✅ Real-time search successful (provider=${state.searchProvider}), urls=${state.searchSourceUrls.length}, context injected`);
       } else {
         logger.warn(`⚠️ Real-time search failed - will rely on training data`);
       }
@@ -2026,7 +2027,8 @@ Output ONLY the corrected table and summary lines:`;
         seedMetricDirectOutput: state.seedMetricDirectOutput,
         mode:    state.mode,
         didSearch: state.didSearch,
-        searchProvider: state.searchProvider || null
+        searchProvider: state.searchProvider || null,
+        searchSourceUrls: state.searchSourceUrls || []
       });
     }
     
