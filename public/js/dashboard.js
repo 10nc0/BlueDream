@@ -3275,8 +3275,8 @@
                                     <span style="color: #e2e8f0; font-size: 0.875rem; font-weight: 600;">🪞 Audit Mirror Outpipe</span>
                                 </div>
                                 <p style="color: #94a3b8; font-size: 0.75rem; margin-bottom: 0.75rem;">Mirror audit logs to your own Discord thread. Paste a Discord thread URL or thread ID below.</p>
-                                <div style="display: flex; gap: 0.5rem; margin-bottom: 0.5rem;">
-                                    <input type="text" id="nyanAuditMirrorInput" placeholder="Thread ID or Discord URL" style="flex: 1; background: rgba(148, 163, 184, 0.1); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 6px; color: #e2e8f0; padding: 0.5rem 0.75rem; font-size: 0.8rem; outline: none;" />
+                                <div style="display: flex; gap: 0.5rem; margin-bottom: 0.5rem; flex-wrap: wrap;">
+                                    <input type="text" id="nyanAuditMirrorInput" placeholder="Thread ID or Discord URL" style="flex: 1; min-width: 0; background: rgba(148, 163, 184, 0.1); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 6px; color: #e2e8f0; padding: 0.5rem 0.75rem; font-size: 0.8rem; outline: none;" />
                                     <button id="nyanAuditMirrorSave" style="background: linear-gradient(135deg, #3b82f6, #2563eb); border: none; border-radius: 6px; color: white; padding: 0.5rem 0.75rem; cursor: pointer; font-size: 0.75rem; font-weight: 600; white-space: nowrap;">Save</button>
                                 </div>
                                 <div id="nyanAuditMirrorStatus" style="font-size: 0.7rem; color: #64748b;"></div>
