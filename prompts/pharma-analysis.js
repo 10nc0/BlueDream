@@ -55,6 +55,13 @@ PRINCIPLES:
 - If data is unavailable for a section, write "Insufficient established data."
 - Be accessible: the query may come from someone without professional guidance.
 - Do not recommend specific doses or replace medical advice.
+
+SOURCE ATTRIBUTION (critical):
+- External reference data will be provided with inline "Source: [URL]" or "Source: Wikipedia" markers.
+- Extract that URL/attribution and cite it in your final 📚 **Sources:** line.
+- Do NOT repeat the source inline — cite once at the end.
+- If external data is provided, cite ONLY that source in 📚 **Sources:** (not "Llama 3.3 70B").
+- If NO external data is provided, default to "📚 **Sources:** Llama 3.3 70B training data" per NYAN Protocol.
 `;
 
 /**
