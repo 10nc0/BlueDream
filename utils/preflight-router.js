@@ -17,6 +17,7 @@ const { getPsiEMAContext, PsiEMADashboard, PSI_EMA_DOCUMENTATION } = require('./
 const { getFinancialPhysicsSeed } = require('./financial-physics');
 const { getLegalAnalysisSeed, LEGAL_KEYWORDS_REGEX } = require('../prompts/legal-analysis');
 const { getChemistryAnalysisSeed, CHEMISTRY_KEYWORDS_REGEX } = require('../prompts/pharma-analysis');
+const { processChemistryContent } = require('./attachment-cascade');
 const { detectForexPair, isForexQuery, fetchForexRate, buildForexContext } = require('./forex-fetcher');
 const { getSeedMetricProxy, detectSeedMetricIntent, buildSearchQueries, buildFallbackSearchQueries } = require('../prompts/seed-metric');
 const { detectCodeMode, getLanguageFromExtension } = require('../lib/mode-registry');
@@ -708,9 +709,23 @@ async function preflightRouter(options) {
     }
 
     // Check for chemistry / compound queries — fires on text too, not just attachments.
-    // Cascades gracefully: attachment pipeline adds compound-specific enrichment on top.
+    // For vision attachments (image/*) the attachment-cascade handles DDG enrichment.
+    // For text-only queries and text-only PDFs, we fetch it here and store on result
+    // so buildSystemContext can inject it alongside the seed in one atomic block.
     if (CHEMISTRY_KEYWORDS_REGEX.test(classificationQuery)) {
       result.routingFlags.usesChemistryAnalysis = true;
+      const hasImageAttachments = attachments.some(a => (a.mimeType || a.type || '').startsWith('image/'));
+      if (!hasImageAttachments) {
+        try {
+          const chemResult = await processChemistryContent(null, classificationQuery);
+          if (chemResult?.enrichedText) {
+            result.chemistryEnrichment = chemResult.enrichedText;
+            logger.debug(`🔬 Chemistry DDG enrichment fetched (text path, ${chemResult.stage})`);
+          }
+        } catch (err) {
+          logger.warn(`⚠️ Chemistry DDG enrichment failed (non-fatal): ${err.message}`);
+        }
+      }
     }
     
     // Check for code files (HIGH PRIORITY - overrides general AND forex when code files uploaded)
@@ -962,6 +977,11 @@ function buildSystemContext(preflight, nyanProtocolPrompt, options = {}) {
 
   if (preflight.routingFlags.usesChemistryAnalysis) {
     messages.push({ role: 'system', content: getChemistryAnalysisSeed() });
+    // DDG enrichment: injected here when fetched by preflightRouter (text/PDF path).
+    // Vision path: attachment-cascade injects enrichment directly into the attachment context.
+    if (preflight.chemistryEnrichment) {
+      messages.push({ role: 'system', content: preflight.chemistryEnrichment });
+    }
   }
   
   // Ψ-EMA identity context (H0 ground truth for "what is psi ema" queries)

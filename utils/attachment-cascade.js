@@ -846,10 +846,43 @@ async function enrichChemistryContext(formula, structureDescription = '', knownC
 
 // ===== UNIFIED CHEMISTRY PIPELINE =====
 // Tiered Epistemology: Stage 0 (settled) → Stage 0.5 (conflict) → Stage 1+ (discovery)
-async function processChemistryContent(visionObservations) {
+// textQuery: optional plain-text fallback when no vision observations are present
+//            (plain text queries, text-only PDFs) — same DDG enrichment, no visual path
+async function processChemistryContent(visionObservations, textQuery = null) {
     // visionObservations: array of {description, contentType, ...}
     // Returns: { compoundInfo, chemistryEnrichment, enrichedText }
-    
+
+    // ── TEXT-ONLY PATH ────────────────────────────────────────────────────────
+    // Fires when there are no vision observations but we have a raw text query.
+    // Skips the visual classification filter and goes straight to DDG enrichment.
+    if ((!visionObservations || visionObservations.length === 0) && textQuery) {
+        const { formula, knownName } = extractFormulaAndKnownName(textQuery);
+        if (!formula && !knownName) {
+            logger.debug(`🧪 Chemistry Pipeline (text): No formula or compound detected in query`);
+            return null;
+        }
+
+        logger.debug(`🧪 Chemistry Pipeline (text): Formula=${formula || 'unknown'}, Compound=${knownName || 'unknown'}`);
+
+        const chemistryEnrichment = await enrichChemistryContext(formula, '', knownName);
+        const enrichedText = chemistryEnrichment?.contextText || '';
+
+        return {
+            compoundInfo: (formula || knownName) ? {
+                name: knownName || formula,
+                confidence: 0.9,
+                source: 'Text query (CHEMISTRY_KEYWORDS_REGEX)',
+                matchedFormula: formula || null
+            } : null,
+            chemistryEnrichment,
+            enrichedText,
+            formula,
+            knownName,
+            stage: 'text-query'
+        };
+    }
+    // ── END TEXT-ONLY PATH ────────────────────────────────────────────────────
+
     if (!visionObservations || visionObservations.length === 0) {
         return null;
     }
