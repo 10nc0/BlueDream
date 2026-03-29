@@ -110,8 +110,9 @@ const TEMPORAL_MEDIUM_PATTERNS = [
   /\b(siapa|quien|qui\s+est|wer\s+ist)\b/i,
 ];
 
-function classifyTemporalVolatility(query) {
+function classifyTemporalVolatility(query, mode = null) {
   if (!query || typeof query !== 'string') return 'low';
+  if (mode && mode !== 'general') return 'low';
   if (TEMPORAL_HIGH_PATTERNS.some(p => p.test(query))) return 'high';
   if (TEMPORAL_MEDIUM_PATTERNS.some(p => p.test(query))) return 'medium';
   return 'low';

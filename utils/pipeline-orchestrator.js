@@ -709,7 +709,7 @@ MANDATORY INSTRUCTIONS:
     // TEMPORAL AWARENESS: Inject current date/time FIRST
     // Uses unified queryTimestamp from PipelineState (single source of truth)
     // ========================================
-    const volatility = state.didSearch ? classifyTemporalVolatility(input.query) : null;
+    const volatility = (state.didSearch && state.searchContext) ? classifyTemporalVolatility(input.query, state.preflight?.mode) : null;
     const temporalMessage = {
       role: 'system',
       content: buildTemporalContent(state.queryTimestamp, volatility)
