@@ -680,7 +680,12 @@ class PipelineOrchestrator {
       const searchQuery = await this.extractCoreQuestion(query);
       const cascadeResult = this.searchCascade
         ? await this.searchCascade({ query: searchQuery, strategy: 'ddg-first', clientIp })
-        : { result: await this.searchDuckDuckGo(searchQuery) || await this.searchBrave(searchQuery, clientIp), provider: 'ddg' };
+        : await (async () => {
+          const ddgResult = await this.searchDuckDuckGo(searchQuery);
+          if (ddgResult) return { result: ddgResult, provider: 'ddg' };
+          const braveResult = await this.searchBrave(searchQuery, clientIp);
+          return { result: braveResult || null, provider: braveResult ? 'brave' : null };
+        })();
       
       if (cascadeResult.result) {
         state.searchContext = `[REAL-TIME WEB SEARCH RESULTS - USE THIS DATA, NOT TRAINING DATA]
