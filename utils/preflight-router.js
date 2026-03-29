@@ -28,18 +28,20 @@ const { NYAN_IDENTITY_DOCUMENTATION, REGISTRY_VERSION } = require('../prompts/ny
 
 const NYAN_IDENTITY_PATTERNS = [
   /^(?:who|what)\s+(?:are|is)\s+(?:you|nyan)\s*\??$/i,
-  /^who\s+(?:made|built|created)\s+(?:you|nyanbook|nyan)\s*\??$/i,
+  /^who\s+(?:made|built|created)\s+(?:you|this|nyanbook|nyan)\s*\??$/i,
   /^(?:what\s+is|tell\s+me\s+about|explain)\s+(?:the\s+)?nyanbook\s*\??$/i,
   /^(?:what\s+is|tell\s+me\s+about|explain)\s+(?:the\s+)?nyan\s*protocol\s*\??$/i,
   /^what\s+(?:can\s+you\s+do|are\s+your\s+capabilities)\s*\??$/i,
-  /^how\s+does\s+(?:nyanbook|nyan)\s+work\s*\??$/i,
+  /^how\s+does\s+(?:this|nyanbook|nyan)\s+work\s*\??$/i,
   /^what\s+is\s+(?:this\s+)?(?:nyanbook\s+)?playground\s*\??$/i,
   /^(?:what\s+is\s+)?blue\s*dream\s*\??$/i,
   /\bnyanbook\b.*\b(?:source\s*code|github|repo(?:sitory)?)\b/i,
   /\b(?:source\s*code|github|repo(?:sitory)?)\b.*\bnyanbook\b/i,
+  /^(?:source\s*code|github|repo(?:sitory)?)\s*\??$/i,
   /^(?:where\s+is\s+(?:the\s+)?(?:source|code|repo))\s*\??$/i,
   /^siapa\s+(?:kamu|anda)\s*\??$/i,
   /^(?:kamu|anda)\s+siapa\s*\??$/i,
+  /^(?:ini|itu)\s+apa\s*\??$/i,
   /^apa\s+(?:itu|ini)\s+nyanbook\s*\??$/i,
 ];
 
