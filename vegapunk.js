@@ -880,6 +880,10 @@ app.listen(PORT, '0.0.0.0', async () => {
             logger.warn('Hermes not ready — skipping auto-heal');
         }
 
+        const { worker: outboxWorker } = require('./lib/outpipes/worker');
+        outboxWorker.setPool(pool);
+        outboxWorker.start(3000);
+
         genesisCounter.start();
         logger.info('🔢 Genesis counter started (cat + φ breath tiers)');
 

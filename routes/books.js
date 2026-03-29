@@ -840,6 +840,13 @@ function registerBooksRoutes(app, deps) {
                 txClient.release();
             }
 
+            // Cancel pending outbox jobs for this book — old config no longer valid
+            pool.query(
+                `UPDATE core.outbox_jobs SET status = 'cancelled', updated_at = NOW()
+                 WHERE book_fractal_id = $1 AND status = 'pending'`,
+                [updateResult.rows[0].fractal_id]
+            ).catch(err => logger.warn({ err }, 'Failed to cancel outbox jobs on outpipe update'));
+
             logger.info({ bookId: id, count: outpipes.length }, 'Outpipes updated');
             _invalidateBooksCache(tenantSchema, req.userId);
             res.json({ success: true, outpipes_user: updateResult.rows[0].outpipes_user });
@@ -890,6 +897,14 @@ function registerBooksRoutes(app, deps) {
             }
             
             logger.info({ bookId: id, userId: req.userId }, 'Book archived successfully');
+
+            // Cancel any pending outbox delivery jobs — book is gone
+            pool.query(
+                `UPDATE core.outbox_jobs SET status = 'cancelled', updated_at = NOW()
+                 WHERE book_fractal_id = $1 AND status = 'pending'`,
+                [id]
+            ).catch(err => logger.warn({ err }, 'Failed to cancel outbox jobs on book archive'));
+
             _invalidateBooksCache(tenantSchema, req.userId);
             res.json({ success: true, message: 'Book deleted successfully' });
             

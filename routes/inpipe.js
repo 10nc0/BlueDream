@@ -1195,7 +1195,7 @@ async function handleActiveBookAsync(channel, msg, rawPayload, bookRecord, deps)
             book_name:  book.name || null,
             timestamp:  new Date().toISOString()
         };
-        await routeUserOutput(outpipeCapsule, { isMedia: !!media }, book);
+        await routeUserOutput(outpipeCapsule, { isMedia: !!media }, book, { pool, tenantSchema });
     } catch (err) {
         logger.warn({ err: err.message }, 'Async: routeUserOutput error (non-fatal)');
     }
