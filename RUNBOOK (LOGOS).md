@@ -3,6 +3,7 @@
 Pairs with the README (pathos — *what to configure*) and LINEAGE (ethos — *why it exists*). This document is logos: *how it works, and what to do when it doesn't*.
 
 **Before**: User → App → Structured DB → UI
+
 **Now**: User → Messaging platform → Webhook → Ledger → Query layer
 
 It's a protocol shift, not an app.
@@ -35,7 +36,7 @@ Run after every fresh deployment or major environment change.
 | Per-book webhooks | Dashboard → Edit Book → Outpipes | — |
 | Agent read API | Dashboard → Edit Book → Agent Access Token | — |
 
-### Agent Read API (OpenClaw Integration)
+### Agent Read API -- OpenClaw Integration
 
 Lets external agents read a single book's messages via bearer token. Auth is **per-tenant per-book** — a token for Book A cannot read Book B, even within the same tenant.
 
