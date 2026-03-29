@@ -48,7 +48,7 @@ const { getMemoryManager, cleanupOldSessions } = require('./utils/memory-manager
 const { initialize: initDeps, setMiddleware: setDepsMiddleware, deps } = require('./lib/deps');
 const { createAuthMiddleware, registerAuthRoutes } = require('./routes/auth');
 const { registerBooksRoutes } = require('./routes/books');
-const { registerInpipeRoutes } = require('./routes/inpipe');
+const { registerPipeRoutes } = require('./routes/pipe');
 const { registerNyanAIRoutes, capacityManager, usageTracker } = require('./routes/nyan-ai');
 const { healQueue } = require('./lib/heal-queue');
 const phiBreathe = require('./lib/phi-breathe');
@@ -760,8 +760,8 @@ app.listen(PORT, '0.0.0.0', async () => {
     const booksResult = registerBooksRoutes(app, deps);
     registeredSatellites.push({ name: 'books', endpoints: booksResult.endpoints });
 
-    const inpipeResult = registerInpipeRoutes(app, deps);
-    stopQueueProcessor = inpipeResult.stopQueueProcessor || (() => Promise.resolve());
+    const pipeResult = registerPipeRoutes(app, deps);
+    stopQueueProcessor = pipeResult.stopQueueProcessor || (() => Promise.resolve());
     _queueProcessorReady = true;
     const activeChannels = [
         'WhatsApp',
@@ -770,9 +770,9 @@ app.listen(PORT, '0.0.0.0', async () => {
         process.env.TELEGRAM_BOT_TOKEN  ? 'Telegram' : null
     ].filter(Boolean);
     registeredSatellites.push({
-        name: 'inpipe',
-        endpoints: inpipeResult.endpoints,
-        desc: `${activeChannels.join(' + ')} inpipe, per-channel webhooks`
+        name: 'pipe',
+        endpoints: pipeResult.endpoints,
+        desc: `${activeChannels.join(' + ')} inbound channels + agent read`
     });
 
     const nyanAIResult = registerNyanAIRoutes(app, deps);
