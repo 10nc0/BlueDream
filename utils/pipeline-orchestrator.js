@@ -403,8 +403,10 @@ class PipelineOrchestrator {
               if (keyTerms) {
                 logger.debug(`🔎 S-1: Vision search enrichment [${trigger}] — querying "${keyTerms}" (scholastic: ${scholastic.domain})`);
                 let searchResult = await this.searchBrave(keyTerms, normalizedInput.clientIp);
+                let visionProvider = searchResult ? 'brave' : null;
                 if (!searchResult) {
                   searchResult = await this.searchDuckDuckGo(keyTerms);
+                  if (searchResult) visionProvider = 'ddg';
                 }
                 
                 if (searchResult) {
@@ -412,7 +414,7 @@ class PipelineOrchestrator {
                     `\n### 🔍 Image Identification (Web Search):\n${searchResult}`
                   );
                   state.didSearch = true;
-                  state.searchProvider = state.searchProvider || 'brave';
+                  state.searchProvider = state.searchProvider || visionProvider;
                   logger.info(`✅ S-1: Vision search enrichment complete (${searchResult.length} chars)`);
                 } else {
                   logger.warn(`⚠️ S-1: Vision search returned no results for "${keyTerms}"`);

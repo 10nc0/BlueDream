@@ -267,20 +267,16 @@ Set `PINATA_JWT` to enable automatic IPFS pinning via Pinata (free 1GB tier). Th
 - DDG dialectic enrichment (default-on, free, no API key — external antithesis to training data)
 - Brave Search premium tier (optional — set `PLAYGROUND_BRAVE_API` for richer results)
 - Powered by Groq Llama 3.3 70B
-
-#### Search Architecture
-
-The AI pipeline uses a two-layer dialectic:
+- Search:
 
 | Layer | Role | Cost |
 |-------|------|------|
 | **DDG enrichment** (external dialectic) | Grounds every general query against live web data *before* the LLM reasons. DDG instant-answer API — free, no key, ~200ms. | $0 |
 | **Brave fallback** (premium tier) | If DDG returns nothing, cascades to Brave Search for richer web results. Requires `PLAYGROUND_BRAVE_API`. | Free tier available |
-| **Two-pass audit** (internal dialectic) | LLM self-checks its own answer (S2→S3). Catches hallucination via confidence scoring. | Included in LLM calls |
 
-**For fork operators:** DDG is auto-plugged — your fork gets web-grounded answers out of the box. Brave is optional: set `PLAYGROUND_BRAVE_API` in Secrets to enable the premium search tier. If the key is missing, the pipeline gracefully falls back to DDG-only.
-
-Abstract topics (philosophy, math proofs, creative writing, code review, tetralemma) skip search — they don't benefit from web grounding. Queries under 3 words (greetings, short commands) also skip.
+**For fork operators:** 
+- DuckDuckGo (DDG) is auto-plugged — your fork gets web-grounded answers out of the box. 
+- Brave is optional: set `PLAYGROUND_BRAVE_API` in Secrets to enable the premium search tier. If the key is missing, the pipeline gracefully falls back to DDG-only.
 
 ### Dashboard Audit (authenticated)
 - 4-stage hallucination correction pipeline (S0–S3)
