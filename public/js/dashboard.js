@@ -3530,9 +3530,6 @@
             // Book Name
             container.appendChild(createFormGroup('Book Name', currentBook.name));
             
-            // Platform
-            container.appendChild(createFormGroup('Platform', platform, ' text-transform: capitalize;'));
-            
             // Webhook URL
             const webhookGroup = document.createElement('div');
             webhookGroup.className = 'form-group';
