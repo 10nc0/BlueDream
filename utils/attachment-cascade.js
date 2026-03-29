@@ -1059,8 +1059,7 @@ const EXTRACTION_TOOLS = {
     'buffer-text': { tier: COST_TIERS.FREE_LOCAL, type: 'text', name: 'buffer-utf8' },
     'groq-whisper': { tier: COST_TIERS.CHEAP_API, type: 'audio', name: 'groq-whisper' },
     'groq-pdf-vision': { tier: COST_TIERS.MODERATE_API, type: 'vision', name: 'groq-pdf-vision' },
-    'groq-doc-vision': { tier: COST_TIERS.MODERATE_API, type: 'vision', name: 'groq-doc-vision' },
-    'tesseract-ocr': { tier: COST_TIERS.MODERATE_API, type: 'ocr', name: 'tesseract.js' }
+    'groq-doc-vision': { tier: COST_TIERS.MODERATE_API, type: 'vision', name: 'groq-doc-vision' }
 };
 
 function selectExtractionPipeline(fileType) {
@@ -1072,7 +1071,6 @@ function selectExtractionPipeline(fileType) {
                 { tool: 'pdf-parse', tier: COST_TIERS.FREE_LOCAL, purpose: 'text-extraction' },
                 { tool: 'tabula', tier: COST_TIERS.FREE_LOCAL, purpose: 'table-extraction' },
                 { tool: 'groq-pdf-vision', tier: COST_TIERS.MODERATE_API, purpose: 'visual-analysis' },
-                { tool: 'tesseract-ocr', tier: COST_TIERS.MODERATE_API, purpose: 'ocr-fallback', condition: 'sparse-text' }
             );
             break;
             
@@ -1224,9 +1222,6 @@ async function executeTool(toolName, buffer, fileName, options) {
             
         case 'groq-pdf-vision':
             return await extractPDFVisualContent(buffer, fileName, options);
-            
-        case 'tesseract-ocr':
-            return { success: false, error: 'OCR requires image data - use groq-pdf-vision instead' };
             
         default:
             return { success: false, error: `Unknown tool: ${toolName}` };
