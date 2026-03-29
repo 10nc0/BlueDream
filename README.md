@@ -128,7 +128,7 @@ Adding a new tool: one `.js` file in `lib/tools/` — auto-discovered on startup
 
 Discord is the bootstrap layer, not the sovereignty layer.
 
-> ***Discord is not permanent. Configure new webhooks to own copies of your books.***
+> ***Discord is not permanent. Books are ownership. Webhooks are escape hatches.***
 
 Nyanbook.io is built for the $7/day earner — the household, the mutual aid network, the small business that has never had a scribe. Free infrastructure (Discord threads, Pinata's 1GB IPFS tier, Supabase's free PostgreSQL) is what makes that accessible. This is a deliberate architectural choice.
 
