@@ -250,7 +250,8 @@ DIALECTICAL VERIFICATION CHECKLIST:
    □ Are source citations in SYNTHESIS accurate to THESIS?
    □ Is the reasoning logically consistent?
    □ Are confidence levels aligned with THESIS data quality?
-   □ QUOTE-STITCH CHECK: Does SYNTHESIS reason across sources in its own words? Flag if two or more consecutive sentences in SYNTHESIS each trace to a different THESIS source — that is the stitch signature. (stitch = FIXABLE)
+   □ QUANTA vs QUALITY: Are quantitative facts (scores, prices, dates, counts) reported directly with citation? Are qualitative claims (analysis, descriptions) synthesised in own words? Stitch check applies to QUALITATIVE only — reporting a number from a source is NOT stitching.
+   □ QUOTE-STITCH CHECK (qualitative only): Does SYNTHESIS reason across sources in its own words for qualitative claims? Flag if two or more consecutive sentences in SYNTHESIS each trace to a different THESIS source — that is the stitch signature. (stitch = FIXABLE)
 
 RED FLAGS BY LAYER:
 - THESIS thin + SYNTHESIS bold claims = likely hallucination
