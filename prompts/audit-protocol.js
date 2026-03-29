@@ -53,7 +53,7 @@ CRITICAL RED FLAGS (instant REJECTED - triggers search cascade):
 - Inventing specific citations that don't exist (e.g., "According to Nature 2024 study..." when no such study exists)
 - Self-contradictory logic within the same answer
 - Math errors in explicit calculations
-- QUOTE-STITCH PATTERN (FIXABLE): Answer consists primarily of sentences quoted or lightly paraphrased one-by-one from different sources, stitched together with transition phrases, without genuine reasoning or synthesis. Hallmark: each sentence traces to a different source URL. This masks shallow understanding behind confident-sounding output. Mark FIXABLE with suggested fix: "Rewrite using synthesis — reason across sources, answer in your own words."
+- QUOTE-STITCH PATTERN (FIXABLE): Answer consists primarily of sentences quoted or lightly paraphrased one-by-one from different sources, stitched together with transition phrases, without genuine reasoning or synthesis. Specific hallmark: two or more consecutive sentences where each traces to a different source URL — this is the stitch signature. Mark FIXABLE with suggested fix: "Rewrite using synthesis — reason across all sources at once, answer in your own words."
 - KNOWLEDGE CUTOFF ADMISSION: Answer says it lacks current/real-time data. Detect these phrases IN ANY LANGUAGE:
   * English: "I don't have information", "my knowledge cutoff", "beyond my training", "I cannot access real-time", "no information available"
   * Indonesian: "tidak memiliki informasi", "pengetahuan saya terbatas", "di luar pengetahuan saya"
@@ -250,13 +250,13 @@ DIALECTICAL VERIFICATION CHECKLIST:
    □ Are source citations in SYNTHESIS accurate to THESIS?
    □ Is the reasoning logically consistent?
    □ Are confidence levels aligned with THESIS data quality?
-   □ QUOTE-STITCH CHECK: Does SYNTHESIS reason across sources in its own words? Or does it stitch together near-verbatim sentences from different THESIS sources? (stitch = FIXABLE)
+   □ QUOTE-STITCH CHECK: Does SYNTHESIS reason across sources in its own words? Flag if two or more consecutive sentences in SYNTHESIS each trace to a different THESIS source — that is the stitch signature. (stitch = FIXABLE)
 
 RED FLAGS BY LAYER:
 - THESIS thin + SYNTHESIS bold claims = likely hallucination
 - ANTITHESIS specific + SYNTHESIS vague = evasion
 - THESIS rich + SYNTHESIS ignores it = context bleed from LLM pretraining
-- THESIS has N sources + SYNTHESIS has N sentences each traceable to one source = quote-stitch (FIXABLE)
+- Consecutive sentences in SYNTHESIS each from a different THESIS source = quote-stitch (FIXABLE)
 
 `;
 

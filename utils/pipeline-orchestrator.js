@@ -693,13 +693,21 @@ class PipelineOrchestrator {
         })();
       
       if (cascadeResult.result) {
+        const _vol = classifyTemporalVolatility(input.query, state.preflight?.mode);
+        state.searchVolatility = _vol; // reused by stepContextBuild — avoids double classification
+        const _volInstruction = _vol === 'high'
+          ? 'Search results are your PRIMARY source for this query — training data is likely stale (changes in minutes/hours). Prioritise what multiple sources agree on; fill gaps with training knowledge only where search is silent.'
+          : _vol === 'medium'
+          ? 'Balance search results and training knowledge. Use search for recent specifics, dates, and current data; rely on training for context, mechanism, and established facts.'
+          : 'Training knowledge is RELIABLE for this topic. Use search only for recent facts or specifics absent from training. Do not let search snippets displace established understanding.';
+
         state.searchContext = `[REAL-TIME WEB SEARCH RESULTS — EVIDENCE LAYER]
 ${cascadeResult.result}
 
 SYNTHESIS INSTRUCTIONS:
-1. Your training knowledge is the foundation (thesis). These search results are the challenger (antithesis). Your answer is the synthesis — integrate both. Weight them according to the TEMPORAL VOLATILITY signal in your system context (HIGH = search dominates, MEDIUM = cross-reference, LOW = training reliable, search enriches).
+1. ${_volInstruction}
 2. If the search results include recent dates or timestamps, incorporate them explicitly.
-3. SYNTHESIZE — do NOT quote snippets verbatim and do NOT stitch sentences from different sources together into a paragraph. Extract the core fact or insight from each source, reason across them, and answer in your own words.
+3. SYNTHESIZE — do NOT quote snippets verbatim. Never output two consecutive sentences drawn from different search results. Extract the core insight from each source, reason across them, and answer in your own words.
 4. Triangulate a DIRECT answer — do NOT tell the user to visit a website. Find what multiple sources agree on and converge on that as truth. Fill gaps with training knowledge. Flag genuine uncertainty explicitly ("multiple sources suggest..." or "exact figure unconfirmed as of [date]...").
 5. Do NOT write a sources footer — the system injects canonical 📚 Sources attribution automatically.`;
         state.didSearch = true;
@@ -718,7 +726,7 @@ SYNTHESIS INSTRUCTIONS:
     // TEMPORAL AWARENESS: Inject current date/time FIRST
     // Uses unified queryTimestamp from PipelineState (single source of truth)
     // ========================================
-    const volatility = (state.didSearch && state.searchContext) ? classifyTemporalVolatility(input.query, state.preflight?.mode) : null;
+    const volatility = state.searchVolatility || ((state.didSearch && state.searchContext) ? classifyTemporalVolatility(input.query, state.preflight?.mode) : null);
     const temporalMessage = {
       role: 'system',
       content: buildTemporalContent(state.queryTimestamp, volatility)
