@@ -409,7 +409,12 @@ class PipelineOrchestrator {
                 logger.debug(`🔎 S-1: Vision search enrichment [${trigger}] — querying "${keyTerms}" (scholastic: ${scholastic.domain})`);
                 const visionSearch = this.searchCascade
                   ? await this.searchCascade({ query: keyTerms, strategy: 'brave-first', clientIp: normalizedInput.clientIp })
-                  : { result: await this.searchBrave(keyTerms, normalizedInput.clientIp) || await this.searchDuckDuckGo(keyTerms), provider: 'brave' };
+                  : await (async () => {
+                    const braveR = await this.searchBrave(keyTerms, normalizedInput.clientIp);
+                    if (braveR) return { result: braveR, provider: 'brave' };
+                    const ddgR = await this.searchDuckDuckGo(keyTerms);
+                    return { result: ddgR || null, provider: ddgR ? 'ddg' : null };
+                  })();
                 
                 if (visionSearch.result) {
                   normalizedInput.extractedContent.push(
@@ -1978,7 +1983,12 @@ Output ONLY the corrected table and summary lines:`;
     const searchQuery = await this.extractCoreQuestion(safeQuery);
     const retrySearch = this.searchCascade
       ? await this.searchCascade({ query: searchQuery, strategy: 'brave-first', clientIp })
-      : { result: await this.searchBrave(searchQuery, clientIp) || await this.searchDuckDuckGo(searchQuery), provider: 'brave' };
+      : await (async () => {
+        const braveR = await this.searchBrave(searchQuery, clientIp);
+        if (braveR) return { result: braveR, provider: 'brave' };
+        const ddgR = await this.searchDuckDuckGo(searchQuery);
+        return { result: ddgR || null, provider: ddgR ? 'ddg' : null };
+      })();
     
     if (retrySearch.result) {
       state.searchContext = retrySearch.result;
