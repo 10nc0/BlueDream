@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <meta name="description" content="Free Nyan AI Playground - Blazing-fast Llama 3.3 70B on Groq.">
+    <meta name="description" content="Free Nyan AI Playground - Blazing-fast AI reasoning, powered by Nyan Protocol.">
     <title>Nyan AI Playground | Nyanbook</title>
     
     <!-- PWA Configuration -->
@@ -345,7 +345,67 @@
         .message.assistant .content a:hover {
             color: #60a5fa;
         }
-        
+
+        /* ── Sources footer ─────────────────────────────────────────── */
+        .sources-footer {
+            margin-top: 0.875rem;
+            padding-top: 0.625rem;
+            border-top: 1px solid rgba(148, 163, 184, 0.15);
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 0.375rem;
+        }
+
+        .sources-label {
+            font-size: 0.7rem;
+            font-weight: 600;
+            color: #94a3b8;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            margin-right: 0.25rem;
+            white-space: nowrap;
+        }
+
+        .source-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+            font-size: 0.72rem;
+            padding: 0.2rem 0.5rem;
+            border-radius: 999px;
+            line-height: 1.4;
+            white-space: nowrap;
+        }
+
+        .source-link {
+            background: rgba(59, 130, 246, 0.12);
+            border: 1px solid rgba(59, 130, 246, 0.3);
+            color: #60a5fa;
+            text-decoration: none;
+            cursor: pointer;
+            transition: background 0.15s, border-color 0.15s;
+        }
+
+        .source-link:hover {
+            background: rgba(59, 130, 246, 0.22);
+            border-color: rgba(59, 130, 246, 0.5);
+            color: #93c5fd;
+            text-decoration: none;
+        }
+
+        .source-chip {
+            background: rgba(100, 116, 139, 0.12);
+            border: 1px solid rgba(100, 116, 139, 0.25);
+            color: #94a3b8;
+        }
+
+        /* Welcome text model label */
+        #welcome-model-label {
+            color: #a78bfa;
+            font-weight: 600;
+        }
+
         .message.assistant .copy-btn {
             position: absolute;
             bottom: 0.5rem;
@@ -869,7 +929,7 @@
         <div class="messages" id="messages">
             <div class="welcome">
                 <h2>Welcome to Nyan AI Playground</h2>
-                <p>No login required. No data stored. Just purr intelligence.<br>Powered by Groq's blazing-fast Llama 3.3 70B.</p>
+                <p>No login required. No data stored. Just purr intelligence.<br>Powered by <span id="welcome-model-label">Groq AI</span>.</p>
                 <div class="features">
                     <div class="feature">
                         <div class="feature-icon">💬</div>

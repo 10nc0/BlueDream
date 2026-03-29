@@ -461,6 +461,15 @@ app.get('/AI', (req, res) => {
     res.sendFile(__dirname + '/public/playground.html');
 });
 
+// Model info — used by playground welcome text and sources footer
+app.get('/api/playground/model-info', (req, res) => {
+    const backend = CONSTANTS.getLLMBackend();
+    res.json({
+        modelLabel: modelIdToLabel(backend.model),
+        modelId:    backend.model
+    });
+});
+
 // Serve login page without authentication (must come before requireAuth check)
 app.get('/login.html', (req, res) => {
     logger.info({ ip: req.ip, ua: req.get('user-agent') }, '📱 Login page accessed');

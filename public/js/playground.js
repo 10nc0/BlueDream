@@ -622,13 +622,87 @@ function createAuditBadge(auditData) {
     return badgeEl;
 }
 
+// ── Sources footer helpers ────────────────────────────────────────────────────
+
+/**
+ * Split content into body + sources string (the 📚 **Sources:** trailing line).
+ * Returns { body, sources } where sources is null if the line is absent.
+ */
+function extractSources(content) {
+    const m = content.match(/(?:\n\n|\n)📚\s*\*\*Sources:\*\*\s*([\s\S]*)$/);
+    if (!m) return { body: content, sources: null };
+    return { body: content.slice(0, m.index), sources: m[1].trim() };
+}
+
+/**
+ * Parse a sources string into typed items — links and plain-text chips.
+ * Handles "[Title](URL)" markdown links interspersed with comma-separated text.
+ */
+function parseSourceItems(sourcesStr) {
+    const items = [];
+    const linkRe = /\[([^\]]+)\]\(([^)]+)\)/g;
+    let lastIndex = 0;
+    let m;
+    while ((m = linkRe.exec(sourcesStr)) !== null) {
+        const before = sourcesStr.slice(lastIndex, m.index);
+        before.split(',').forEach(s => { s = s.trim(); if (s) items.push({ type: 'text', label: s }); });
+        items.push({ type: 'link', label: m[1].trim(), url: m[2].trim() });
+        lastIndex = linkRe.lastIndex;
+    }
+    sourcesStr.slice(lastIndex).split(',').forEach(s => { s = s.trim(); if (s) items.push({ type: 'text', label: s }); });
+    return items;
+}
+
+/**
+ * Build the pretty sources footer element.
+ * Link items → blue pill anchors; text items → muted chip spans.
+ * Falls back gracefully for unrecognised raw text (renders as a single chip).
+ */
+function renderSourcesFooter(sourcesStr) {
+    const items = parseSourceItems(sourcesStr);
+    if (!items.length) return null;
+
+    const footer = document.createElement('div');
+    footer.className = 'sources-footer';
+
+    const lbl = document.createElement('span');
+    lbl.className = 'sources-label';
+    lbl.textContent = '📚 Sources';
+    footer.appendChild(lbl);
+
+    items.forEach(item => {
+        if (item.type === 'link') {
+            const a = document.createElement('a');
+            a.className = 'source-pill source-link';
+            a.href = item.url;
+            a.target = '_blank';
+            a.rel = 'noopener noreferrer';
+            a.textContent = item.label;
+            footer.appendChild(a);
+        } else {
+            const span = document.createElement('span');
+            span.className = 'source-pill source-chip';
+            span.textContent = item.label;
+            footer.appendChild(span);
+        }
+    });
+
+    return footer;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 function renderMarkdownContent(content) {
     const contentDiv = document.createElement('div');
     contentDiv.className = 'content';
-    
+
+    // Split off the 📚 Sources line so it renders as styled pills, not raw prose
+    const { body, sources } = extractSources(content);
+    const markdownBody = sources !== null ? body : content;
+
     if (typeof marked !== 'undefined') {
         try {
-            const safeContent = content.replace(/nyan~/g, 'nyan\\~');
+            const safeContent = markdownBody.replace(/nyan~/g, 'nyan\\~');
             let renderedMarkdown = marked.parse(safeContent, {
                 breaks: true,
                 gfm: true
@@ -649,12 +723,17 @@ function renderMarkdownContent(content) {
             }
         } catch (err) {
             console.error('Markdown parse error:', err);
-            contentDiv.textContent = content;
+            contentDiv.textContent = markdownBody;
         }
     } else {
-        contentDiv.textContent = content;
+        contentDiv.textContent = markdownBody;
     }
-    
+
+    if (sources !== null) {
+        const footer = renderSourcesFooter(sources);
+        if (footer) contentDiv.appendChild(footer);
+    }
+
     return contentDiv;
 }
 
@@ -930,26 +1009,36 @@ function finalizeStreamingMessage(fullContent, auditData) {
     const contentEl = streamingEl.querySelector('.streaming-content');
     contentEl.replaceChildren();
     
-    if (contentEl && typeof marked !== 'undefined') {
-        try {
-            const safeContent = fullContent.replace(/nyan~/g, 'nyan\\~');
-            let renderedMarkdown = marked.parse(safeContent, { breaks: true, gfm: true });
-            if (typeof DOMPurify !== 'undefined') {
-                renderedMarkdown = DOMPurify.sanitize(renderedMarkdown, {
-                    ALLOWED_TAGS: ['p', 'br', 'strong', 'em', 'b', 'i', 'u', 'code', 'pre', 'blockquote', 
-                                   'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'li', 'a', 'hr',
-                                   'table', 'thead', 'tbody', 'tr', 'th', 'td', 'div', 'span', 'del'],
-                    ALLOWED_ATTR: ['href', 'title', 'target', 'rel', 'class'],
-                    ALLOW_DATA_ATTR: false
-                });
+    if (contentEl) {
+        const { body: streamBody, sources: streamSources } = extractSources(fullContent);
+        const markdownBody = streamSources !== null ? streamBody : fullContent;
+        if (typeof marked !== 'undefined') {
+            try {
+                const safeContent = markdownBody.replace(/nyan~/g, 'nyan\\~');
+                let renderedMarkdown = marked.parse(safeContent, { breaks: true, gfm: true });
+                if (typeof DOMPurify !== 'undefined') {
+                    renderedMarkdown = DOMPurify.sanitize(renderedMarkdown, {
+                        ALLOWED_TAGS: ['p', 'br', 'strong', 'em', 'b', 'i', 'u', 'code', 'pre', 'blockquote', 
+                                       'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'li', 'a', 'hr',
+                                       'table', 'thead', 'tbody', 'tr', 'th', 'td', 'div', 'span', 'del'],
+                        ALLOWED_ATTR: ['href', 'title', 'target', 'rel', 'class'],
+                        ALLOW_DATA_ATTR: false
+                    });
+                }
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(renderedMarkdown, 'text/html');
+                while (doc.body.firstChild) {
+                    contentEl.appendChild(doc.body.firstChild);
+                }
+            } catch (err) {
+                contentEl.textContent = markdownBody;
             }
-            const parser = new DOMParser();
-            const doc = parser.parseFromString(renderedMarkdown, 'text/html');
-            while (doc.body.firstChild) {
-                contentEl.appendChild(doc.body.firstChild);
-            }
-        } catch (err) {
-            contentEl.textContent = fullContent;
+        } else {
+            contentEl.textContent = markdownBody;
+        }
+        if (streamSources !== null) {
+            const footer = renderSourcesFooter(streamSources);
+            if (footer) contentEl.appendChild(footer);
         }
     }
     
@@ -1387,6 +1476,16 @@ function nyanConfirm(message, subtext, onConfirm, danger = true, okLabel = 'Clea
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+    // Populate welcome text with live model label
+    fetch('/api/playground/model-info')
+        .then(r => r.ok ? r.json() : null)
+        .then(data => {
+            if (!data) return;
+            const el = document.getElementById('welcome-model-label');
+            if (el) el.textContent = `Groq's blazing-fast ${data.modelLabel}`;
+        })
+        .catch(() => {});
+
     // Small delay to ensure all DOM elements are ready
     setTimeout(() => {
         hydrateHistoryToUI();
