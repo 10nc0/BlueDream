@@ -1,3 +1,6 @@
+// Bidirectional message pipe — handles both inbound channels (Twilio/LINE/Telegram/email
+// webhooks, agent write POST) and the outbound agent read GET. All inbound paths enqueue
+// to core.message_queue before ack; the read path reads Discord directly via Thoth.
 const { TwilioChannel } = require('../lib/channels/twilio');
 const { LineChannel } = require('../lib/channels/line');
 const { EmailChannel } = require('../lib/channels/email');
@@ -22,7 +25,7 @@ const {
     sleep
 } = require('../lib/packet-queue');
 
-function registerInpipeRoutes(app, deps) {
+function registerPipeRoutes(app, deps) {
     const { pool, bots, helpers, constants, logger } = deps;
     const { hermes: hermesBot, thoth: thothBot } = bots || {};
     const NYANBOOK_LEDGER_WEBHOOK = constants?.NYANBOOK_LEDGER_WEBHOOK;
@@ -589,9 +592,9 @@ function registerInpipeRoutes(app, deps) {
     });
     registeredRoutes.push('GET /api/webhook/:fractalId/messages');
 
-    logger.info('📥 Inpipe routes registered: %s', registeredRoutes.join(', '));
+    logger.info('📥 Pipe routes registered: %s', registeredRoutes.join(', '));
 
     return { endpoints: registeredRoutes.length, stopQueueProcessor: queueProcessor.stop };
 }
 
-module.exports = { registerInpipeRoutes };
+module.exports = { registerPipeRoutes };
