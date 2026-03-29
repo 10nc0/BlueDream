@@ -4678,6 +4678,12 @@
                 shareSection.style.display = 'block';
                 loadBookShares(fractalId);
             }
+
+            const agentTokenSection = document.getElementById('agentTokenSection');
+            if (agentTokenSection) {
+                agentTokenSection.style.display = 'block';
+                loadAgentTokenStatus(fractalId);
+            }
             
             document.getElementById('botModal').classList.add('active');
         }
@@ -4755,6 +4761,88 @@
             });
         }
 
+        async function loadAgentTokenStatus(fractalId) {
+            const display = document.getElementById('agentTokenDisplay');
+            const actions = document.getElementById('agentTokenActions');
+            if (!display || !actions) return;
+            display.innerHTML = '<span style="color: #94a3b8; font-size: 0.75rem;">Checking...</span>';
+            actions.innerHTML = '';
+            try {
+                const res = await fetch(`/api/books/${fractalId}/agent-token`, { credentials: 'include' });
+                const data = await res.json();
+                if (data.has_token) {
+                    display.innerHTML = '<span style="color: #10b981; font-size: 0.8rem;">&#x2713; Token active</span>';
+                    const rotateBtn = document.createElement('button');
+                    rotateBtn.type = 'button';
+                    rotateBtn.textContent = 'Rotate Token';
+                    rotateBtn.style.cssText = 'background: rgba(251,191,36,0.15); border: 1px solid rgba(251,191,36,0.3); color: #fbbf24; border-radius: 6px; padding: 0.35rem 0.75rem; cursor: pointer; font-size: 0.8rem;';
+                    rotateBtn.onclick = () => nyanConfirm('Rotate agent token?', 'The old token will stop working immediately. Any agent using it must be updated.', () => generateAgentToken(fractalId), true, 'Rotate');
+                    const revokeBtn = document.createElement('button');
+                    revokeBtn.type = 'button';
+                    revokeBtn.textContent = 'Revoke Token';
+                    revokeBtn.style.cssText = 'background: rgba(239,68,68,0.15); border: 1px solid rgba(239,68,68,0.3); color: #ef4444; border-radius: 6px; padding: 0.35rem 0.75rem; cursor: pointer; font-size: 0.8rem;';
+                    revokeBtn.onclick = () => nyanConfirm('Revoke agent token?', 'External agents will lose access to this book immediately.', () => revokeAgentToken(fractalId), true, 'Revoke');
+                    actions.appendChild(rotateBtn);
+                    actions.appendChild(revokeBtn);
+                } else {
+                    display.innerHTML = '<span style="color: #64748b; font-size: 0.8rem;">No token generated</span>';
+                    const genBtn = document.createElement('button');
+                    genBtn.type = 'button';
+                    genBtn.textContent = 'Generate Token';
+                    genBtn.style.cssText = 'background: rgba(59,130,246,0.15); border: 1px solid rgba(59,130,246,0.3); color: #60a5fa; border-radius: 6px; padding: 0.35rem 0.75rem; cursor: pointer; font-size: 0.8rem;';
+                    genBtn.onclick = () => nyanConfirm('Generate agent token?', 'This creates a bearer token that grants read access to this book\'s messages via API.', () => generateAgentToken(fractalId), false, 'Generate');
+                    actions.appendChild(genBtn);
+                }
+            } catch (err) {
+                display.innerHTML = '<span style="color: #ef4444; font-size: 0.75rem;">Failed to check token status</span>';
+            }
+        }
+
+        async function generateAgentToken(fractalId) {
+            try {
+                const res = await fetch(`/api/books/${fractalId}/agent-token`, { method: 'POST', credentials: 'include' });
+                const data = await res.json();
+                if (!data.success) { showToast(data.error || 'Failed to generate token', 'error'); return; }
+                const display = document.getElementById('agentTokenDisplay');
+                const actions = document.getElementById('agentTokenActions');
+                if (display) {
+                    display.innerHTML = '';
+                    const tokenBox = document.createElement('div');
+                    tokenBox.style.cssText = 'background: rgba(15,23,42,0.6); border: 1px solid rgba(59,130,246,0.3); border-radius: 6px; padding: 0.5rem; font-family: monospace; font-size: 0.75rem; color: #60a5fa; word-break: break-all; margin-bottom: 0.25rem;';
+                    tokenBox.textContent = data.token;
+                    display.appendChild(tokenBox);
+                    const warn = document.createElement('small');
+                    warn.style.cssText = 'color: #fbbf24; font-size: 0.7rem;';
+                    warn.textContent = 'Copy this token now — it will not be shown again.';
+                    display.appendChild(warn);
+                }
+                if (actions) {
+                    actions.innerHTML = '';
+                    const copyBtn = document.createElement('button');
+                    copyBtn.type = 'button';
+                    copyBtn.textContent = 'Copy';
+                    copyBtn.style.cssText = 'background: rgba(59,130,246,0.15); border: 1px solid rgba(59,130,246,0.3); color: #60a5fa; border-radius: 6px; padding: 0.35rem 0.75rem; cursor: pointer; font-size: 0.8rem;';
+                    copyBtn.onclick = () => { navigator.clipboard.writeText(data.token); showToast('Token copied', 'success'); };
+                    actions.appendChild(copyBtn);
+                }
+                showToast('Agent token generated', 'success');
+            } catch (err) {
+                showToast('Failed to generate token', 'error');
+            }
+        }
+
+        async function revokeAgentToken(fractalId) {
+            try {
+                const res = await fetch(`/api/books/${fractalId}/agent-token`, { method: 'DELETE', credentials: 'include' });
+                const data = await res.json();
+                if (!data.success) { showToast(data.error || 'Failed to revoke', 'error'); return; }
+                showToast('Agent token revoked', 'success');
+                loadAgentTokenStatus(fractalId);
+            } catch (err) {
+                showToast('Failed to revoke token', 'error');
+            }
+        }
+
         function closeBotModal() {
             document.getElementById('botModal').classList.remove('active');
             document.getElementById('botName').value = '';
@@ -4778,6 +4866,8 @@
             if (shareSection) {
                 shareSection.style.display = 'none';
             }
+            const agentTokenSection = document.getElementById('agentTokenSection');
+            if (agentTokenSection) agentTokenSection.style.display = 'none';
             const shareInput = document.getElementById('shareEmailInput');
             if (shareInput) shareInput.value = '';
             const sharedList = document.getElementById('sharedEmailsList');

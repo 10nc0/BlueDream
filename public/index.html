@@ -439,7 +439,16 @@
                     </div>
                 </div>
 
-                <!-- Outpipes Section (edit mode only) -->
+                <div class="form-group" id="agentTokenSection" style="display: none;">
+                    <label class="form-label">
+                        Agent Access Token
+                        <span class="optional-badge">Optional</span>
+                    </label>
+                    <small class="form-help" style="display: block; margin-bottom: 0.5rem;">Generate a bearer token so external agents (e.g. OpenClaw) can read this book's messages via API. Token is unique per book.</small>
+                    <div id="agentTokenDisplay" style="margin-bottom: 0.5rem;"></div>
+                    <div id="agentTokenActions" style="display: flex; gap: 0.5rem; flex-wrap: wrap;"></div>
+                </div>
+
                 <div class="form-group" id="outpipesSection" style="display: none;">
                     <label class="form-label">
                         Replicas / Mirrors

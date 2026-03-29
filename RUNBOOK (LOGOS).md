@@ -395,3 +395,64 @@ FROM core.message_ledger
 ORDER BY created_at DESC
 LIMIT 20;
 ```
+
+---
+
+## OpenClaw Integration (Agent Read API)
+
+External agents (OpenClaw, custom bots, analytics pipelines) can read a book's messages via the agent pipe. Auth is per-tenant per-book: each token only grants access to the single book it was generated for.
+
+### Setup
+
+1. **Dashboard** → Edit Book → Agent Access Token → **Generate Token**
+2. Copy the token immediately — it's shown once. The backend stores only a SHA-256 hash.
+3. Configure the agent with the book's `fractal_id` and the bearer token.
+
+### Reading messages
+
+```
+GET /api/webhook/:fractalId/messages
+Authorization: Bearer <agent_token>
+```
+
+Query parameters:
+
+| Param | Type | Description |
+|-------|------|-------------|
+| `after` | string | Discord message ID — return messages after this cursor |
+| `before` | string | Discord message ID — return messages before this cursor |
+| `limit` | int | 1–100 (default 50) |
+
+`after` and `before` are mutually exclusive. Response:
+
+```json
+{
+  "book": { "name": "...", "created_at": "..." },
+  "messages": [
+    { "id": "...", "sender": "...", "text": "...", "timestamp": "...", "has_media": false }
+  ],
+  "total": 142,
+  "hasMore": true,
+  "cursor": { "newest": "...", "oldest": "..." }
+}
+```
+
+Rate limit: 60 requests/minute per IP.
+
+### Token lifecycle
+
+| Action | Route | Method |
+|--------|-------|--------|
+| Check status | `/api/books/:fractalId/agent-token` | GET |
+| Generate / rotate | `/api/books/:fractalId/agent-token` | POST |
+| Revoke | `/api/books/:fractalId/agent-token` | DELETE |
+
+Rotate replaces the old hash in-place — previous token stops working instantly. Revoke sets the hash to NULL; the messages endpoint returns 403 until a new token is generated.
+
+### Security model
+
+- Token is 32 random bytes, base64url-encoded (256 bits of entropy).
+- Only the SHA-256 hash is stored. Raw token is never persisted.
+- `agent_token_hash` has a UNIQUE index per tenant schema — one token per book, no collisions across books.
+- Timing-safe comparison prevents timing attacks.
+- The messages endpoint validates the token against the specific book's hash, so a token for Book A cannot read Book B even within the same tenant.

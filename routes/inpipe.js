@@ -590,11 +590,26 @@ function registerInpipeRoutes(app, deps) {
             }
 
             const bookResult = await pool.query(
-                format(`SELECT id, name, output_credentials, created_at FROM %I.books WHERE fractal_id = $1`, tenantSchema),
+                format(`SELECT id, name, output_credentials, created_at, agent_token_hash FROM %I.books WHERE fractal_id = $1`, tenantSchema),
                 [fractalIdParam]
             );
             if (bookResult.rows.length === 0) {
                 return res.status(404).json({ error: 'Book not found' });
+            }
+
+            const tokenHash = bookResult.rows[0].agent_token_hash;
+            if (!tokenHash) {
+                return res.status(403).json({ error: 'Agent access not enabled for this book. Generate a token in the dashboard.' });
+            }
+            const authHeader = req.headers.authorization;
+            if (!authHeader || !authHeader.startsWith('Bearer ')) {
+                return res.status(401).json({ error: 'Authorization required. Use: Authorization: Bearer <agent_token>' });
+            }
+            const providedToken = authHeader.slice(7);
+            const crypto = require('crypto');
+            const providedHash = crypto.createHash('sha256').update(providedToken).digest('hex');
+            if (!crypto.timingSafeEqual(Buffer.from(tokenHash, 'hex'), Buffer.from(providedHash, 'hex'))) {
+                return res.status(401).json({ error: 'Invalid agent token' });
             }
 
             const book = bookResult.rows[0];
