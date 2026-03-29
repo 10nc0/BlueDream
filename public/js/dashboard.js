@@ -4761,16 +4761,32 @@
             });
         }
 
-        function showAgentEndpointHint(fractalId) {
-            const el = document.getElementById('agentTokenEndpoint');
-            if (!el) return;
-            const baseUrl = window.location.origin;
-            el.style.display = 'block';
-            el.innerHTML = '<small style="color: #94a3b8; font-size: 0.7rem;">Endpoint</small>' +
-                '<div style="background: rgba(15,23,42,0.6); border: 1px solid rgba(100,116,139,0.25); border-radius: 6px; padding: 0.4rem 0.5rem; font-family: monospace; font-size: 0.7rem; color: #94a3b8; word-break: break-all; display: flex; align-items: center; gap: 0.5rem;">' +
-                '<span style="flex:1;">GET ' + baseUrl + '/api/webhook/' + fractalId + '/messages</span>' +
-                '<button type="button" onclick="navigator.clipboard.writeText(\'' + baseUrl + '/api/webhook/' + fractalId + '/messages\');showToast(\'Endpoint copied\',\'success\')" style="background: rgba(59,130,246,0.1); border: 1px solid rgba(59,130,246,0.3); color: #60a5fa; border-radius: 4px; padding: 0.2rem 0.5rem; cursor: pointer; font-size: 0.7rem; white-space: nowrap;">Copy</button>' +
-                '</div>';
+        function _agentEndpointUrl(fractalId) {
+            return window.location.origin + '/api/webhook/' + fractalId + '/messages';
+        }
+
+        function _renderAgentEndpointBlock(fractalId) {
+            const url = _agentEndpointUrl(fractalId);
+            const el = document.createElement('div');
+            el.style.cssText = 'background: rgba(15,23,42,0.6); border: 1px solid rgba(100,116,139,0.25); border-radius: 6px; padding: 0.5rem; font-family: monospace; font-size: 0.7rem; color: #94a3b8; word-break: break-all; margin-bottom: 0.25rem;';
+            el.textContent = url;
+            return el;
+        }
+
+        function _renderAgentActions(fractalId, actions, clear) {
+            if (clear !== false) actions.innerHTML = '';
+            const rotateBtn = document.createElement('button');
+            rotateBtn.type = 'button';
+            rotateBtn.textContent = 'Rotate';
+            rotateBtn.style.cssText = 'background: rgba(251,191,36,0.15); border: 1px solid rgba(251,191,36,0.3); color: #fbbf24; border-radius: 6px; padding: 0.35rem 0.75rem; cursor: pointer; font-size: 0.8rem;';
+            rotateBtn.onclick = () => nyanConfirm('Rotate agent token?', 'The old token will stop working immediately. Any agent using it must be updated.', () => generateAgentToken(fractalId), true, 'Rotate');
+            const revokeBtn = document.createElement('button');
+            revokeBtn.type = 'button';
+            revokeBtn.textContent = 'Revoke';
+            revokeBtn.style.cssText = 'background: rgba(239,68,68,0.15); border: 1px solid rgba(239,68,68,0.3); color: #ef4444; border-radius: 6px; padding: 0.35rem 0.75rem; cursor: pointer; font-size: 0.8rem;';
+            revokeBtn.onclick = () => nyanConfirm('Revoke agent token?', 'Your agents will lose access to this book immediately.', () => revokeAgentToken(fractalId), true, 'Revoke');
+            actions.appendChild(rotateBtn);
+            actions.appendChild(revokeBtn);
         }
 
         async function loadAgentTokenStatus(fractalId) {
@@ -4779,31 +4795,24 @@
             if (!display || !actions) return;
             display.innerHTML = '<span style="color: #94a3b8; font-size: 0.75rem;">Checking...</span>';
             actions.innerHTML = '';
-            showAgentEndpointHint(fractalId);
             try {
                 const res = await fetch(`/api/books/${fractalId}/agent-token`, { credentials: 'include' });
                 const data = await res.json();
                 if (data.has_token) {
-                    display.innerHTML = '<span style="color: #10b981; font-size: 0.8rem;">&#x2713; Token active</span>';
-                    const rotateBtn = document.createElement('button');
-                    rotateBtn.type = 'button';
-                    rotateBtn.textContent = 'Rotate Token';
-                    rotateBtn.style.cssText = 'background: rgba(251,191,36,0.15); border: 1px solid rgba(251,191,36,0.3); color: #fbbf24; border-radius: 6px; padding: 0.35rem 0.75rem; cursor: pointer; font-size: 0.8rem;';
-                    rotateBtn.onclick = () => nyanConfirm('Rotate agent token?', 'The old token will stop working immediately. Any agent using it must be updated.', () => generateAgentToken(fractalId), true, 'Rotate');
-                    const revokeBtn = document.createElement('button');
-                    revokeBtn.type = 'button';
-                    revokeBtn.textContent = 'Revoke Token';
-                    revokeBtn.style.cssText = 'background: rgba(239,68,68,0.15); border: 1px solid rgba(239,68,68,0.3); color: #ef4444; border-radius: 6px; padding: 0.35rem 0.75rem; cursor: pointer; font-size: 0.8rem;';
-                    revokeBtn.onclick = () => nyanConfirm('Revoke agent token?', 'External agents will lose access to this book immediately.', () => revokeAgentToken(fractalId), true, 'Revoke');
-                    actions.appendChild(rotateBtn);
-                    actions.appendChild(revokeBtn);
+                    display.innerHTML = '';
+                    display.appendChild(_renderAgentEndpointBlock(fractalId));
+                    const status = document.createElement('span');
+                    status.style.cssText = 'color: #10b981; font-size: 0.8rem;';
+                    status.innerHTML = '&#x2713; Connected';
+                    display.appendChild(status);
+                    _renderAgentActions(fractalId, actions);
                 } else {
-                    display.innerHTML = '<span style="color: #64748b; font-size: 0.8rem;">No token generated</span>';
+                    display.innerHTML = '';
                     const genBtn = document.createElement('button');
                     genBtn.type = 'button';
                     genBtn.textContent = 'Generate Token';
                     genBtn.style.cssText = 'background: rgba(59,130,246,0.15); border: 1px solid rgba(59,130,246,0.3); color: #60a5fa; border-radius: 6px; padding: 0.35rem 0.75rem; cursor: pointer; font-size: 0.8rem;';
-                    genBtn.onclick = () => nyanConfirm('Generate agent token?', 'This creates a bearer token that grants read access to this book\'s messages via API.', () => generateAgentToken(fractalId), false, 'Generate');
+                    genBtn.onclick = () => nyanConfirm('Generate agent token?', 'This creates a one-time token that lets your agent read this book\'s messages.', () => generateAgentToken(fractalId), false, 'Generate');
                     actions.appendChild(genBtn);
                 }
             } catch (err) {
@@ -4818,25 +4827,28 @@
                 if (!data.success) { showToast(data.error || 'Failed to generate token', 'error'); return; }
                 const display = document.getElementById('agentTokenDisplay');
                 const actions = document.getElementById('agentTokenActions');
+                const url = _agentEndpointUrl(fractalId);
+                const copyPayload = 'Endpoint: ' + url + '\nAuthorization: Bearer ' + data.token;
                 if (display) {
                     display.innerHTML = '';
-                    const tokenBox = document.createElement('div');
-                    tokenBox.style.cssText = 'background: rgba(15,23,42,0.6); border: 1px solid rgba(59,130,246,0.3); border-radius: 6px; padding: 0.5rem; font-family: monospace; font-size: 0.75rem; color: #60a5fa; word-break: break-all; margin-bottom: 0.25rem;';
-                    tokenBox.textContent = data.token;
-                    display.appendChild(tokenBox);
+                    const block = document.createElement('div');
+                    block.style.cssText = 'background: rgba(15,23,42,0.6); border: 1px solid rgba(59,130,246,0.3); border-radius: 6px; padding: 0.5rem; font-family: monospace; font-size: 0.7rem; color: #60a5fa; word-break: break-all; white-space: pre-wrap; margin-bottom: 0.25rem;';
+                    block.textContent = copyPayload;
+                    display.appendChild(block);
                     const warn = document.createElement('small');
                     warn.style.cssText = 'color: #fbbf24; font-size: 0.7rem;';
-                    warn.textContent = 'Copy this token now — it will not be shown again.';
+                    warn.textContent = 'Copy this now \u2014 the token will not be shown again.';
                     display.appendChild(warn);
                 }
                 if (actions) {
                     actions.innerHTML = '';
                     const copyBtn = document.createElement('button');
                     copyBtn.type = 'button';
-                    copyBtn.textContent = 'Copy';
+                    copyBtn.textContent = 'Copy All';
                     copyBtn.style.cssText = 'background: rgba(59,130,246,0.15); border: 1px solid rgba(59,130,246,0.3); color: #60a5fa; border-radius: 6px; padding: 0.35rem 0.75rem; cursor: pointer; font-size: 0.8rem;';
-                    copyBtn.onclick = () => { navigator.clipboard.writeText(data.token); showToast('Token copied', 'success'); };
+                    copyBtn.onclick = () => { navigator.clipboard.writeText(copyPayload).then(() => showToast('Copied to clipboard', 'success')).catch(() => showToast('Copy failed — select and copy manually', 'error')); };
                     actions.appendChild(copyBtn);
+                    _renderAgentActions(fractalId, actions, false);
                 }
                 showToast('Agent token generated', 'success');
             } catch (err) {
@@ -4881,8 +4893,10 @@
             }
             const agentTokenSection = document.getElementById('agentTokenSection');
             if (agentTokenSection) agentTokenSection.style.display = 'none';
-            const agentTokenEndpoint = document.getElementById('agentTokenEndpoint');
-            if (agentTokenEndpoint) { agentTokenEndpoint.style.display = 'none'; agentTokenEndpoint.innerHTML = ''; }
+            const agentTokenDisplay = document.getElementById('agentTokenDisplay');
+            if (agentTokenDisplay) agentTokenDisplay.innerHTML = '';
+            const agentTokenActions = document.getElementById('agentTokenActions');
+            if (agentTokenActions) agentTokenActions.innerHTML = '';
             const shareInput = document.getElementById('shareEmailInput');
             if (shareInput) shareInput.value = '';
             const sharedList = document.getElementById('sharedEmailsList');
