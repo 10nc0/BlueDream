@@ -1,11 +1,11 @@
 # Nyanbook.io 🐟🌈
 *(PATHOS)*
 
-Nyanbook.io is a post-folder information protocol, leveraging HTTP Post (with auth) as communication channel.
+Nyanbook.io is a post-folder information protocol.
 
-Instead of messy folders and hierarchies, you send screenshot messages / attachments — via WhatsApp, LINE, or any SNS. Nyanbook.io save and sort them by time. 
+Instead of messy folders and hierarchies, you send screenshot messages / attachments — via WhatsApp, LINE, or any SNS. Nyanbook.io save and sort them by time. (HTTP POST / GET).
 
-A versatile AI endpoint is provided to make your data queryable & interactive. **OpenClaw** and other Agents are supported via **agent tokens** within book.
+A versatile AI endpoint is provided to make your data queryable & interactive. **OpenClaw** and other Agents are supported via **agent tokens** within each book.
 
 **Before**: Receipt → Fill Reimbursement Forms for Receipt → Create folder "2026/Taxes" → Rename file → Wrong Input in Forms → Forget where you saved it → ...
 
@@ -93,10 +93,7 @@ Nyanbook continues a 50-year stack:
 - **HTTP** — documents that need no permission from the server
 - **Bitcoin** — transactions that need no permission from the bank
 - **IPFS** — content that needs no permission from location
-
-**Nyanbook (2026)** — messages + gaps that need no permission from the platform.
-
-The sovereignty guarantee lives in the hash and the structure, never in the intermediary.
+- **Nyanbook** — messages + gaps that need no permission from platforms.
 
 > Full lineage → [`LINEAGE (ETHOS).md`](LINEAGE%20(ETHOS).md)
 
