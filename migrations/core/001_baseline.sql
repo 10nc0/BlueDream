@@ -87,30 +87,24 @@ CREATE INDEX IF NOT EXISTS idx_book_shares_book_id
 
 -- Book registry (cross-tenant, routing table for inbound messages)
 -- id is UUID — DO NOT change to SERIAL; packet-queue.js uses UUID joins.
+-- heal_* columns are added by 003_compat_columns.sql — not here.
 CREATE TABLE IF NOT EXISTS core.book_registry (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    book_name       TEXT NOT NULL,
-    join_code       TEXT UNIQUE NOT NULL,
-    fractal_id      TEXT UNIQUE NOT NULL,
-    tenant_schema   TEXT NOT NULL,
-    tenant_email    TEXT NOT NULL,
-    phone_number    TEXT,
-    status          TEXT NOT NULL DEFAULT 'pending'
-                    CHECK (status IN ('pending', 'active', 'inactive', 'suspended')),
-    inpipe_type     TEXT DEFAULT 'whatsapp',
-    outpipe_ledger  TEXT NOT NULL,
-    outpipes_user   JSONB NOT NULL DEFAULT '[]'::jsonb,
-    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    activated_at    TIMESTAMPTZ,
-    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    heal_status     TEXT NOT NULL DEFAULT 'healthy'
-                    CHECK (heal_status IN ('pending', 'healing', 'healthy', 'failed')),
-    last_healed_at  TIMESTAMPTZ,
-    next_heal_at    TIMESTAMPTZ DEFAULT NOW(),
-    heal_attempts   INTEGER NOT NULL DEFAULT 0,
-    heal_error      TEXT,
-    heal_lease_until TIMESTAMPTZ,
-    creator_phone   TEXT
+    id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    book_name      TEXT NOT NULL,
+    join_code      TEXT UNIQUE NOT NULL,
+    fractal_id     TEXT UNIQUE NOT NULL,
+    tenant_schema  TEXT NOT NULL,
+    tenant_email   TEXT NOT NULL,
+    phone_number   TEXT,
+    status         TEXT NOT NULL DEFAULT 'pending'
+                   CHECK (status IN ('pending', 'active', 'inactive', 'suspended')),
+    inpipe_type    TEXT DEFAULT 'whatsapp',
+    outpipe_ledger TEXT NOT NULL,
+    outpipes_user  JSONB NOT NULL DEFAULT '[]'::jsonb,
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    activated_at   TIMESTAMPTZ,
+    updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    creator_phone  TEXT
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_book_registry_join_code
@@ -123,12 +117,6 @@ CREATE INDEX IF NOT EXISTS idx_book_registry_status
     ON core.book_registry (status) WHERE status = 'pending';
 CREATE INDEX IF NOT EXISTS idx_book_registry_tenant_book
     ON core.book_registry (tenant_schema, id);
-CREATE INDEX IF NOT EXISTS idx_book_heal_priority
-    ON core.book_registry (next_heal_at ASC)
-    WHERE heal_status IN ('pending', 'healing');
-CREATE INDEX IF NOT EXISTS idx_book_heal_lease
-    ON core.book_registry (heal_lease_until ASC NULLS FIRST)
-    WHERE heal_status IN ('pending', 'healing');
 
 -- Phones that have interacted with a book
 CREATE TABLE IF NOT EXISTS core.book_engaged_phones (
@@ -161,6 +149,7 @@ CREATE INDEX IF NOT EXISTS idx_channel_identifiers_book
 
 -- Append-only message ledger (immutable provenance record)
 -- recorded_at — DO NOT rename to created_at; packet-queue.js inserts use recorded_at.
+-- env and detected_lang are added by 003_compat_columns.sql — not here.
 CREATE TABLE IF NOT EXISTS core.message_ledger (
     message_fractal_id   TEXT        PRIMARY KEY,
     book_fractal_id      TEXT        NOT NULL,
@@ -170,8 +159,6 @@ CREATE TABLE IF NOT EXISTS core.message_ledger (
     has_attachment       BOOLEAN     NOT NULL DEFAULT FALSE,
     attachment_disclosed BOOLEAN     NOT NULL DEFAULT TRUE,
     attachment_cid       TEXT,
-    env                  TEXT        NOT NULL DEFAULT 'prod',
-    detected_lang        TEXT,
     recorded_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -179,8 +166,6 @@ CREATE INDEX IF NOT EXISTS idx_message_ledger_book
     ON core.message_ledger (book_fractal_id, recorded_at DESC);
 CREATE INDEX IF NOT EXISTS idx_message_ledger_ipfs
     ON core.message_ledger (ipfs_cid) WHERE ipfs_cid IS NOT NULL;
-CREATE INDEX IF NOT EXISTS idx_message_ledger_env
-    ON core.message_ledger (env);
 
 -- Password reset tokens
 CREATE TABLE IF NOT EXISTS core.password_reset_tokens (
