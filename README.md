@@ -261,7 +261,7 @@ Each channel is independent. Deploy first (Deploy → Autoscale) to get a persis
 
 ## Inpipe: Activating a Book
 
-Each "Book" is a routing address. To route messages to a book:
+Each "Book" is a routing address. 
 
 1. Create a book in the dashboard
 2. Get the join code (e.g. `MyBook-a1b2c3`)
@@ -296,23 +296,9 @@ Set `PINATA_JWT` to enable automatic IPFS pinning via Pinata (free 1GB tier). Th
 - Web-grounded AI — answers are checked against live web data (free, no API key needed)
 - Optional premium search available (set `PLAYGROUND_BRAVE_API` for richer results)
 - Powered by Groq Llama 3.3 70B
+- Built-in two-pass audit and pipeline orchestrator (customizable)
 
 **For fork operators:** See the [Runbook](RUNBOOK%20(LOGOS).md) for search architecture details.
-
-### Dashboard Audit (authenticated)
-- Hallucination correction — the AI checks its own answers before you see them
-- Session-scoped entity extraction
-- Clean, filler-free responses
-
-### Seed Metric
-
-Real estate affordability formula:
-
-```
-(price_per_sqm × 700) / annual_income = years_to_afford
-```
-
-No P/I ratio fallback. N/A is the honest answer when data is unavailable.
 
 ---
 
