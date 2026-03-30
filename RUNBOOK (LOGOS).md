@@ -36,9 +36,11 @@ Run after every fresh deployment or major environment change.
 | Per-book webhooks | Dashboard → Edit Book → Outpipes | — |
 | Agent read API | Dashboard → Edit Book → Agent Access Token | — |
 
-### Agent Read API -- OpenClaw Integration
+### Agent Read API — Anatta Node Mesh
 
 Lets external agents read a single book's messages via bearer token. Auth is **per-tenant per-book** — a token for Book A cannot read Book B, even within the same tenant.
+
+Read source is **PostgreSQL** (`anatta_messages` table, tenant schema). No Discord bot required for reads.
 
 **Setup:** Dashboard → Edit Book → Agent Access Token → Generate Token. Copy immediately; only the SHA-256 hash is stored.
 
@@ -51,11 +53,41 @@ Authorization: Bearer <agent_token>
 
 | Param | Type | Description |
 |-------|------|-------------|
-| `after` | string | Cursor — messages after this Discord message ID |
-| `before` | string | Cursor — messages before this ID (mutually exclusive with `after`) |
+| `after` | ISO 8601 | Cursor — messages recorded after this timestamp |
+| `before` | ISO 8601 | Cursor — messages recorded before this timestamp (mutually exclusive with `after`) |
 | `limit` | int | 1–100 (default 50) |
 
-Response shape: `{ book, messages[], total, hasMore, cursor: { newest, oldest } }`
+Discord snowflake cursors (17–20 digit integers) return 400 with a migration message.
+
+**Response shape:**
+
+```json
+{
+  "book": "book-name",
+  "_meta": {
+    "source": "postgresql",
+    "media_note": "media_ipfs_cid is verifiable against content_hash in core.message_ledger. media_ipfs_gateway_url is a convenience URL for direct access. media_url is a Discord CDN URL and may expire."
+  },
+  "messages": [
+    {
+      "id": 1,
+      "message_fractal_id": "msg_...",
+      "sender": "phone-or-name",
+      "text": "...",
+      "timestamp": "2026-01-01T00:00:00.000Z",
+      "has_media": false,
+      "media_ipfs_cid": "Qm...",
+      "media_ipfs_gateway_url": "https://gateway.pinata.cloud/ipfs/Qm...",
+      "media_url": "https://cdn.discordapp.com/..."
+    }
+  ],
+  "total": 1,
+  "hasMore": false,
+  "cursor": { "newest": "2026-01-01T00:00:00.000Z", "oldest": "2026-01-01T00:00:00.000Z" }
+}
+```
+
+**Trust levels:** `media_ipfs_cid` is sovereign — verify against `content_hash` in `core.message_ledger`. `media_url` is ephemeral — Discord CDN, may expire. `media_ipfs_gateway_url` is a convenience link, trust level follows `media_ipfs_cid`.
 
 Rate limit: 60 req/min per IP.
 
