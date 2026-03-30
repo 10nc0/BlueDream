@@ -70,6 +70,15 @@ anything that can send an HTTP POST.
 Built for the $7/day mobile user who never had access to any of the four layers below —  
 and now inherits all of them at once.
 
+#### Anatta — node mesh layer
+**Information:** the message + its IPFS CID  
+**Protocol:** POST/GET pipe endpoints, bearer token, content-hash verification
+
+No node owns the truth. Each fork — a Mac Mini, a Replit instance, a claw — can POST into a book and GET from it. The bearer token is access control. The CID is the trust primitive. Node B receives a message from Node A, checks the CID against its own ledger hash, and knows the content arrived intact — without trusting Node A's CDN URL or Node A's database.
+
+The ledger is the ground. The nodes are pointers.  
+*Anatta — no fixed self, no fixed authority.*
+
 ---
 
 ## The Roles
