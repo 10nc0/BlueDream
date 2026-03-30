@@ -5,7 +5,7 @@ const { TwilioChannel } = require('../lib/channels/twilio');
 const { LineChannel } = require('../lib/channels/line');
 const { EmailChannel } = require('../lib/channels/email');
 const { TelegramChannel } = require('../lib/channels/telegram');
-const { VALID_SCHEMA_PATTERN } = require('../lib/validators');
+const { VALID_SCHEMA_PATTERN, DISCORD_SNOWFLAKE_RE, ISO8601_STRICT_RE } = require('../lib/validators');
 const format = require('pg-format');
 const rateLimit = require('express-rate-limit');
 const { z } = require('zod');
@@ -477,13 +477,12 @@ function registerPipeRoutes(app, deps) {
             const beforeParam = req.query.before;
 
             // Reject legacy Discord snowflake cursors — ISO 8601 required
-            const SNOWFLAKE_RE = /^\d{17,20}$/;
-            if (afterParam && SNOWFLAKE_RE.test(afterParam)) {
+            if (afterParam && DISCORD_SNOWFLAKE_RE.test(afterParam)) {
                 return res.status(400).json({
                     error: 'Discord snowflake cursors are no longer supported. Use ISO 8601 timestamps (e.g. 2024-01-01T00:00:00.000Z) via the after or before parameters.'
                 });
             }
-            if (beforeParam && SNOWFLAKE_RE.test(beforeParam)) {
+            if (beforeParam && DISCORD_SNOWFLAKE_RE.test(beforeParam)) {
                 return res.status(400).json({
                     error: 'Discord snowflake cursors are no longer supported. Use ISO 8601 timestamps (e.g. 2024-01-01T00:00:00.000Z) via the after or before parameters.'
                 });
@@ -492,8 +491,7 @@ function registerPipeRoutes(app, deps) {
                 return res.status(400).json({ error: 'Cannot use both after and before cursors' });
             }
 
-            // Strict ISO-8601 cursor validation: YYYY-MM-DDTHH:MM:SS[.fff](Z|±HH:MM)
-            const ISO8601_STRICT_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/;
+            // Strict ISO-8601 cursor validation (ISO8601_STRICT_RE from lib/validators)
             if (afterParam && !ISO8601_STRICT_RE.test(afterParam)) {
                 return res.status(400).json({ error: 'Invalid after cursor — must be a strict ISO 8601 timestamp (e.g. 2024-01-01T00:00:00.000Z)' });
             }
