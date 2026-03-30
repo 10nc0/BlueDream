@@ -501,14 +501,20 @@ function registerPipeRoutes(app, deps) {
                 return res.status(400).json({ error: 'Invalid before cursor — must be a strict ISO 8601 timestamp (e.g. 2024-01-01T00:00:00.000Z)' });
             }
 
-            // Parse validated cursors
+            // Parse validated cursors — also reject semantically invalid dates (e.g. month 99)
             let afterTs = null;
             let beforeTs = null;
             if (afterParam) {
                 afterTs = new Date(afterParam);
+                if (isNaN(afterTs.getTime())) {
+                    return res.status(400).json({ error: 'Invalid after cursor — date value is out of range' });
+                }
             }
             if (beforeParam) {
                 beforeTs = new Date(beforeParam);
+                if (isNaN(beforeTs.getTime())) {
+                    return res.status(400).json({ error: 'Invalid before cursor — date value is out of range' });
+                }
             }
 
             // Build PostgreSQL query against tenant messages table
