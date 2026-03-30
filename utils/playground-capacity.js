@@ -457,31 +457,8 @@ function getCapacityStatus() {
 }
 
 async function initReputationTable() {
-    if (!dbPool) {
-        logger.warn('⚠️ No database pool for reputation table');
-        return false;
-    }
-    
-    try {
-        await dbPool.query(`
-            CREATE TABLE IF NOT EXISTS core.playground_reputation (
-                ip_hash VARCHAR(32) PRIMARY KEY,
-                first_seen TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-                total_queries INTEGER DEFAULT 0,
-                last_seen TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-                blocked_until TIMESTAMP WITH TIME ZONE DEFAULT NULL
-            )
-        `);
-        await dbPool.query(`
-            ALTER TABLE core.playground_reputation
-            ADD COLUMN IF NOT EXISTS blocked_until TIMESTAMP WITH TIME ZONE DEFAULT NULL
-        `).catch(() => {});
-        logger.info('✅ Playground reputation table initialized');
-        return true;
-    } catch (error) {
-        logger.error({ err: error }, '⚠️ Failed to init reputation table');
-        return false;
-    }
+    // core.playground_reputation is now created by migrations/core/008_playground_reputation.sql
+    // kept as no-op for backward compat with callers
 }
 
 // Generate cat-themed rest messages based on wait time
