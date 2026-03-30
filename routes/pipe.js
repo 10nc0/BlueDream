@@ -492,20 +492,23 @@ function registerPipeRoutes(app, deps) {
                 return res.status(400).json({ error: 'Cannot use both after and before cursors' });
             }
 
-            // Validate and parse ISO 8601 cursors
+            // Strict ISO-8601 cursor validation: YYYY-MM-DDTHH:MM:SS[.fff](Z|±HH:MM)
+            const ISO8601_STRICT_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/;
+            if (afterParam && !ISO8601_STRICT_RE.test(afterParam)) {
+                return res.status(400).json({ error: 'Invalid after cursor — must be a strict ISO 8601 timestamp (e.g. 2024-01-01T00:00:00.000Z)' });
+            }
+            if (beforeParam && !ISO8601_STRICT_RE.test(beforeParam)) {
+                return res.status(400).json({ error: 'Invalid before cursor — must be a strict ISO 8601 timestamp (e.g. 2024-01-01T00:00:00.000Z)' });
+            }
+
+            // Parse validated cursors
             let afterTs = null;
             let beforeTs = null;
             if (afterParam) {
                 afterTs = new Date(afterParam);
-                if (isNaN(afterTs.getTime())) {
-                    return res.status(400).json({ error: 'Invalid after cursor — must be an ISO 8601 timestamp' });
-                }
             }
             if (beforeParam) {
                 beforeTs = new Date(beforeParam);
-                if (isNaN(beforeTs.getTime())) {
-                    return res.status(400).json({ error: 'Invalid before cursor — must be an ISO 8601 timestamp' });
-                }
             }
 
             // Build PostgreSQL query against tenant messages table
