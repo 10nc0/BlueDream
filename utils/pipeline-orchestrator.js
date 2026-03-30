@@ -600,6 +600,15 @@ class PipelineOrchestrator {
       if (state.auditResult?.verdict === 'REJECTED' && state.retryCount < state.maxRetries) {
         await this.stepRetry(state, normalizedInput);
       }
+
+      // EXPERT REFERRAL: both audit passes exhausted + still REJECTED
+      // Discard the model's output (knowledge-cutoff admissions, raw URL redirects).
+      // The search found the right sources — present them as expert pointers instead.
+      // Sources footer attaches normally in stepOutput via injectSourceLine.
+      if (state.auditResult?.verdict === 'REJECTED' && state.retryCount >= state.maxRetries) {
+        logger.debug(`🔗 Expert referral: retries exhausted + still REJECTED — injecting referral stub`);
+        state.draftAnswer = 'I searched and found these authoritative sources — they\'ll have the most up-to-date information:';
+      }
       
       await this.stepOutput(state);
       
