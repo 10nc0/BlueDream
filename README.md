@@ -1,7 +1,7 @@
 # Nyanbook.io 🐟🌈
 *(PATHOS)*
 
-Nyanbook.io is a post-folder information protocol. 
+Nyanbook.io is a post-folder information protocol, leveraging HTTP Post (with auth) as communication channel.
 
 Instead of messy folders and hierarchies, you send screenshot messages / attachments — via WhatsApp, LINE, or any SNS. Nyanbook.io save and sort them by time. 
 

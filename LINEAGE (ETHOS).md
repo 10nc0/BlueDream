@@ -1,5 +1,7 @@
 # Information × Protocol — A Lineage
 
+**Nothing can block a HTTP POST**
+
 Five systems. Each adds one layer to the same stack.
 Each encodes sovereignty into the structure itself, not into trust.
 
