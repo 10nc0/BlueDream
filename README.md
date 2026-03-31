@@ -130,7 +130,7 @@ Adding a new messaging channel or a new tool requires one file. Drop it in, rest
 
 Discord is the bootstrap layer, not the sovereignty layer.
 
-The Golden statue (content), more valuable than the temple (infrastructure)?
+Save the Golden statue (content), not the temple (infrastructure)?
 
 Free infrastructure (Discord threads, Pinata's 1GB IPFS tier, Supabase's free PostgreSQL) is what makes that accessible. This is a deliberate architectural choice.
 
