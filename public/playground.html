@@ -550,6 +550,30 @@
             color: #f87171;
         }
 
+        .warmup-status-bar {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            padding: 5px 10px;
+            font-size: 0.7rem;
+            color: #fbbf24;
+            background: rgba(251, 191, 36, 0.08);
+            border-left: 2px solid rgba(251, 191, 36, 0.4);
+            border-radius: 0 4px 4px 0;
+            margin-bottom: 4px;
+        }
+        .warmup-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: #fbbf24;
+            animation: warmup-pulse 1.2s ease-in-out infinite;
+            flex-shrink: 0;
+        }
+        @keyframes warmup-pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.35; transform: scale(0.75); }
+        }
         .url-fetch-hint {
             display: none;
             align-items: center;
@@ -944,6 +968,10 @@
         </div>
         
         <div class="input-container">
+            <div class="warmup-status-bar" id="warmupStatusBar" style="display:none;">
+                <span class="warmup-dot"></span>
+                <span id="warmupStatusText">Waiting for server…</span>
+            </div>
             <div class="url-fetch-hint" id="urlFetchHint">🔗 <span id="urlHintText">URL detected — will be auto-read</span></div>
             <div class="attachments-container" id="attachmentsContainer"></div>
             <div class="input-row">

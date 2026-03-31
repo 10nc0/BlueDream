@@ -5,7 +5,7 @@ Nyanbook.io is a post-folder information protocol.
 
 Instead of messy folders and hierarchies, you send screenshot messages / attachments — via WhatsApp, LINE, or any SNS. Nyanbook.io save and sort them by time. (HTTP POST / GET).
 
-A versatile AI endpoint is provided to make your data queryable & interactive. **OpenClaw** and other Agents are supported via **agent tokens** within each book.
+A versatile AI endpoint is provided to make your data queryable & interactive. **OpenClaw**, agents, nodes, and forks are supported via **HTTP tokens** within each book.
 
 **Before**: Receipt → Fill Reimbursement Forms for Receipt → Create folder "2026/Taxes" → Rename file → Wrong Input in Forms → Forget where you saved it → ...
 
@@ -126,15 +126,19 @@ Adding a new messaging channel or a new tool requires one file. Drop it in, rest
 
 ## Why Discord?
 
-Discord is the bootstrap layer, not the sovereignty layer.
-
 > ***Discord is not permanent. Books are ownership. Webhooks are escape hatches.***
 
-Nyanbook.io is built for the $7/day earner, the small business that has never had a scribe. Free infrastructure (Discord threads, Pinata's 1GB IPFS tier, Supabase's free PostgreSQL) is what makes that accessible. This is a deliberate architectural choice.
+Discord is the bootstrap layer, not the sovereignty layer.
+
+Save the Golden statue (content), not the temple (infrastructure)?
+
+Free infrastructure (Discord threads, Pinata's 1GB IPFS tier, Supabase's free PostgreSQL) is what makes that accessible. This is a deliberate architectural choice.
+
+Nyanbook.io is built for the $7/day earner, the small business that has never had a scribe. 
 
 The sovereignty guarantee is not the URL. It is the hash.
 
-Every inpipe message is assigned a `message_fractal_id` (derived from content + sender + timestamp) and a `content_hash` (SHA256 of the body). Both live in PostgreSQL, independent of Discord. Discord CDN URLs can expire or change. The hashes do not. When a deployment is ready to migrate — to self-hosted storage, to a full IPFS node, to anything — its history transfers intact because the hash is the anchor.
+Every inpipe message is assigned a `message_fractal_id` (derived from content + sender + timestamp) and a `content_hash` (SHA256 of the body). Both live in PostgreSQL, independent of Discord. Discord CDN URLs can expire or change. The hashes do not. Migrating transfers its history because the hash is the anchor.
 
 | Layer | Role | Cost |
 |---|---|---|
@@ -144,11 +148,15 @@ Every inpipe message is assigned a `message_fractal_id` (derived from content + 
 
 Set `PINATA_JWT` and every inpipe message is automatically pinned to IPFS on arrival. The ledger is complete without IPFS. IPFS makes it sovereign.
 
+Every inpipe message also builds a cryptographic provenance capsule: the message body, an HMAC sender proof (phone proven, not revealed), a SHA256 content hash, and per-attachment metadata. The version field (`v`) is a public interface — structural changes bump the version, old CIDs remain permanently valid.
+
+> *Deleting a Postgres row does not delete the IPFS pin. The name is erased. The weight of the heart remains on the scale.*
+
 ---
 
-## Agent Integration (OpenClaw, Ollama, etc.)
+## HTTP Token — Agent / Node / Fork Integration
 
-Per-book bearer tokens make external agent integration clean and secure. Generate, rotate, or revoke tokens from the dashboard — each book gets its own.
+Agents, peer nodes, or forks all use the same HTTP bearer token pattern. Click "Edit Book" to generate, rotate, or revoke tokens from the nyanbook.io — token is unique per tenant x book.
 
 **Two endpoints, one loop:**
 
@@ -174,7 +182,7 @@ BlueDream doesn't decide when or whether to think. It only records and serves.
 
 ## Quick Start
 
-> Everything runs on free tiers. No coding skills required, No terminal required. The **console log** tells you what's active.
+> Everything runs on free tiers. No coding skills required, No terminal required. The **console log** provides full diagnostics.
 >
 > **Operators:** see [`RUNBOOK (LOGOS).md`](RUNBOOK%20(LOGOS).md) for secret rotation, incident response, and post-deploy checklist.
 
@@ -244,6 +252,8 @@ Each channel is independent. Deploy first (Deploy → Autoscale) to get a persis
 
 **Telegram** — [@BotFather](https://t.me/botfather) → `/newbot` → webhook `https://yourapp.replit.app/api/telegram/webhook` → add `TELEGRAM_BOT_TOKEN` → users join via `t.me/YourBot?start=JOINCODE`
 
+*Activation: send the book's join code (e.g. `MyBook-a1b2c3`) as your first message to route that sender to a book. All subsequent messages from that sender follow automatically.*
+
 ---
 
 ### Tier 3 — Sovereignty (~2 min, $0)
@@ -256,42 +266,11 @@ Each channel is independent. Deploy first (Deploy → Autoscale) to get a persis
 
 ---
 
-## Inpipe: Activating a Book
-
-Each "Book" is a routing address. 
-
-1. Create a book in the dashboard
-2. Get the join code (e.g. `MyBook-a1b2c3`)
-3. Send the join code as your first WhatsApp/LINE message to activate routing
-
-After activation, all subsequent messages from that sender are routed to the active book until changed.
-
----
-
-## IPFS Capsule Ledger (optional)
-
-Every inpipe message builds a cryptographic provenance capsule:
-
-- Actual message body
-- HMAC sender proof (phone proven, not revealed)
-- SHA256 content hash
-- Per-attachment metadata
-
-Set `PINATA_JWT` to enable automatic IPFS pinning via Pinata (free 1GB tier). The ledger works without IPFS; IPFS makes it sovereign.
-
-**Capsule schema contract**: The version field (`v`) is a public interface. Structural changes bump the version. Old CIDs remain permanently valid.
-
-> *Deleting a Postgres row does not delete the IPFS pin. The name is erased. The weight of the heart remains on the scale.*
-
----
-
 ## AI Features
 
 ### Playground (public, no login)
-- Multimodal: text + images + documents
-- Document parsing: PDF, Excel, DOCX
-- Web-grounded AI — answers are checked against live web data (free, no API key needed)
-- Optional premium search available (set `PLAYGROUND_BRAVE_API` for richer results)
+- Multimodal & document support: text + images + documents
+- Web-grounded AI — answers are checked against live web data (free, no API key needed, set `PLAYGROUND_BRAVE_API` for richer results)
 - Powered by Groq Llama 3.3 70B
 - Built-in two-pass audit and pipeline orchestrator (customizable)
 
@@ -307,7 +286,7 @@ Set `PINATA_JWT` to enable automatic IPFS pinning via Pinata (free 1GB tier). Th
 | **AI search-retry** | `npm test` (server must be running) | 2-pass hallucination correction pipeline, search-retry + re-audit stages |
 | **BooksModule (browser)** | `Nyan.BooksModuleTests.runTests()` in console | Book deduplication, selection, API loading logic |
 
-Discord threads are the observability layer — every inpipe message is a timestamped, human-readable audit trail. No Grafana required.
+Discord threads are the observability layer — every message is a timestamped, human-readable audit trail. No Grafana required.
 
 ---
 
