@@ -34,7 +34,7 @@ Run after every fresh deployment or major environment change.
 | Email outpipe | `RESEND_API_KEY` — [resend.com](https://resend.com) | Free tier |
 | IPFS pinning | `PINATA_JWT` — [pinata.cloud](https://pinata.cloud) | Free tier |
 | Per-book webhooks | Dashboard → Edit Book → Outpipes | — |
-| HTTP Token (Agent / Node) | Dashboard → Edit Book → HTTP Token | — |
+| HTTP Token | Dashboard → Edit Book → HTTP Token | — |
 
 ### HTTP Token — Anatta Node Mesh
 
@@ -217,12 +217,15 @@ UPDATE core.message_queue SET status = 'pending', retry_count = 0, last_error = 
 WHERE status = 'failed';
 ```
 
+**Reliability properties:**
+- Graceful shutdown: three checkpoints (pre-dequeue, post-dequeue, post-process) drain the loop cleanly on SIGTERM — no mid-flight message loss.
+- TOCTOU guard: dequeue uses `FOR UPDATE SKIP LOCKED` so concurrent restarts cannot claim the same row.
+- Dead-letter: after 3 failed attempts the row is set to `status = 'failed'` with `last_error` stored. Row survives for 24 h then purged. Re-queue with the SQL above.
+
 **Log signals:**
 - `⚙️ Queue processor started` → normal startup
 - `📥 Recovered N in-flight messages back to pending` → crash recovery on boot
-- `Queued message permanently failed (max retries)` → check `last_error` column
-
-> **Future:** `packet-queue.js` currently bundles queue primitives + pipe-specific async handlers. If another system needs queue semantics, split into `lib/queue-core.js` (pure primitives, zero deps) + `lib/pipe-handlers.js`.
+- `Queued message permanently failed (max retries)` → check `last_error` column; re-queue or drop
 
 ---
 
