@@ -1267,6 +1267,61 @@ function addUncompressedAttachments(payload, attachmentsList) {
 }
 
 const MAX_WARMUP_RETRIES = 3;
+const WARMUP_TOTAL_TIMEOUT_MS = 3 * 60 * 1000;
+const WARMUP_POLL_INTERVAL_MS = 5000;
+
+let _warmupPoller = null;
+
+function _clearWarmupPoller() {
+    const wasPolling = !!_warmupPoller;
+    if (_warmupPoller) {
+        clearInterval(_warmupPoller);
+        _warmupPoller = null;
+    }
+    const bar = document.getElementById('warmupStatusBar');
+    if (bar) bar.style.display = 'none';
+    if (wasPolling) {
+        isProcessing = false;
+        sendBtn.disabled = false;
+    }
+}
+
+async function _resendAfterWarmup(payload) {
+    delete payload._retryCount;
+    delete payload._warmupStartTime;
+    isProcessing = false;
+    await sendMessage(payload);
+}
+
+function _startWarmupPolling(payload) {
+    const bar = document.getElementById('warmupStatusBar');
+    const txt = document.getElementById('warmupStatusText');
+    if (bar) bar.style.display = 'flex';
+    if (txt) txt.textContent = 'Waiting for server…';
+
+    isProcessing = true;
+    sendBtn.disabled = true;
+
+    const warmupStart = payload._warmupStartTime || Date.now();
+    const deadline = warmupStart + WARMUP_TOTAL_TIMEOUT_MS;
+
+    _warmupPoller = setInterval(async () => {
+        if (!_warmupPoller) return;
+        if (Date.now() >= deadline) {
+            _clearWarmupPoller();
+            addMessage('assistant', '⚠️ Server unavailable — please refresh the page and try again.');
+            return;
+        }
+        try {
+            const res = await fetch('/api/playground/model-info');
+            if (res.ok && _warmupPoller) {
+                _clearWarmupPoller();
+                await _resendAfterWarmup(payload);
+            }
+        } catch (_) {
+        }
+    }, WARMUP_POLL_INTERVAL_MS);
+}
 
 async function sendMessage(_retryPayload = null) {
     if (isProcessing) return;
@@ -1348,12 +1403,15 @@ async function sendMessage(_retryPayload = null) {
             const errorData = await res.json().catch(() => ({}));
             if (res.status === 503 && errorData.code === 'warming_up') {
                 const retryCount = (payload._retryCount || 0) + 1;
+                if (!payload._warmupStartTime) {
+                    payload._warmupStartTime = Date.now();
+                }
                 if (retryCount > MAX_WARMUP_RETRIES) {
-                    addMessage('assistant', '🐱 Server is still warming up. Please try again in a moment.');
                     isProcessing = false;
-                    sendBtn.disabled = false;
+                    payload._retryCount = retryCount;
+                    _startWarmupPolling(payload);
                 } else {
-                    addMessage('assistant', `🐱 Still warming up — will retry automatically in 5 seconds... (${retryCount}/${MAX_WARMUP_RETRIES})`);
+                    addMessage('assistant', `🐱 Still warming up — will retry automatically in 5 seconds…`);
                     isProcessing = false;
                     payload._retryCount = retryCount;
                     setTimeout(() => sendMessage(payload), 5000);
@@ -1440,6 +1498,8 @@ async function sendMessage(_retryPayload = null) {
 // Clear history handler (can be called from UI or console)
 async function clearNyanHistory() {
     console.log('🧹 CLEARHISTORY CALLED - Starting conversation clear...');
+    
+    _clearWarmupPoller();
     
     // Set flag to prevent auto-hydration
     shouldSkipHydration = true;
