@@ -34,15 +34,15 @@ Run after every fresh deployment or major environment change.
 | Email outpipe | `RESEND_API_KEY` — [resend.com](https://resend.com) | Free tier |
 | IPFS pinning | `PINATA_JWT` — [pinata.cloud](https://pinata.cloud) | Free tier |
 | Per-book webhooks | Dashboard → Edit Book → Outpipes | — |
-| Agent read API | Dashboard → Edit Book → Agent Access Token | — |
+| HTTP Token (Agent / Node) | Dashboard → Edit Book → HTTP Token | — |
 
-### Agent Read API — Anatta Node Mesh
+### HTTP Token — Anatta Node Mesh
 
-Lets external agents read a single book's messages via bearer token. Auth is **per-tenant per-book** — a token for Book A cannot read Book B, even within the same tenant.
+Lets external agents, peer nodes, or any HTTP client read a single book's messages via bearer token. Auth is **per-tenant per-book** — a token for Book A cannot read Book B, even within the same tenant.
 
 Read source is **PostgreSQL** (`anatta_messages` table, tenant schema). No Discord bot required for reads.
 
-**Setup:** Dashboard → Edit Book → Agent Access Token → Generate Token. Copy immediately; only the SHA-256 hash is stored.
+**Setup:** Dashboard → Edit Book → HTTP Token → Generate Token. Copy immediately; only the SHA-256 hash is stored.
 
 **Endpoint:**
 
@@ -98,6 +98,8 @@ Rate limit: 60 req/min per IP.
 | Check | GET | `/api/books/:fractalId/agent-token` |
 | Generate / rotate | POST | `/api/books/:fractalId/agent-token` |
 | Revoke | DELETE | `/api/books/:fractalId/agent-token` |
+
+> Route paths retain `/agent-token` for backward compatibility with existing integrations.
 
 Rotate replaces the hash in-place — old token dies instantly. Revoke sets hash to NULL; read endpoint returns 403 until a new token is generated. Token: 32 random bytes (base64url), UNIQUE index per tenant schema, timing-safe comparison.
 

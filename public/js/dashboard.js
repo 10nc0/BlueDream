@@ -4779,12 +4779,12 @@
             rotateBtn.type = 'button';
             rotateBtn.textContent = 'Rotate';
             rotateBtn.style.cssText = 'background: rgba(251,191,36,0.15); border: 1px solid rgba(251,191,36,0.3); color: #fbbf24; border-radius: 6px; padding: 0.35rem 0.75rem; cursor: pointer; font-size: 0.8rem;';
-            rotateBtn.onclick = () => nyanConfirm('Rotate agent token?', 'The old token will stop working immediately. Any agent using it must be updated.', () => generateAgentToken(fractalId), true, 'Rotate');
+            rotateBtn.onclick = () => nyanConfirm('Rotate HTTP token?', 'The old token will stop working immediately. Any agent or node using it must be updated.', () => generateAgentToken(fractalId), true, 'Rotate');
             const revokeBtn = document.createElement('button');
             revokeBtn.type = 'button';
             revokeBtn.textContent = 'Revoke';
             revokeBtn.style.cssText = 'background: rgba(239,68,68,0.15); border: 1px solid rgba(239,68,68,0.3); color: #ef4444; border-radius: 6px; padding: 0.35rem 0.75rem; cursor: pointer; font-size: 0.8rem;';
-            revokeBtn.onclick = () => nyanConfirm('Revoke agent token?', 'Your agents will lose access to this book immediately.', () => revokeAgentToken(fractalId), true, 'Revoke');
+            revokeBtn.onclick = () => nyanConfirm('Revoke HTTP token?', 'Your agents and nodes will lose access to this book immediately.', () => revokeAgentToken(fractalId), true, 'Revoke');
             actions.appendChild(rotateBtn);
             actions.appendChild(revokeBtn);
         }
@@ -4812,7 +4812,7 @@
                     genBtn.type = 'button';
                     genBtn.textContent = 'Generate Token';
                     genBtn.style.cssText = 'background: rgba(59,130,246,0.15); border: 1px solid rgba(59,130,246,0.3); color: #60a5fa; border-radius: 6px; padding: 0.35rem 0.75rem; cursor: pointer; font-size: 0.8rem;';
-                    genBtn.onclick = () => nyanConfirm('Generate agent token?', 'This creates a one-time token that lets your agent read this book\'s messages.', () => generateAgentToken(fractalId), false, 'Generate');
+                    genBtn.onclick = () => nyanConfirm('Generate HTTP token?', 'This creates a one-time token that lets your agent or node access this book\'s message stream.', () => generateAgentToken(fractalId), false, 'Generate');
                     actions.appendChild(genBtn);
                 }
             } catch (err) {

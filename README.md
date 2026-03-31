@@ -5,7 +5,7 @@ Nyanbook.io is a post-folder information protocol.
 
 Instead of messy folders and hierarchies, you send screenshot messages / attachments — via WhatsApp, LINE, or any SNS. Nyanbook.io save and sort them by time. (HTTP POST / GET).
 
-A versatile AI endpoint is provided to make your data queryable & interactive. **OpenClaw** and other Agents are supported via **agent tokens** within each book.
+A versatile AI endpoint is provided to make your data queryable & interactive. **OpenClaw** and other agents, nodes, and forks are supported via **HTTP tokens** within each book.
 
 **Before**: Receipt → Fill Reimbursement Forms for Receipt → Create folder "2026/Taxes" → Rename file → Wrong Input in Forms → Forget where you saved it → ...
 
@@ -146,9 +146,9 @@ Set `PINATA_JWT` and every inpipe message is automatically pinned to IPFS on arr
 
 ---
 
-## Agent Integration (OpenClaw, Ollama, etc.)
+## HTTP Token — Agent / Node / Fork Integration
 
-Per-book bearer tokens make external agent integration clean and secure. Generate, rotate, or revoke tokens from the dashboard — each book gets its own.
+Per-book HTTP tokens make external integration clean and secure — agents, peer nodes, and forks all use the same bearer token pattern. Generate, rotate, or revoke tokens from the dashboard — each book gets its own.
 
 **Two endpoints, one loop:**
 
