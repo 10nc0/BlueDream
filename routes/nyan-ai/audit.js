@@ -7,6 +7,12 @@ const { buildAuditContext } = require('../../utils/audit-context');
 const { runDashboardAuditPipeline } = require('../../utils/dashboard-audit-pipeline');
 const { formatExecutiveResponse } = require('../../utils/executive-formatter');
 const { buildExecutiveAuditPrompt, buildRetryPrompt } = require('../../prompts/executive-audit');
+const { runMonthlyClosing } = require('../../lib/monthly-closing');
+
+// In-flight guard — prevents the same user from firing two identical audit
+// calls simultaneously (double-click, retry while pending, etc.).
+// Keyed by userId + sorted bookIds. Cleared when the request completes.
+const auditInFlight = new Set();
 
 const _llm = getLLMBackend();
 
@@ -38,6 +44,14 @@ function registerAuditRoutes(app, deps) {
         if (!query || typeof query !== 'string' || query.trim().length === 0) {
             return res.status(400).json({ error: 'Query is required' });
         }
+
+        // Double-run guard — same user + same bookIds already in flight
+        const flightKey = `${req.userId}:${(Array.isArray(bookIds) ? [...bookIds].sort() : []).join(',')}`;
+        if (auditInFlight.has(flightKey)) {
+            logger.warn({ userId: req.userId, flightKey }, '⚠️ Audit already in progress, rejecting duplicate');
+            return res.status(409).json({ error: 'Audit already in progress for these books. Please wait for it to complete.' });
+        }
+        auditInFlight.add(flightKey);
 
         logger.info({ userId: req.userId, bookCount: bookIds?.length || 0 }, 'Nyan AI Audit query');
 
@@ -297,6 +311,31 @@ Analyze the data and answer the user's question. Count carefully when asked abou
                 error: 'Failed to process audit query',
                 message: error.message
             });
+        } finally {
+            auditInFlight.delete(flightKey);
+        }
+    });
+
+    // Manual monthly closing trigger — admin only.
+    // POST /api/nyan-ai/monthly-closing?month=YYYY-MM&force=true
+    app.post('/api/nyan-ai/monthly-closing', requireAuth, async (req, res) => {
+        if (req.userRole !== 'admin' && req.userRole !== 'dev') {
+            return res.status(403).json({ error: 'Admin access required' });
+        }
+
+        const overrideMonth = typeof req.query.month === 'string' && /^\d{4}-\d{2}$/.test(req.query.month)
+            ? req.query.month
+            : null;
+        const force = req.query.force === 'true';
+
+        logger.info({ userId: req.userId, overrideMonth, force }, '📊 Manual monthly closing trigger');
+
+        try {
+            const result = await runMonthlyClosing(pool, bots, { overrideMonth, force });
+            res.json({ success: true, result });
+        } catch (err) {
+            logger.error({ err }, '📊 Manual monthly closing failed');
+            res.status(500).json({ error: 'Monthly closing failed', message: err.message });
         }
     });
 
