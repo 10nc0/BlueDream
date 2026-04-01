@@ -282,7 +282,7 @@ Each channel is independent. Deploy first (Deploy → Autoscale) to get a persis
 
 | Suite | Command | Covers |
 |-------|---------|--------|
-| **Core flow** | `npm run test:core` (server must be running) | Auth, JWT lifecycle, books CRUD, tenant isolation, capsule/inpipe, outpipe routing, validators |
+| **Core flow** | `npm run test:core` | Auth, JWT lifecycle, books CRUD, tenant isolation, capsule/inpipe, outpipe routing, validators |
 | **AI search-retry** | `npm test` (server must be running) | 2-pass hallucination correction pipeline, search-retry + re-audit stages |
 | **BooksModule (browser)** | `Nyan.BooksModuleTests.runTests()` in console | Book deduplication, selection, API loading logic |
 
