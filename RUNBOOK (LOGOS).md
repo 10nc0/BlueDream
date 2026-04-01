@@ -36,6 +36,19 @@ Run after every fresh deployment or major environment change.
 | Per-book webhooks | Dashboard → Edit Book → Outpipes | — |
 | HTTP Token | Dashboard → Edit Book → HTTP Token | — |
 
+**When infrastructure approaches a paid tier, fork rather than upgrade.**
+
+A Nyanbook node is stateless by design — the durable record lives in IPFS and Discord, not the database. When Supabase storage approaches its free limit (~500K messages), the lowest-cost path is:
+
+1. Fork a new BlueDream instance (new Replit, fresh Supabase free DB)
+2. Keep the old node running at minimal cost (Autoscale scales to zero when idle)
+3. Update DNS / webhook URLs to point to the new node
+4. Reference the old node's URL in the new node's config as a peer archive
+
+The old node becomes a read-only archive. Provenance is unbroken — IPFS CIDs and Discord threads are permanent and independent of any node lifecycle. The only continuity gap is cross-boundary AI audit queries, which would need to query both nodes separately. That is an acceptable trade-off given the cost savings (per month subscription paid for just storage).
+
+_The fractal self-references. The ledger outlives the node._
+
 ### HTTP Token — Anatta Node Mesh
 
 Lets external agents, peer nodes, or any HTTP client read a single book's messages via bearer token. Auth is **per-tenant per-book** — a token for Book A cannot read Book B, even within the same tenant.
