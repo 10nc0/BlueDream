@@ -558,6 +558,23 @@
         </div>
     </div>
 
+    <!-- Webhook Password Confirmation Modal -->
+    <div id="webhookPasswordModal" class="modal" style="display:none;">
+        <div class="modal-content" style="max-width:360px;">
+            <div class="modal-header">
+                <h2 class="modal-title">🔐 Password Required</h2>
+                <button class="close-btn" id="webhookPasswordCancelBtn">×</button>
+            </div>
+            <p id="webhookPasswordMessage" style="margin:0 0 1rem;font-size:0.9rem;color:var(--text-secondary);"></p>
+            <div class="form-group">
+                <label class="form-label">Your password</label>
+                <input type="password" class="form-input" id="webhookPasswordInput" autocomplete="current-password" placeholder="••••••••">
+            </div>
+            <div id="webhookPasswordError" style="color:var(--error,#e53e3e);font-size:0.85rem;min-height:1.2em;margin-bottom:0.75rem;"></div>
+            <button class="submit-btn" id="webhookPasswordConfirmBtn">Confirm</button>
+        </div>
+    </div>
+
     <!-- Advanced Search Modal -->
     <div id="advancedSearchModal" class="modal" style="display: none;">
         <div class="modal-content" style="max-width: 700px;">

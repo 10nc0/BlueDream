@@ -2,8 +2,9 @@
 -- Adds a generated tsvector column (body + sender_name) and a GIN index.
 -- ${SCHEMA} is replaced at runtime with the actual tenant schema name.
 --
--- CONCURRENTLY: no explicit BEGIN/COMMIT → runs in autocommit mode, which
--- is required for CREATE INDEX CONCURRENTLY. Safe on tables with existing rows.
+-- Note: no CONCURRENTLY — migration runner sends multi-statement SQL in a single
+-- pool.query() call which PostgreSQL wraps in an implicit transaction, blocking
+-- CONCURRENTLY. Standard CREATE INDEX is safe at startup on all supported table sizes.
 
 ALTER TABLE ${SCHEMA}.anatta_messages
     ADD COLUMN IF NOT EXISTS fts_vector tsvector
@@ -12,5 +13,5 @@ ALTER TABLE ${SCHEMA}.anatta_messages
                 coalesce(body, '') || ' ' || coalesce(sender_name, ''))
         ) STORED;
 
-CREATE INDEX CONCURRENTLY IF NOT EXISTS anatta_messages_fts_idx
+CREATE INDEX IF NOT EXISTS anatta_messages_fts_idx
     ON ${SCHEMA}.anatta_messages USING GIN (fts_vector);
