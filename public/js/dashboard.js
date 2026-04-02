@@ -5377,11 +5377,11 @@
                 msgEl.textContent   = message;
                 errorEl.textContent = '';
                 input.value         = '';
-                modal.style.display = 'flex';
+                modal.classList.add('active');
                 setTimeout(() => input.focus(), 50);
 
                 function cleanup() {
-                    modal.style.display = 'none';
+                    modal.classList.remove('active');
                     confirmBtn.removeEventListener('click', onConfirm);
                     cancelBtn.removeEventListener('click', onCancel);
                     input.removeEventListener('keydown', onKeydown);
