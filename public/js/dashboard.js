@@ -1277,7 +1277,7 @@
             const hasUrlOutpipe = outpipes.some(p => p.type === 'discord' || p.type === 'webhook');
             let password = null;
             if (hasUrlOutpipe) {
-                password = prompt('Enter your password to save Discord/Webhook channels:');
+                password = await showPasswordModal('Enter your account password to save Discord / Webhook channels.');
                 if (!password) return;
             }
 
@@ -4980,10 +4980,10 @@
                 
                 // If webhook URL is changing, require password
                 if (newWebhookUrl && newWebhookUrl !== existingWebhookUrl) {
-                    password = prompt('🔐 Password Required\n\nYou are changing the webhook URL. Please enter your password to confirm this security-sensitive change:');
+                    password = await showPasswordModal('You are changing the webhook URL. Enter your account password to confirm this security-sensitive change.');
                     
                     if (!password) {
-                        alert('⚠️ Webhook change cancelled. Password is required to modify webhook URLs.');
+                        showToast('Webhook URL change cancelled — password is required.', 'error');
                         return;
                     }
                 }
@@ -5060,27 +5060,27 @@
                             setFilteredBooks(books);
                             renderBooks(true); // Skip detail re-render to preserve state
                         }
-                        alert('✅ Book updated successfully!');
+                        showToast('Book updated successfully.', 'success');
                     } else {
                         // For new books, do full refresh to initialize WhatsApp client
                         loadBooks();
-                        alert('✅ Bot created successfully! Click the ▶️ button to start WhatsApp.');
+                        showToast('Book created! Click ▶️ to start WhatsApp.', 'success');
                     }
                 } else {
                     const errorData = await response.json().catch(() => ({}));
                     
                     // Handle password errors specifically
                     if (errorData.invalidPassword) {
-                        alert('❌ Invalid password. Webhook URL was not changed. All other changes have been saved.');
+                        showToast('Wrong password — webhook URL was not changed. All other changes were saved.', 'error');
                     } else if (errorData.requiresPassword) {
-                        alert('❌ Password required to change webhook URL.');
+                        showToast('Password required to change webhook URL.', 'error');
                     } else {
-                        alert(`Failed to save bot: ${errorData.error || response.statusText}`);
+                        showToast(errorData.error || 'Failed to save book.', 'error');
                     }
                 }
             } catch (error) {
                 console.error('Error saving bot:', error);
-                alert(`Error saving bot: ${error.message}`);
+                showToast(error.message || 'Error saving book.', 'error');
             }
         }
 
@@ -5364,6 +5364,40 @@
             }
         }
         
+        // Password confirmation modal — replaces native prompt() so input is masked
+        function showPasswordModal(message) {
+            return new Promise((resolve) => {
+                const modal   = document.getElementById('webhookPasswordModal');
+                const input   = document.getElementById('webhookPasswordInput');
+                const msgEl   = document.getElementById('webhookPasswordMessage');
+                const errorEl = document.getElementById('webhookPasswordError');
+                const confirmBtn = document.getElementById('webhookPasswordConfirmBtn');
+                const cancelBtn  = document.getElementById('webhookPasswordCancelBtn');
+
+                msgEl.textContent   = message;
+                errorEl.textContent = '';
+                input.value         = '';
+                modal.style.display = 'flex';
+                setTimeout(() => input.focus(), 50);
+
+                function cleanup() {
+                    modal.style.display = 'none';
+                    confirmBtn.removeEventListener('click', onConfirm);
+                    cancelBtn.removeEventListener('click', onCancel);
+                    input.removeEventListener('keydown', onKeydown);
+                }
+                function onConfirm() { cleanup(); resolve(input.value.trim() || null); }
+                function onCancel()  { cleanup(); resolve(null); }
+                function onKeydown(e) {
+                    if (e.key === 'Enter')  onConfirm();
+                    if (e.key === 'Escape') onCancel();
+                }
+                confirmBtn.addEventListener('click', onConfirm);
+                cancelBtn.addEventListener('click', onCancel);
+                input.addEventListener('keydown', onKeydown);
+            });
+        }
+
         // Toast notification system with glassmorphism design
         function showToast(message, type = 'info') {
             const toast = document.createElement('div');
