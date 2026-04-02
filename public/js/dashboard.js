@@ -4645,7 +4645,10 @@
             const bookCodeSection = document.getElementById('bookCodeSection');
             const bookCodeDisplay = document.getElementById('bookCodeDisplay');
             if (bookCodeSection && bookCodeDisplay) {
-                bookCodeDisplay.value = book.fractal_id || '';
+                const routingCode = (book.join_code && !book.join_code.startsWith('no-code-'))
+                    ? book.join_code
+                    : book.fractal_id || '';
+                bookCodeDisplay.value = routingCode;
                 bookCodeSection.style.display = 'block';
             }
             
