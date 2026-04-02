@@ -45,6 +45,10 @@
         function setEditingBookId(id) { editingBookId = id; _S.setEditingBookId(id); }
         function setSelectedBookId(id) { selectedBookId = id; _S.setSelectedBookId(id); }
 
+        // drops tag cache: bookId → { discord_message_id → string[] }
+        // populated by hydrateDropsForBook; used by applyLensFilter for #tag searches
+        const dropsTagCache = {};
+
         // ===================================================================
         // UNIFIED ACTION REGISTRY
         // Central map for all buttons/actions (mobile + desktop)
@@ -1286,9 +1290,9 @@
             btn.disabled = true;
 
             try {
-                const res = await fetch(`/api/books/${bookId}/outpipes`, {
+                const res = await window.authFetch(`/api/books/${bookId}/outpipes`, {
                     method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ outpipes, ...(password ? { password } : {}) })
                 });
                 const data = await res.json();
@@ -2006,24 +2010,36 @@
 
         // LENS MODE: Filter messages at data level BEFORE rendering
         // Pure function - filters without DOM manipulation
-        function applyLensFilter(messages, searchText, statusFilter = 'all') {
+        function applyLensFilter(messages, searchText, statusFilter = 'all', bookId = null) {
             if (!messages || messages.length === 0) return [];
             if (!searchText?.trim() && statusFilter === 'all') return messages;
             
             const searchLower = (searchText || '').toLowerCase().trim();
+            const isTagSearch = searchLower.startsWith('#');
+            const tagTerm = isTagSearch ? searchLower.slice(1) : null;
+            const bookDrops = bookId ? (dropsTagCache[bookId] || {}) : {};
             
             return messages.filter(msg => {
+                // Merge drops tags from cache (populated by hydrateDropsForBook)
+                const cachedTags = bookDrops[String(msg.id)] || msg.extracted_tags || [];
+                
                 // Build searchable text from message data
                 const searchableText = [
                     msg.sender_name || '',
                     msg.message_content || '',
                     msg.sender_contact || '',
                     extractEmbedSearchText(msg.embeds),
-                    (msg.extracted_tags || []).map(t => '#' + t).join(' ')
+                    cachedTags.map(t => '#' + t).join(' ')
                 ].join(' ').toLowerCase();
                 
-                // Match search text
-                const matchesSearch = !searchLower || window.searchState?.performSearch(searchLower, searchableText) || searchableText.includes(searchLower);
+                let matchesSearch;
+                if (isTagSearch && tagTerm) {
+                    // Tag search: check drops cache tags directly (exact prefix match)
+                    matchesSearch = cachedTags.some(t => t.toLowerCase().startsWith(tagTerm))
+                        || searchableText.includes(searchLower);
+                } else {
+                    matchesSearch = !searchLower || window.searchState?.performSearch(searchLower, searchableText) || searchableText.includes(searchLower);
+                }
                 
                 // Match status filter
                 const matchesStatus = statusFilter === 'all' || msg.discord_status === statusFilter;
@@ -2038,7 +2054,7 @@
             if (!cached || cached.length === 0) return;
             
             const filterState = lensFilterState[bookId] || { searchText: '', statusFilter: 'all' };
-            const filtered = applyLensFilter(cached, filterState.searchText, filterState.statusFilter);
+            const filtered = applyLensFilter(cached, filterState.searchText, filterState.statusFilter, bookId);
             
             const container = document.getElementById(`discord-messages-${bookId}`);
             if (!container) return;
@@ -2312,6 +2328,17 @@
                 return;
             }
             
+            // For #tag searches, ensure drops tag cache is populated before filtering
+            if (searchText.startsWith('#') && !dropsTagCache[bookId]) {
+                const coldDrops = await fetchDrops(bookId);
+                dropsTagCache[bookId] = {};
+                coldDrops.forEach(drop => {
+                    if (drop.discord_message_id && drop.extracted_tags?.length) {
+                        dropsTagCache[bookId][String(drop.discord_message_id)] = drop.extracted_tags;
+                    }
+                });
+            }
+
             // LENS MODE: Re-render from cache with filter applied
             await renderFromCacheWithLens(bookId);
             
@@ -3751,18 +3778,11 @@
             webhookGroup.appendChild(webhookValueDiv);
             container.appendChild(webhookGroup);
             
-            // Status
-            const statusGroup = document.createElement('div');
-            statusGroup.className = 'form-group';
-            const statusLabel = document.createElement('label');
-            statusLabel.className = 'form-label';
-            statusLabel.textContent = 'Status';
-            statusGroup.appendChild(statusLabel);
-            const statusValueDiv = document.createElement('div');
-            statusValueDiv.style.cssText = `padding: 0.75rem; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 8px; color: ${statusColor}; text-transform: capitalize; font-weight: 500;`;
-            statusValueDiv.textContent = status;
-            statusGroup.appendChild(statusValueDiv);
-            container.appendChild(statusGroup);
+            // Address (contact_info — phone number or routing join code)
+            const rawContact = (currentBook.contact_info || '').replace(/^join baby-ability\s+/i, '').trim();
+            if (rawContact) {
+                container.appendChild(createFormGroup('Address', rawContact));
+            }
             
             // Tags (if any)
             if (tags.length > 0) {
@@ -4645,7 +4665,10 @@
             const bookCodeSection = document.getElementById('bookCodeSection');
             const bookCodeDisplay = document.getElementById('bookCodeDisplay');
             if (bookCodeSection && bookCodeDisplay) {
-                bookCodeDisplay.value = book.fractal_id || '';
+                const routingCode = (book.join_code && !book.join_code.startsWith('no-code-'))
+                    ? book.join_code
+                    : book.fractal_id || '';
+                bookCodeDisplay.value = routingCode;
                 bookCodeSection.style.display = 'block';
             }
             
@@ -5377,11 +5400,11 @@
                 msgEl.textContent   = message;
                 errorEl.textContent = '';
                 input.value         = '';
-                modal.style.display = 'flex';
+                modal.classList.add('active');
                 setTimeout(() => input.focus(), 50);
 
                 function cleanup() {
-                    modal.style.display = 'none';
+                    modal.classList.remove('active');
                     confirmBtn.removeEventListener('click', onConfirm);
                     cancelBtn.removeEventListener('click', onCancel);
                     input.removeEventListener('keydown', onKeydown);
@@ -8786,10 +8809,18 @@ function showBulkTagModal(bookId) {
 async function hydrateDropsForBook(bookId) {
     const drops = await fetchDrops(bookId);
     
+    // Populate drops tag cache so applyLensFilter can use tags for #tag searches
+    if (!dropsTagCache[bookId]) dropsTagCache[bookId] = {};
+    drops.forEach(drop => {
+        if (drop.discord_message_id && drop.extracted_tags?.length) {
+            dropsTagCache[bookId][String(drop.discord_message_id)] = drop.extracted_tags;
+        }
+    });
+    
     drops.forEach(drop => {
         const section = document.querySelector(`.message-drop-section[data-message-id="${drop.discord_message_id}"][data-book-id="${bookId}"]`);
         if (section) {
-            displayDrop(section, drop, null, bookId); // Pass fractal_id
+            displayDrop(section, drop, null, bookId);
         }
     });
 }
