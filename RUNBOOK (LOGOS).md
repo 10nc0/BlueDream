@@ -363,8 +363,11 @@ utils/
 ├── psi-EMA.js                    — φ-derived time series analysis
 ├── fetch-stock-prices.py         — Psi-EMA data fetcher (yfinance/pandas)
 ├── pipeline-orchestrator.js      — 7-stage AI pipeline (S-1 → S6)
+├── groq-client.js                — Groq LLM client with OpenRouter fallback (5xx/429/network)
+├── firecrawl-enricher.js         — enrichUrls() + substituteEnrichedSnippets() for post-cascade context
 ├── two-pass-verification.js      — 2-pass hallucination correction
 ├── dashboard-audit-pipeline.js   — 4-stage hallucination correction
+├── audit-context.js              — buildTsQuery() + fetchMessagesByKeywords() (FTS + ILIKE fallback)
 ├── seed-metric-calculator.js     — Real estate affordability (Seed Metric)
 ├── markdown-table-formatter.js   — Column-aligned markdown tables
 └── language-detector.js          — Trigram + script language detection (ISO 639-1)
@@ -373,10 +376,11 @@ utils/
 ### `lib/tools/` (auto-discovered — drop a `.js` file to add a tool)
 
 ```
-lib/tools/ (9 tools):
+lib/tools/ (10 tools):
 ├── registry.js          — Auto-discovers on startup, getTool() + getManifest()
 ├── brave-search.js      — Brave API (cached, throttled)
 ├── duckduckgo.js        — DDG instant answers (cached, fallback)
+├── exa.js               — Exa neural search (cascade tier 3, gated on EXA_API_KEY)
 ├── url-fetcher.js       — Fetch + extract readable content from URLs (cached)
 ├── github-reader.js     — GitHub repos, blobs, trees, raw files, Gists
 ├── pdf-analyzer.js      — PDF analysis via attachment cascade
@@ -398,7 +402,7 @@ lib/outpipes/
 
 ### `lib/fetch-cache.js`
 
-TTL cache: `braveCache` 3min, `duckduckgoCache` 5min, `urlCache` 10min.
+TTL cache: `braveCache` 3min, `duckduckgoCache` 5min, `urlCache` 10min, `exaCache` 5min.
 
 ---
 
