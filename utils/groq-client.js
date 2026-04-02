@@ -79,6 +79,17 @@ async function _groqCore(axiosConfig, maxRetries, serviceType) {
     throw lastError;
 }
 
+// Returns true for errors that indicate Groq is unavailable — eligible for OpenRouter fallback.
+// 4xx client errors (bad request, auth, not found, etc.) are NOT eligible: they will fail on
+// OpenRouter too and masking them would hide real request bugs.
+function _isEligibleForFallback(error) {
+    const status = error.response?.status;
+    if (!status) return true;         // no response = connection/network failure
+    if (status === 429) return true;  // rate-limited and all retries exhausted
+    if (status >= 500) return true;   // Groq server error
+    return false;                     // 4xx and other client errors — rethrow as-is
+}
+
 // Exported — tries Groq first, then OpenRouter if OPENROUTER_API_KEY is configured.
 // All existing callers use this function unchanged — the fallback is transparent.
 async function groqWithRetry(axiosConfig, maxRetries = 3, serviceType = 'text') {
@@ -94,6 +105,9 @@ async function groqWithRetry(axiosConfig, maxRetries = 3, serviceType = 'text') 
 
         // Audio models use a different request format — cannot proxy through OpenRouter
         if (AUDIO_MODELS.has(groqModel)) throw groqError;
+
+        // Only fall back for server-side / network failures — not for 4xx client errors
+        if (!_isEligibleForFallback(groqError)) throw groqError;
 
         const orModel = GROQ_TO_OPENROUTER[groqModel] || groqModel;
         logger.warn(
