@@ -724,6 +724,19 @@ SYNTHESIS INSTRUCTIONS:
         state.didSearch = true;
         state.searchProvider = cascadeResult.provider;
         logger.info(`✅ Real-time search successful (provider=${state.searchProvider}), urls=${state.searchSourceUrls.length}, context injected`);
+
+        // Firecrawl source enrichment: replace raw snippet text with clean Firecrawl markdown in-place.
+        // state.searchSourceUrls is preserved unchanged — source-ascriber uses it for the 📚 Sources footer.
+        if (state.searchSourceUrls.length > 0 && process.env.FIRECRAWL_API_KEY) {
+          const { enrichUrls, substituteEnrichedSnippets } = require('./firecrawl-enricher');
+          const enriched = await enrichUrls(state.searchSourceUrls, { timeoutMs: 6000 });
+          if (enriched.size > 0) {
+            const enrichedResult = substituteEnrichedSnippets(cascadeResult.result, enriched);
+            // Use function replacement to avoid $ interpolation issues in markdown content
+            state.searchContext = state.searchContext.replace(cascadeResult.result, () => enrichedResult);
+            logger.info({ enriched: enriched.size }, '🕷️ Firecrawl: snippets replaced with enriched markdown in search context');
+          }
+        }
       } else {
         logger.warn(`⚠️ Real-time search failed - will rely on training data`);
       }
@@ -2009,6 +2022,17 @@ Output ONLY the corrected table and summary lines:`;
       state.searchContext = retrySearch.result;
       state.searchProvider = retrySearch.provider;
       state.didSearch = true;
+      // Extract URLs from retry search results and enrich with Firecrawl if configured
+      const retryUrls = [...retrySearch.result.matchAll(/^   Source:\s*(https?:\/\/\S+)/gm)].map(m => m[1]);
+      if (retryUrls.length > 0 && process.env.FIRECRAWL_API_KEY) {
+        const { enrichUrls, substituteEnrichedSnippets } = require('./firecrawl-enricher');
+        const enriched = await enrichUrls(retryUrls, { timeoutMs: 6000 });
+        if (enriched.size > 0) {
+          const enrichedResult = substituteEnrichedSnippets(retrySearch.result, enriched);
+          state.searchContext = state.searchContext.replace(retrySearch.result, () => enrichedResult);
+          logger.info({ enriched: enriched.size }, '🕷️ Firecrawl: retry snippets replaced with enriched markdown');
+        }
+      }
       await this.stepReasoning(state, reasoningInput);
       await this.stepAudit(state, reasoningInput);
     }

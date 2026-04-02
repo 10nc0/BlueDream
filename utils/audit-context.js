@@ -58,6 +58,153 @@ function extractKeywords(query) {
         .slice(0, 5);
 }
 
+// Build a tsquery-safe token string from an array of keywords.
+// Each token is sanitised to alphanumeric + underscore to avoid injection.
+function buildTsQuery(keywords) {
+    return keywords
+        .map(kw => kw.replace(/[^a-z0-9_]/g, ''))
+        .filter(Boolean)
+        .join(' & ');
+}
+
+// Fetch messages from anatta_messages using full-text search when keywords has
+// 2+ tokens or a single long token (uses fts_vector GIN index), falling back
+// to ILIKE for a single short token (<=3 chars). Results from FTS are ranked
+// by ts_rank descending and include `_ftsRanked: true` for caller ordering.
+//
+// `keywords` — pre-filtered significant tokens (from extractKeywords, length>3)
+// `rawTokens` — all lowercased split tokens from the raw query (unfiltered),
+//               used to detect single short-token queries that should use ILIKE.
+//
+// Returns an array of plain message objects compatible with the audit context
+// format: { id, content, timestamp, bookName, sender, _ftsRanked }.
+async function fetchMessagesByKeywords(pool, tenantSchema, bookFractalId, keywords, options = {}) {
+    const { assertValidSchemaName } = require('../lib/validators');
+    const schemaSafe = assertValidSchemaName(tenantSchema);
+    const { limit = 500, datePatterns = [], rawTokens = [] } = options;
+
+    let whereClauses = ['book_fractal_id = $1'];
+    const params = [bookFractalId];
+
+    // Date-range filter when date patterns are present
+    if (datePatterns.length > 0) {
+        const dateOr = datePatterns
+            .map(p => {
+                params.push(`${p}%`);
+                return `recorded_at::text LIKE $${params.length}`;
+            })
+            .join(' OR ');
+        whereClauses.push(`(${dateOr})`);
+    }
+
+    let orderBy = 'recorded_at DESC';
+    let rankSelect = '';
+    let usedFts = false;
+
+    // Classify tokens for search strategy selection.
+    // significantRaw: tokens not in stop-words, used for short-token detection.
+    // A "short" token is <=3 chars; FTS 'simple' dictionary ignores such terms.
+    const significantRaw = rawTokens.filter(w => w.length > 0 && !STOP_WORDS.has(w));
+    const allShortRaw = significantRaw.every(w => w.length <= 3);
+
+    if (keywords.length >= 2) {
+        // Multi-keyword query: use FTS (GIN index path) for O(log n) ranked retrieval
+        const tsq = buildTsQuery(keywords);
+        if (tsq) {
+            params.push(tsq);
+            whereClauses.push(`fts_vector @@ to_tsquery('simple', $${params.length})`);
+            rankSelect = `, ts_rank(fts_vector, to_tsquery('simple', $${params.length})) AS _rank`;
+            orderBy = `_rank DESC, recorded_at DESC`;
+            usedFts = true;
+        }
+    } else if (keywords.length === 1) {
+        // Single long token (>3 chars): use FTS (GIN index) for performance
+        const tsq = buildTsQuery(keywords);
+        if (tsq) {
+            params.push(tsq);
+            whereClauses.push(`fts_vector @@ to_tsquery('simple', $${params.length})`);
+            rankSelect = `, ts_rank(fts_vector, to_tsquery('simple', $${params.length})) AS _rank`;
+            orderBy = `_rank DESC, recorded_at DESC`;
+            usedFts = true;
+        }
+    } else if (significantRaw.length > 0 && allShortRaw) {
+        // All significant tokens are short (<=3 chars): fall back to ILIKE OR clauses.
+        // FTS 'simple' dictionary ignores short tokens entirely.
+        const ilikeClauses = significantRaw.map(w => {
+            params.push(`%${w}%`);
+            return `body ILIKE $${params.length}`;
+        });
+        whereClauses.push(`(${ilikeClauses.join(' OR ')})`);
+    }
+
+    const where = whereClauses.join(' AND ');
+    params.push(limit);
+
+    try {
+        const result = await pool.query(
+            `SELECT id, sender_name, body, recorded_at${rankSelect}
+             FROM ${schemaSafe}.anatta_messages
+             WHERE ${where}
+             ORDER BY ${orderBy}
+             LIMIT $${params.length}`,
+            params
+        );
+        return result.rows.map(row => ({
+            id:         row.id,
+            content:    row.body || '',
+            timestamp:  row.recorded_at instanceof Date
+                ? row.recorded_at.toISOString()
+                : new Date(row.recorded_at).toISOString(),
+            sender:     row.sender_name || null,
+            bookName:   null,
+            _ftsRanked: usedFts,
+            _ftsRank:   usedFts ? (row._rank || 0) : null
+        }));
+    } catch (err) {
+        // If the FTS column is missing (migration hasn't run yet), fall back
+        // to a plain ILIKE query so audit results are not silently lost.
+        const isFtsColumnMissing = usedFts &&
+            (err.code === '42703' || /fts_vector|column.*does not exist/i.test(err.message));
+
+        if (isFtsColumnMissing) {
+            logger.warn({ tenantSchema, bookFractalId },
+                '🔍 Audit FTS: fts_vector column missing, falling back to ILIKE (migration pending)');
+            try {
+                const allKws = [...(keywords || []), ...(significantRaw || [])].filter(Boolean);
+                if (allKws.length === 0) return [];
+                const fallbackParams = [bookFractalId, `%${allKws[0]}%`, limit];
+                const fallbackResult = await pool.query(
+                    `SELECT id, sender_name, body, recorded_at
+                     FROM ${schemaSafe}.anatta_messages
+                     WHERE book_fractal_id = $1 AND body ILIKE $2
+                     ORDER BY recorded_at DESC
+                     LIMIT $3`,
+                    fallbackParams
+                );
+                return fallbackResult.rows.map(row => ({
+                    id:         row.id,
+                    content:    row.body || '',
+                    timestamp:  row.recorded_at instanceof Date
+                        ? row.recorded_at.toISOString()
+                        : new Date(row.recorded_at).toISOString(),
+                    sender:     row.sender_name || null,
+                    bookName:   null,
+                    _ftsRanked: false,
+                    _ftsRank:   null
+                }));
+            } catch (fallbackErr) {
+                logger.warn({ err: fallbackErr.message, tenantSchema, bookFractalId },
+                    '🔍 Audit FTS: ILIKE fallback also failed');
+                return [];
+            }
+        }
+
+        logger.warn({ err: err.message, tenantSchema, bookFractalId },
+            '🔍 Audit FTS: anatta_messages keyword query failed');
+        return [];
+    }
+}
+
 function serializeCompact(messages, options = {}) {
     const { maxChars = 150 } = options;
     return messages.map(m => {
@@ -294,6 +441,11 @@ async function buildAuditContext(bookIds, fallbackTenantSchema, query, options =
             continue;
         }
 
+        // Extract keywords and raw tokens for FTS query
+        const queryKeywords = extractKeywords(query);
+        const queryDatePatterns = extractDatePatterns(query);
+        const rawTokens = query.toLowerCase().split(/\s+/).filter(Boolean);
+
         try {
             const thread = await thothBot.client.channels.fetch(threadId);
             if (!thread) continue;
@@ -310,7 +462,7 @@ async function buildAuditContext(bookIds, fallbackTenantSchema, query, options =
                 if (allDiscordMessages.length >= 5000) break;
             }
 
-            const messages = allDiscordMessages
+            const discordMessages = allDiscordMessages
                 .filter(msg => msg.createdAt >= bookCreatedAt)
                 .map(msg => {
                     let content = msg.content;
@@ -329,15 +481,53 @@ async function buildAuditContext(bookIds, fallbackTenantSchema, query, options =
                     };
                 });
 
-            await enrichMessagesWithLang(messages, book.fractal_id, pool);
+            // ── Supplement with DB FTS results ───────────────────────────────
+            // Query anatta_messages via fts_vector GIN index for keyword-matched
+            // messages. Results are ranked by ts_rank and merged into the Discord
+            // message set (deduplicated by timestamp+content prefix).
+            // Only query DB when there's a meaningful search predicate to avoid
+            // returning unfiltered rows. Gate: FTS keywords present OR all
+            // significant raw tokens are short (ILIKE fallback path).
+            const significantRawForDb = rawTokens.filter(w => w.length > 0 && !STOP_WORDS.has(w));
+            const allShortRawForDb = significantRawForDb.length > 0 &&
+                significantRawForDb.every(w => w.length <= 3);
+            const hasDbSearchTerms = queryKeywords.length > 0 || allShortRawForDb;
+
+            let dbMessages = [];
+            if (pool && book.fractal_id && hasDbSearchTerms) {
+                dbMessages = await fetchMessagesByKeywords(
+                    pool,
+                    targetSchema,
+                    book.fractal_id,
+                    queryKeywords,
+                    { limit: maxMessages, datePatterns: queryDatePatterns, rawTokens }
+                );
+                if (dbMessages.length > 0) {
+                    dbMessages = dbMessages.map(m => ({ ...m, bookName: book.name, createdAt: new Date(m.timestamp) }));
+                    logger.debug(`🔍 Audit FTS: ${dbMessages.length} messages from DB for book ${book.name}`);
+                }
+            }
+
+            // Merge DB FTS results into Discord messages (deduplicate by timestamp+content prefix)
+            const seenKeys = new Set(discordMessages.map(m => `${m.timestamp}:${(m.content||'').substring(0,80)}`));
+            const mergedMessages = [...discordMessages];
+            for (const dbMsg of dbMessages) {
+                const key = `${dbMsg.timestamp}:${(dbMsg.content||'').substring(0,80)}`;
+                if (!seenKeys.has(key)) {
+                    seenKeys.add(key);
+                    mergedMessages.push(dbMsg);
+                }
+            }
+
+            await enrichMessagesWithLang(mergedMessages, book.fractal_id, pool);
 
             books.push({
                 name: book.name,
                 fractalId: book.fractal_id || book.id.toString(),
-                totalMessages: messages.length,
-                messages,
-                dateRange: messages.length > 0 
-                    ? `${messages[messages.length-1].timestamp.split('T')[0]} to ${messages[0].timestamp.split('T')[0]}`
+                totalMessages: mergedMessages.length,
+                messages: mergedMessages,
+                dateRange: mergedMessages.length > 0 
+                    ? `${mergedMessages[mergedMessages.length-1].timestamp.split('T')[0]} to ${mergedMessages[0].timestamp.split('T')[0]}`
                     : 'No messages'
             });
         } catch (err) {
@@ -347,8 +537,20 @@ async function buildAuditContext(bookIds, fallbackTenantSchema, query, options =
 
     if (books.length === 0) return null;
 
-    const allMessages = books.flatMap(b => b.messages)
-        .sort((a, b) => b.createdAt - a.createdAt);
+    const flatMessages = books.flatMap(b => b.messages);
+
+    // Preserve FTS rank ordering when present: FTS-ranked messages sort by
+    // ts_rank descending (relevance) first, then chronologically. Non-ranked
+    // messages use chronological order only. This ensures multi-keyword FTS
+    // result ordering is not overridden by the global sort.
+    const hasFtsRanked = flatMessages.some(m => m._ftsRanked);
+    const allMessages = flatMessages.sort((a, b) => {
+        if (hasFtsRanked) {
+            const rankDiff = (b._ftsRank || 0) - (a._ftsRank || 0);
+            if (rankDiff !== 0) return rankDiff;
+        }
+        return b.createdAt - a.createdAt;
+    });
 
     const capsuleChain = buildCapsuleChain(allMessages, query);
     const terminalCapsule = capsuleChain.getTerminalCapsule();
@@ -381,7 +583,7 @@ async function buildAuditContext(bookIds, fallbackTenantSchema, query, options =
         allMessages: allMessages,
         recentMessages: sampledMessages,
         sampledCount: sampledMessages.length,
-        sampleStrategy: 'capsule_chain',
+        sampleStrategy: hasFtsRanked ? 'fts_ranked_capsule_chain' : 'capsule_chain',
         contextNote: contextNote,
         overflowWarning: overflowWarning,
         entityAggregates: terminalCapsule.output,
@@ -396,6 +598,8 @@ async function buildAuditContext(bookIds, fallbackTenantSchema, query, options =
 module.exports = {
     extractDatePatterns,
     extractKeywords,
+    buildTsQuery,
+    fetchMessagesByKeywords,
     serializeCompact,
     applyQueryAwareFilter,
     buildAuditContext,

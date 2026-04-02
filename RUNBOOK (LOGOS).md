@@ -33,6 +33,9 @@ Run after every fresh deployment or major environment change.
 | Web search in Playground | `PLAYGROUND_BRAVE_API` — [brave.com/search/api](https://brave.com/search/api) | Free (2k queries/mo) |
 | Email outpipe | `RESEND_API_KEY` — [resend.com](https://resend.com) | Free tier |
 | IPFS pinning | `PINATA_JWT` — [pinata.cloud](https://pinata.cloud) | Free tier |
+| Semantic search (cascade tier 3) | `EXA_API_KEY` — [exa.ai](https://exa.ai) | Free (1k/mo) |
+| Firecrawl source enrichment | `FIRECRAWL_API_KEY` — [firecrawl.dev](https://firecrawl.dev) | Free (500/mo) |
+| LLM failover (Groq → OpenRouter) | `OPENROUTER_API_KEY` — [openrouter.ai](https://openrouter.ai) | Free account |
 | Per-book webhooks | Dashboard → Edit Book → Outpipes | — |
 | HTTP Token | Dashboard → Edit Book → HTTP Token | — |
 
@@ -324,23 +327,27 @@ On Supabase free tier: Dashboard → Database → Backups for point-in-time reco
 
 ## Appendix: Search Architecture
 
-The AI pipeline uses a three-layer dialectic via `lib/tools/search-cascade.js`:
+The AI pipeline uses a three-layer search cascade via `lib/tools/search-cascade.js`, followed by optional Firecrawl enrichment:
 
 | Layer | Role | Cost |
 |-------|------|------|
 | **DDG enrichment** | Grounds general queries against live web before LLM reasoning. Free, no key, ~200ms. | $0 |
 | **Brave fallback** | Cascades to Brave if DDG returns nothing. Requires `PLAYGROUND_BRAVE_API`. | Free tier |
+| **Exa semantic fallback** | Cascades to Exa if DDG + Brave both return nothing. Requires `EXA_API_KEY`. Neural search. | Free (1k/mo) |
+| **Firecrawl enrichment** | After cascade: replaces raw HTML snippets with clean Firecrawl markdown in-place. Requires `FIRECRAWL_API_KEY`. | Free (500/mo) |
 | **Temporal volatility** | Classifies freshness: HIGH (prices, scores), MEDIUM (politics), LOW (philosophy, history). | $0 |
 | **Two-pass audit** | LLM self-checks its answer (S2→S3). Confidence scoring catches hallucination. | In LLM calls |
 
-**For forkers:** DDG is auto-plugged — web-grounded answers out of the box. Brave is optional (set key to enable, falls back gracefully). New providers plug into the cascade with zero orchestrator changes.
+**For forkers:** DDG is auto-plugged — web-grounded answers out of the box. Brave, Exa, and Firecrawl are optional (each key is independent; missing ones degrade gracefully). New providers plug into the cascade with zero orchestrator changes.
 
 ### Internals
 
 - `cascade({ query, strategy, clientIp })` → `{ result, provider }`. Strategies: `ddg-first` or `brave-first`.
 - `cascadeMulti()` — batch queries with rate limiting.
+- Exa fires only when DDG + Brave both return null; lazy-required so startup has no overhead when `EXA_API_KEY` is absent.
+- Firecrawl enrichment runs post-cascade in `pipeline-orchestrator.js` (S0 + S4 retry). `enrichUrls()` fetches cited URLs in parallel with per-URL timeout; `substituteEnrichedSnippets()` replaces descriptions in-place. `state.searchSourceUrls` is never modified — source-ascriber uses it for the `📚 Sources` footer.
 - `classifyTemporalVolatility()` in `utils/preflight-router.js` — injected at `stepContextBuild` when search context exists.
-- `utils/source-ascriber.js` — canonical `📚 Sources` attribution. Priority: `nyan-identity` → `psiEmaDirectOutput` → `seedMetricDirectOutput` → `forex` → Brave → DDG → training data.
+- `utils/source-ascriber.js` — canonical `📚 Sources` attribution. Priority: `nyan-identity` → `psiEmaDirectOutput` → `seedMetricDirectOutput` → `forex` → search URLs → training data.
 - DDG gating: default-on for `general` mode. Opted out: math exercises, creative writing, code debugging, greetings, single-word queries. Philosophy gets enrichment.
 
 ---
@@ -356,8 +363,11 @@ utils/
 ├── psi-EMA.js                    — φ-derived time series analysis
 ├── fetch-stock-prices.py         — Psi-EMA data fetcher (yfinance/pandas)
 ├── pipeline-orchestrator.js      — 7-stage AI pipeline (S-1 → S6)
+├── groq-client.js                — Groq LLM client with OpenRouter fallback (5xx/429/network)
+├── firecrawl-enricher.js         — enrichUrls() + substituteEnrichedSnippets() for post-cascade context
 ├── two-pass-verification.js      — 2-pass hallucination correction
 ├── dashboard-audit-pipeline.js   — 4-stage hallucination correction
+├── audit-context.js              — buildTsQuery() + fetchMessagesByKeywords() (FTS + ILIKE fallback)
 ├── seed-metric-calculator.js     — Real estate affordability (Seed Metric)
 ├── markdown-table-formatter.js   — Column-aligned markdown tables
 └── language-detector.js          — Trigram + script language detection (ISO 639-1)
@@ -366,10 +376,11 @@ utils/
 ### `lib/tools/` (auto-discovered — drop a `.js` file to add a tool)
 
 ```
-lib/tools/ (9 tools):
+lib/tools/ (10 tools):
 ├── registry.js          — Auto-discovers on startup, getTool() + getManifest()
 ├── brave-search.js      — Brave API (cached, throttled)
 ├── duckduckgo.js        — DDG instant answers (cached, fallback)
+├── exa.js               — Exa neural search (cascade tier 3, gated on EXA_API_KEY)
 ├── url-fetcher.js       — Fetch + extract readable content from URLs (cached)
 ├── github-reader.js     — GitHub repos, blobs, trees, raw files, Gists
 ├── pdf-analyzer.js      — PDF analysis via attachment cascade
@@ -391,4 +402,45 @@ lib/outpipes/
 
 ### `lib/fetch-cache.js`
 
-TTL cache: `braveCache` 3min, `duckduckgoCache` 5min, `urlCache` 10min.
+TTL cache: `braveCache` 3min, `duckduckgoCache` 5min, `urlCache` 10min, `exaCache` 5min.
+
+---
+
+## Dependency Security
+
+### Pinning Policy
+
+All `package.json` dependencies use **upper-bound semver ranges** (`>=current <next-major`) instead of bare `^` caret ranges. This allows patch and minor updates within the current major while blocking unexpected major-version jumps that could introduce breaking changes or unaudited code.
+
+Example: `"axios": ">=1.14.0 <2.0.0"` — accepts any 1.x patch, blocks 2.x.
+
+### Running the Security Check
+
+```bash
+npm run security
+```
+
+This runs `npm audit --audit-level=high` and exits non-zero if any high or critical CVEs are found. Run this after every `npm install` or dependency change. The underlying script is `scripts/security-check.sh`.
+
+### Accepted / Mitigated CVEs
+
+As of 2026-04-02, `npm audit` returns **0 vulnerabilities**. The following CVEs were resolved during the initial hardening pass:
+
+| Package | CVE | Resolution |
+|---------|-----|------------|
+| `axios <=1.13.4` | GHSA-43fc-jf86-j433 (DoS via `__proto__` in mergeConfig) | Upgraded to `>=1.14.0` |
+| `@xmldom/xmldom <0.8.12` | GHSA-wh4c-j3r5-mjhp (XML injection via CDATA) | Resolved via `discord.js` transitive update |
+| `undici` (transitive via `@discordjs/rest`) | Moderate | Resolved via `discord.js >=14.26.0` |
+| `express-rate-limit <8.3.0` | High | Upgraded to `>=8.3.2` |
+| `path-to-regexp`, `minimatch`, `lodash`, `underscore` | Various | Resolved via transitive dependency upgrades |
+
+If a new CVE appears, triage it here and either upgrade the pinned lower-bound or document the accepted risk with justification.
+
+### When a New CVE Is Discovered
+
+1. Run `npm audit` to identify the affected package and version range.
+2. Bump the lower bound in `package.json` to the patched version (e.g. `>=1.14.0` → `>=1.15.0`).
+3. Run `npm install` to update `package-lock.json`.
+4. Run `npm run security` to confirm zero findings.
+5. Document the CVE in the table above.
+6. Commit both `package.json` and `package-lock.json`.
