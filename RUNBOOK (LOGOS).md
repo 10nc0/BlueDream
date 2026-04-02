@@ -392,3 +392,44 @@ lib/outpipes/
 ### `lib/fetch-cache.js`
 
 TTL cache: `braveCache` 3min, `duckduckgoCache` 5min, `urlCache` 10min.
+
+---
+
+## Dependency Security
+
+### Pinning Policy
+
+All `package.json` dependencies use **upper-bound semver ranges** (`>=current <next-major`) instead of bare `^` caret ranges. This allows patch and minor updates within the current major while blocking unexpected major-version jumps that could introduce breaking changes or unaudited code.
+
+Example: `"axios": ">=1.14.0 <2.0.0"` — accepts any 1.x patch, blocks 2.x.
+
+### Running the Security Check
+
+```bash
+npm run security
+```
+
+This runs `npm audit --audit-level=high` and exits non-zero if any high or critical CVEs are found. Run this after every `npm install` or dependency change. The underlying script is `scripts/security-check.sh`.
+
+### Accepted / Mitigated CVEs
+
+As of 2026-04-02, `npm audit` returns **0 vulnerabilities**. The following CVEs were resolved during the initial hardening pass:
+
+| Package | CVE | Resolution |
+|---------|-----|------------|
+| `axios <=1.13.4` | GHSA-43fc-jf86-j433 (DoS via `__proto__` in mergeConfig) | Upgraded to `>=1.14.0` |
+| `@xmldom/xmldom <0.8.12` | GHSA-wh4c-j3r5-mjhp (XML injection via CDATA) | Resolved via `discord.js` transitive update |
+| `undici` (transitive via `@discordjs/rest`) | Moderate | Resolved via `discord.js >=14.26.0` |
+| `express-rate-limit <8.3.0` | High | Upgraded to `>=8.3.2` |
+| `path-to-regexp`, `minimatch`, `lodash`, `underscore` | Various | Resolved via transitive dependency upgrades |
+
+If a new CVE appears, triage it here and either upgrade the pinned lower-bound or document the accepted risk with justification.
+
+### When a New CVE Is Discovered
+
+1. Run `npm audit` to identify the affected package and version range.
+2. Bump the lower bound in `package.json` to the patched version (e.g. `>=1.14.0` → `>=1.15.0`).
+3. Run `npm install` to update `package-lock.json`.
+4. Run `npm run security` to confirm zero findings.
+5. Document the CVE in the table above.
+6. Commit both `package.json` and `package-lock.json`.
