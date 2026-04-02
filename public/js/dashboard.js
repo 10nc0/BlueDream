@@ -1286,9 +1286,9 @@
             btn.disabled = true;
 
             try {
-                const res = await fetch(`/api/books/${bookId}/outpipes`, {
+                const res = await window.authFetch(`/api/books/${bookId}/outpipes`, {
                     method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ outpipes, ...(password ? { password } : {}) })
                 });
                 const data = await res.json();
