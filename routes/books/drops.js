@@ -177,7 +177,7 @@ function register(app, deps) {
         try {
             const tenantSchema = req.tenantContext?.tenantSchema || req.tenantSchema;
             const { book_id } = req.params;
-            const { query } = req.query;
+            const query = req.query.q || req.query.query;
             const client = req.dbClient || pool;
 
             if (!query) {
@@ -193,17 +193,43 @@ function register(app, deps) {
                 return res.status(404).json({ error: 'Book not found' });
             }
 
-            const queryLang = detectLanguage(query);
-            const ftsConfig = getFtsConfig(queryLang.lang);
-            const searchResult = await client.query(`
-                SELECT *, ts_rank(search_vector, plainto_tsquery($3, $1)) as rank
-                FROM ${tenantSchema}.drops
-                WHERE book_id = $2 AND search_vector @@ plainto_tsquery($3, $1)
-                ORDER BY rank DESC, created_at DESC
-                LIMIT 100
-            `, [query, bookResult.rows[0].id, ftsConfig]);
+            const bookInternalId = bookResult.rows[0].id;
+            const isTagSearch = query.startsWith('#');
+            const tagTerm = isTagSearch ? query.slice(1).toLowerCase() : null;
 
-            res.json({ query, results: searchResult.rows, count: searchResult.rows.length });
+            let searchResult;
+            if (isTagSearch && tagTerm) {
+                // Tag search: match against extracted_tags array (case-insensitive prefix)
+                searchResult = await client.query(`
+                    SELECT *, 1.0 as rank
+                    FROM ${tenantSchema}.drops
+                    WHERE book_id = $1
+                      AND EXISTS (
+                          SELECT 1 FROM unnest(extracted_tags) t
+                          WHERE lower(t) LIKE $2
+                      )
+                    ORDER BY created_at DESC
+                    LIMIT 100
+                `, [bookInternalId, `${tagTerm}%`]);
+            } else {
+                const queryLang = detectLanguage(query);
+                const ftsConfig = getFtsConfig(queryLang.lang);
+                searchResult = await client.query(`
+                    SELECT *, ts_rank(search_vector, plainto_tsquery($3, $1)) as rank
+                    FROM ${tenantSchema}.drops
+                    WHERE book_id = $2 AND (
+                        search_vector @@ plainto_tsquery($3, $1)
+                        OR EXISTS (
+                            SELECT 1 FROM unnest(extracted_tags) t
+                            WHERE lower(t) LIKE $4
+                        )
+                    )
+                    ORDER BY rank DESC, created_at DESC
+                    LIMIT 100
+                `, [query, bookInternalId, ftsConfig, `%${query.toLowerCase()}%`]);
+            }
+
+            res.json(searchResult.rows);
         } catch (error) {
             logger.error({ err: error }, 'Error searching drops');
             res.status(500).json({ error: 'An internal error occurred. Please try again.' });

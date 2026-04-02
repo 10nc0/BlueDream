@@ -3751,18 +3751,11 @@
             webhookGroup.appendChild(webhookValueDiv);
             container.appendChild(webhookGroup);
             
-            // Status
-            const statusGroup = document.createElement('div');
-            statusGroup.className = 'form-group';
-            const statusLabel = document.createElement('label');
-            statusLabel.className = 'form-label';
-            statusLabel.textContent = 'Status';
-            statusGroup.appendChild(statusLabel);
-            const statusValueDiv = document.createElement('div');
-            statusValueDiv.style.cssText = `padding: 0.75rem; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 8px; color: ${statusColor}; text-transform: capitalize; font-weight: 500;`;
-            statusValueDiv.textContent = status;
-            statusGroup.appendChild(statusValueDiv);
-            container.appendChild(statusGroup);
+            // Address (contact_info — phone number or routing join code)
+            const rawContact = (currentBook.contact_info || '').replace(/^join baby-ability\s+/i, '').trim();
+            if (rawContact) {
+                container.appendChild(createFormGroup('Address', rawContact));
+            }
             
             // Tags (if any)
             if (tags.length > 0) {
