@@ -818,7 +818,7 @@ app.listen(PORT, '0.0.0.0', async () => {
              '🔍', 'Live web search',
              'AI answers from training data only — set PLAYGROUND_BRAVE_API for real-time knowledge'],
             [['EXA_API_KEY'],
-             '🔭', 'Exa semantic search (cascade tier 3)',
+             '🔍', 'Exa search (semantic cascade tier)',
              'Search cascade is DDG+Brave only — set EXA_API_KEY to add semantic fallback (exa.ai, 1k/month free)'],
             [['HERMES_TOKEN', 'THOTH_TOKEN', 'IDRIS_AI_LOG_TOKEN', 'HORUS_AI_LOG_TOKEN'],
              '🤖', 'Discord bots (Hermes φ · Thoth 0 · Idris ι · Horus Ω)',
