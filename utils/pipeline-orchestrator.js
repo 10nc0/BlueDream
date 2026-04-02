@@ -724,6 +724,20 @@ SYNTHESIS INSTRUCTIONS:
         state.didSearch = true;
         state.searchProvider = cascadeResult.provider;
         logger.info(`✅ Real-time search successful (provider=${state.searchProvider}), urls=${state.searchSourceUrls.length}, context injected`);
+
+        // Firecrawl source enrichment: replace raw HTML snippets with clean page markdown
+        if (state.searchSourceUrls.length > 0 && process.env.FIRECRAWL_API_KEY) {
+          const { enrichUrls } = require('./firecrawl-enricher');
+          const enriched = await enrichUrls(state.searchSourceUrls, { timeoutMs: 6000 });
+          if (enriched.size > 0) {
+            const enrichedBlocks = [];
+            for (const [url, md] of enriched) {
+              enrichedBlocks.push(`[SOURCE: ${url}]\n${md}`);
+            }
+            state.searchContext += `\n\n[ENRICHED SOURCE PAGES — FULL MARKDOWN CONTENT]\n${enrichedBlocks.join('\n\n---\n\n')}`;
+            logger.info({ enriched: enriched.size }, '🕷️ Firecrawl: enriched sources injected into search context');
+          }
+        }
       } else {
         logger.warn(`⚠️ Real-time search failed - will rely on training data`);
       }
@@ -2009,6 +2023,20 @@ Output ONLY the corrected table and summary lines:`;
       state.searchContext = retrySearch.result;
       state.searchProvider = retrySearch.provider;
       state.didSearch = true;
+      // Extract URLs from retry search results and enrich with Firecrawl if configured
+      const retryUrls = [...retrySearch.result.matchAll(/^   Source:\s*(https?:\/\/\S+)/gm)].map(m => m[1]);
+      if (retryUrls.length > 0 && process.env.FIRECRAWL_API_KEY) {
+        const { enrichUrls } = require('./firecrawl-enricher');
+        const enriched = await enrichUrls(retryUrls, { timeoutMs: 6000 });
+        if (enriched.size > 0) {
+          const enrichedBlocks = [];
+          for (const [url, md] of enriched) {
+            enrichedBlocks.push(`[SOURCE: ${url}]\n${md}`);
+          }
+          state.searchContext += `\n\n[ENRICHED SOURCE PAGES — FULL MARKDOWN CONTENT]\n${enrichedBlocks.join('\n\n---\n\n')}`;
+          logger.info({ enriched: enriched.size }, '🕷️ Firecrawl: retry enriched sources injected');
+        }
+      }
       await this.stepReasoning(state, reasoningInput);
       await this.stepAudit(state, reasoningInput);
     }

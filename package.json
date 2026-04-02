@@ -14,6 +14,7 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@mendable/firecrawl-js": "^4.18.1",
     "archiver": "^7.0.1",
     "axios": "^1.12.2",
     "bcrypt": "^6.0.0",
