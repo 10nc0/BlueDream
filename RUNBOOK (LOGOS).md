@@ -33,6 +33,9 @@ Run after every fresh deployment or major environment change.
 | Web search in Playground | `PLAYGROUND_BRAVE_API` — [brave.com/search/api](https://brave.com/search/api) | Free (2k queries/mo) |
 | Email outpipe | `RESEND_API_KEY` — [resend.com](https://resend.com) | Free tier |
 | IPFS pinning | `PINATA_JWT` — [pinata.cloud](https://pinata.cloud) | Free tier |
+| Semantic search (cascade tier 3) | `EXA_API_KEY` — [exa.ai](https://exa.ai) | Free (1k/mo) |
+| Firecrawl source enrichment | `FIRECRAWL_API_KEY` — [firecrawl.dev](https://firecrawl.dev) | Free (500/mo) |
+| LLM failover (Groq → OpenRouter) | `OPENROUTER_API_KEY` — [openrouter.ai](https://openrouter.ai) | Free account |
 | Per-book webhooks | Dashboard → Edit Book → Outpipes | — |
 | HTTP Token | Dashboard → Edit Book → HTTP Token | — |
 
@@ -324,23 +327,27 @@ On Supabase free tier: Dashboard → Database → Backups for point-in-time reco
 
 ## Appendix: Search Architecture
 
-The AI pipeline uses a three-layer dialectic via `lib/tools/search-cascade.js`:
+The AI pipeline uses a three-layer search cascade via `lib/tools/search-cascade.js`, followed by optional Firecrawl enrichment:
 
 | Layer | Role | Cost |
 |-------|------|------|
 | **DDG enrichment** | Grounds general queries against live web before LLM reasoning. Free, no key, ~200ms. | $0 |
 | **Brave fallback** | Cascades to Brave if DDG returns nothing. Requires `PLAYGROUND_BRAVE_API`. | Free tier |
+| **Exa semantic fallback** | Cascades to Exa if DDG + Brave both return nothing. Requires `EXA_API_KEY`. Neural search. | Free (1k/mo) |
+| **Firecrawl enrichment** | After cascade: replaces raw HTML snippets with clean Firecrawl markdown in-place. Requires `FIRECRAWL_API_KEY`. | Free (500/mo) |
 | **Temporal volatility** | Classifies freshness: HIGH (prices, scores), MEDIUM (politics), LOW (philosophy, history). | $0 |
 | **Two-pass audit** | LLM self-checks its answer (S2→S3). Confidence scoring catches hallucination. | In LLM calls |
 
-**For forkers:** DDG is auto-plugged — web-grounded answers out of the box. Brave is optional (set key to enable, falls back gracefully). New providers plug into the cascade with zero orchestrator changes.
+**For forkers:** DDG is auto-plugged — web-grounded answers out of the box. Brave, Exa, and Firecrawl are optional (each key is independent; missing ones degrade gracefully). New providers plug into the cascade with zero orchestrator changes.
 
 ### Internals
 
 - `cascade({ query, strategy, clientIp })` → `{ result, provider }`. Strategies: `ddg-first` or `brave-first`.
 - `cascadeMulti()` — batch queries with rate limiting.
+- Exa fires only when DDG + Brave both return null; lazy-required so startup has no overhead when `EXA_API_KEY` is absent.
+- Firecrawl enrichment runs post-cascade in `pipeline-orchestrator.js` (S0 + S4 retry). `enrichUrls()` fetches cited URLs in parallel with per-URL timeout; `substituteEnrichedSnippets()` replaces descriptions in-place. `state.searchSourceUrls` is never modified — source-ascriber uses it for the `📚 Sources` footer.
 - `classifyTemporalVolatility()` in `utils/preflight-router.js` — injected at `stepContextBuild` when search context exists.
-- `utils/source-ascriber.js` — canonical `📚 Sources` attribution. Priority: `nyan-identity` → `psiEmaDirectOutput` → `seedMetricDirectOutput` → `forex` → Brave → DDG → training data.
+- `utils/source-ascriber.js` — canonical `📚 Sources` attribution. Priority: `nyan-identity` → `psiEmaDirectOutput` → `seedMetricDirectOutput` → `forex` → search URLs → training data.
 - DDG gating: default-on for `general` mode. Opted out: math exercises, creative writing, code debugging, greetings, single-word queries. Philosophy gets enrichment.
 
 ---
