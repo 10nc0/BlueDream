@@ -44,7 +44,7 @@ const { detectPathogens, generateClinicalReport, generatePhysicalAuditDisclaimer
 const { DataPackage, globalPackageStore, STAGE_IDS } = require('./data-package');
 const { globalCheckpointStore, buildResumableSnapshot, applySnapshot } = require('./pipeline-checkpoint');
 const { getLLMBackend, getAuditBackend } = require('../config/constants');
-const { CITY_TO_COUNTRY } = require('./geo-data');
+const { CITY_EXPAND, COUNTRY_TO_CITY, CITY_TO_COUNTRY } = require('./geo-data');
 const { MAX_CONTENT_CHARS } = require('./config-constants');
 
 const PIPELINE_STEPS = {
