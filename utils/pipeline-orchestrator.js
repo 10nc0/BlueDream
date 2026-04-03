@@ -1379,15 +1379,14 @@ Rules:
         const pd = cityData[period];
         if (!pd) continue;
         const bucket = parsedData.cities[norm][period];
-        const pps = pd.pricePerSqm;
-        if (pps?.value != null && isFinite(pps.value) && pps.value > 0 && !bucket.pricePerSqm) {
-          bucket.pricePerSqm = { value: Math.round(pps.value), currency: pps.currency || 'USD' };
-          logger.debug(`🔬 R2: ${norm}/${period}/pricePerSqm = ${Math.round(pps.value)} ${pps.currency || '?'}`);
+        const currency = pd.currency || 'USD';
+        if (pd.pricePerSqm != null && isFinite(pd.pricePerSqm) && pd.pricePerSqm > 0 && !bucket.pricePerSqm) {
+          bucket.pricePerSqm = { value: Math.round(pd.pricePerSqm), currency };
+          logger.debug(`🔬 R2: ${norm}/${period}/pricePerSqm = ${Math.round(pd.pricePerSqm)} ${currency}`);
         }
-        const inc = pd.income;
-        if (inc?.value != null && isFinite(inc.value) && inc.value > 0 && !bucket.income) {
-          bucket.income = { value: Math.round(inc.value), currency: inc.currency || 'USD', type: 'single' };
-          logger.debug(`🔬 R2: ${norm}/${period}/income = ${Math.round(inc.value)} ${inc.currency || '?'}`);
+        if (pd.income != null && isFinite(pd.income) && pd.income > 0 && !bucket.income) {
+          bucket.income = { value: Math.round(pd.income), currency, type: 'single' };
+          logger.debug(`🔬 R2: ${norm}/${period}/income = ${Math.round(pd.income)} ${currency}`);
         }
       }
     }

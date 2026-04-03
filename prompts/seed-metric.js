@@ -226,57 +226,50 @@ function getSeedMetricExtractionPrompt({ cities = [], histDecade = '2000s', curr
   const histDecadeNum = parseInt(histDecade) || (currentYear - 25);
   const histDecadeEnd = histDecadeNum + 9;
   const citiesList = cities.join(', ') || 'the cities mentioned';
-  return `You are a precision data extraction engine. You have received Brave Search results for ${citiesList}.
+  return `You are a data extraction engine. Extract exactly two numbers per city per period from the search results below.
 
-Extract pricePerSqm and income into this JSON schema. Output ONLY valid JSON — no markdown, no backticks, no explanation.
+Output ONLY valid JSON — no markdown, no backticks, no explanation:
 
 {
   "cities": {
     "<city_lowercase>": {
-      "current": {
-        "pricePerSqm": { "value": <integer|null>, "currency": "<ISO code>", "source": "<brief source>" },
-        "income":      { "value": <integer|null>, "currency": "<ISO code>", "unit": "annual", "source_year": <integer|null> }
-      },
-      "historical": {
-        "pricePerSqm": { "value": <integer|null>, "currency": "<ISO code>", "source": "<brief source>" },
-        "income":      { "value": <integer|null>, "currency": "<ISO code>", "unit": "annual", "source_year": <integer|null> }
-      }
+      "current":    { "pricePerSqm": <integer|null>, "currency": "<ISO code>", "income": <integer|null> },
+      "historical": { "pricePerSqm": <integer|null>, "currency": "<ISO code>", "income": <integer|null> }
     }
   }
 }
 
 TARGET CITIES: ${citiesList}
-HISTORICAL PERIOD: ${histDecade} (source_year must be ${histDecadeNum}–${histDecadeEnd})
-CURRENT PERIOD: most recent available (~${currentYear - 1} or ${currentYear})
+HISTORICAL PERIOD: ${histDecade} — only accept values explicitly dated ${histDecadeNum}–${histDecadeEnd}
+CURRENT PERIOD: most recent available
 
-SCHEMA RULES — each rule prevents a specific class of error:
+─── TWO INPUTS ONLY ───────────────────────────────────────────────────
 
-1. VALUES ARE RAW INTEGERS. Expand all suffixes before outputting:
-   K or k = ×1,000 | M or m = ×1,000,000 | B or b = ×1,000,000,000
-   "Rp22.1M" → 22100000 | "RM8K" → 8000 | "USD 1.2M" → 1200000
+INPUT 1 — pricePerSqm (purchase price per square meter, local currency)
+  ACCEPT: source text explicitly says "X per sqm", "X/m²", "X per square meter"
+  REJECT without exception: total listing price ("apartment for RM790,000"), rental price, P/I ratio
+  No division, no inference. If not explicitly stated as per-sqm → null.
 
-2. CURRENCY MUST BE LOCAL (LCU), not USD.
-   Jakarta/Indonesia → IDR | Kuala Lumpur/Malaysia → MYR | Tokyo → JPY | Seoul → KRW | Bangkok → THB
-   If a source only reports USD for a non-USD city, omit the field (set value to null).
+INPUT 2 — income (average annual income, individual earner, local currency)
+  ACCEPT: average income / average wage / average salary (annual, or monthly × 12)
+  REJECT: GDP per capita, household income, minimum wage, dual-earner figures
+  Monthly figure → multiply by 12. Daily → multiply by 260. Annual → use as-is.
 
-3. INCOME MUST BE ANNUAL SINGLE-EARNER.
-   Monthly source → multiply by 12. Daily source → multiply by 260.
-   Household income → divide by 2 ONLY if no individual figure exists (note in source field).
-   GDP per capita → NOT income, ignore.
-   Minimum wage → NOT average income, ignore unless it is the only available figure.
+─── THREE HARD RULES ──────────────────────────────────────────────────
 
-4. HISTORICAL source_year MUST fall within ${histDecade} (${histDecadeNum}–${histDecadeEnd}).
-   If text says "grew from X in ${histDecadeNum + 2} to Y in ${currentYear}": use X, source_year=${histDecadeNum + 2}.
-   If all values in the text are from outside ${histDecadeNum}–${histDecadeEnd}: set value to null.
+1. RAW INTEGER — expand all suffixes before outputting:
+   K = ×1,000 | M = ×1,000,000 | B = ×1,000,000,000
+   "Rp22.1M" → 22100000 | "RM8K" → 8000 | "THB 120K" → 120000
 
-5. pricePerSqm is PURCHASE PRICE **per square meter** — NOT total property price.
-   If Brave says "apartment listed for RM7.9 million" that is the TOTAL unit price, NOT per sqm.
-   To convert: total price ÷ unit area in sqm (only if the area is stated in the same text).
-   Prefer explicit "RM X,000/sqm" or "USD X per square meter" quotes.
-   Plausible per-sqm ranges for reference: Jakarta IDR 5M-50M | KL RM3K-20K | Bangkok THB 50K-300K | Tokyo JPY 500K-3M | NYC USD 5K-30K.
-   If the only figure you see is a total property price with no stated area, set value to null.
+2. LOCAL CURRENCY (LCU) — one currency per city per period, not USD:
+   Jakarta → IDR | Kuala Lumpur → MYR | Bangkok → THB | Tokyo → JPY | Seoul → KRW
+   If source only gives USD for a non-USD city → null.
 
-6. When in doubt, set value to null. Every non-null value must be traceable to the search text.`;
+3. HISTORICAL PERIOD LOCK — for the historical slot, the value must be
+   explicitly dated within ${histDecadeNum}–${histDecadeEnd}.
+   Text: "grew from Rp18M in 2002 to Rp104M today" + histDecade=${histDecade} → 18000000
+   Text: "average income is Rp104M" with no year stated → null for historical slot.
+   null is always correct. Guessing is always wrong.`;
 }
 
 /**
@@ -297,17 +290,19 @@ function getSeedMetricGapFillPrompt({ field, city, period, yearToken }) {
   const decadeNum = isDecade ? parseInt(yearToken) : null;
   const decadeRange = decadeNum ? `${decadeNum}–${decadeNum + 9}` : yearToken;
 
-  return `Extract one value from this search result.
+  return `Extract one number from the search result below.
 Output ONLY valid JSON — no markdown: { "value": <integer or null>, "currency": "<ISO code or null>" }
 
-Target: ${target}
+Looking for: ${target}
 
 Rules:
-- value is a raw integer (expand K/M/B: K=×1000, M=×1000000, B=×1000000000)
-- currency is the local currency code (not USD unless the city is US-based)
-${isIncome ? '- income must be annual (monthly ×12, daily ×260)\n- GDP per capita and minimum wage are NOT average income — ignore them\n- Household income is NOT single-earner — divide by 2 only if no individual figure exists' : '- purchase price only — rental price is not purchase price'}
-${isDecade ? `- source must be from ${decadeRange} — if only values from outside this range exist, return null` : `- use the most recent figure available`}
-- If no confident value found: { "value": null, "currency": null }`;
+- value must be a raw integer — expand all suffixes (K=×1000, M=×1000000, B=×1000000000)
+- currency must be the local currency (not USD unless the city is in the US)
+${isIncome
+  ? '- ACCEPT: average income / average wage / average salary for an individual earner (annual, or monthly×12, or daily×260)\n- REJECT: GDP per capita, household income, minimum wage, dual-earner figures'
+  : '- ACCEPT: only if the text EXPLICITLY states a price per sqm / per m² / per square meter\n- REJECT: total property listing price, rental price — no division, no inference'}
+${isDecade ? `- value must be explicitly dated within ${decadeRange} — undated figures or figures from outside this range → null` : '- use the most recent available figure'}
+- null is correct when the text does not contain the target value. Do not guess.`;
 }
 
 module.exports = {
