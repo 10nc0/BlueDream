@@ -63,7 +63,7 @@ const { analyzeImageWithGroqVision, processChemistryContent, classifyScholasticD
 const { createQueryTimestamp, buildTemporalContent } = require('./time-format');
 const { buildSeedMetricTable, validateSeedMetricOutput, parseTFR, injectTFRColumn } = require('./seed-metric-calculator');
 const { cleanMarkdownJson, EMPTY_TABLE_ROW_REGEX } = require('./parse-helpers');
-const { buildGatherPromptBlock, getSeedMetricExtractionPrompt, getSeedMetricGapFillPrompt } = require('../prompts/seed-metric');
+const { buildGatherPromptBlock, getMicroExtractPrompt } = require('../prompts/seed-metric');
 
 function extractVisionSearchTerms(visionDescription) {
   if (!visionDescription || visionDescription.length < 20) return null;
@@ -1259,8 +1259,7 @@ Rules:
       return;
     }
 
-    // ── Execute tool calls: collect all Brave results (Round 1 execution) ──
-    // No per-search micro-extraction. All results feed into Round 2 as a batch.
+    // ── Execute tool calls (up to 12): per-search micro-extraction follows ──
     const callsToRun = toolCalls.slice(0, 12);
     const sourceUrls = [];
 
@@ -1279,7 +1278,14 @@ Rules:
       };
     }
 
-    const searchResultsContext = [];
+    // ── Execute tool calls: per-search micro-extraction ────────────────────
+    // One search result → one tiny LLM call → one number or null.
+    // LLM sees only one Brave result at a time — zero cross-city context,
+    // zero hallucination surface. City/period/metric type are determined
+    // deterministically from the search query string. null = null.
+    const histDecadeNum = parseInt(histDecade) || (currentYear - 25);
+    const microExtractPrompt = getMicroExtractPrompt();
+    const pendingExtractions = [];
 
     for (let i = 0; i < callsToRun.length; i++) {
       const tc = callsToRun[i];
@@ -1312,8 +1318,96 @@ Rules:
         braveText = String(result || '');
       }
 
-      if (braveText.trim()) {
-        searchResultsContext.push({ query: searchQuery, text: braveText });
+      // Deterministic routing: city / period / metric type from query string
+      const queryLower = searchQuery.toLowerCase();
+      let matchedCity = null;
+      for (const city of cities) {
+        const expanded = CITY_EXPAND[city] || city;
+        const escapedCity = city.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const escapedExpanded = expanded.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const cityBoundary = new RegExp(`(?:^|\\s|[^a-z])${escapedCity}(?:$|\\s|[^a-z])`, 'i');
+        const expandedBoundary = new RegExp(`(?:^|\\s|[^a-z])${escapedExpanded}(?:$|\\s|[^a-z])`, 'i');
+        if (expandedBoundary.test(queryLower) || (city.length > 2 && cityBoundary.test(queryLower))) {
+          matchedCity = city;
+          break;
+        }
+      }
+      if (!matchedCity) {
+        for (const [country, city] of Object.entries(COUNTRY_TO_CITY)) {
+          if (cities.includes(city) && new RegExp(`\\b${country.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(queryLower)) {
+            matchedCity = city;
+            break;
+          }
+        }
+      }
+
+      const isIncome = /income|salary|wage|earnings/i.test(searchQuery);
+      const metricType = isIncome ? 'income' : 'pricePerSqm';
+      const queryYears = [...searchQuery.matchAll(/\b(19\d{2}|20\d{2})\b/g)].map(m => parseInt(m[1]));
+      const hasHistoricalYear = queryYears.some(y => y >= histDecadeNum && y <= histDecadeNum + 15);
+      const hasAnyOldYear = queryYears.some(y => y < currentYear - 5);
+      const isHistorical = hasHistoricalYear || hasAnyOldYear || new RegExp(`${histDecade}|\\d{4}s|historical`, 'i').test(searchQuery);
+      const period = isHistorical ? 'historical' : 'current';
+
+      if (matchedCity && braveText.trim()) {
+        const capturedI = i;
+        const extractionPromise = (async () => {
+          try {
+            const extractResponse = await this.groqWithRetry({
+              url: this.llmUrl,
+              data: {
+                model: this.llmModel,
+                messages: [
+                  { role: 'system', content: microExtractPrompt },
+                  { role: 'user', content: `Search query: "${searchQuery}"\n\nSearch results:\n${braveText.slice(0, 3000)}` }
+                ],
+                temperature: 0,
+                max_tokens: 100
+              },
+              config: {
+                headers: {
+                  'Authorization': `Bearer ${this.groqToken}`,
+                  'Content-Type': 'application/json'
+                },
+                timeout: 10000
+              }
+            }, 1, 'text');
+
+            let rawJson = extractResponse.data.choices[0]?.message?.content?.trim() || '';
+            rawJson = cleanMarkdownJson(rawJson);
+            const extracted = JSON.parse(rawJson);
+
+            if (extracted.value != null && isFinite(extracted.value) && extracted.value > 0) {
+              const currency = extracted.currency || 'USD';
+              const resolvedType = (extracted.type === 'pricePerSqm' || extracted.type === 'income')
+                ? extracted.type : metricType;
+              if (!parsedData.cities[matchedCity]) {
+                parsedData.cities[matchedCity] = {
+                  current: { pricePerSqm: null, income: null },
+                  historical: { pricePerSqm: null, income: null, decade: histDecade }
+                };
+              }
+              const bucket = parsedData.cities[matchedCity][period];
+              if (!bucket[resolvedType]) {
+                if (resolvedType === 'income') {
+                  bucket[resolvedType] = { value: Math.round(extracted.value), currency, type: 'single' };
+                } else {
+                  bucket[resolvedType] = { value: Math.round(extracted.value), currency };
+                }
+                logger.debug(`👁️ Extract #${capturedI + 1}: ${matchedCity}/${period}/${resolvedType} = ${Math.round(extracted.value)} ${currency}`);
+              } else {
+                logger.debug(`👁️ Extract #${capturedI + 1}: ${matchedCity}/${period}/${resolvedType} already filled, skipping`);
+              }
+            } else {
+              logger.debug(`👁️ Extract #${capturedI + 1}: ${matchedCity}/${period}/${metricType} = null`);
+            }
+          } catch (err) {
+            console.warn(`⚠️ Extract #${i + 1} failed: ${err.message}`);
+          }
+        })();
+        pendingExtractions.push(extractionPromise);
+      } else {
+        logger.debug(`👁️ Extract #${i + 1}: no city match or empty result, skipping`);
       }
 
       if (i < callsToRun.length - 1) {
@@ -1321,174 +1415,7 @@ Rules:
       }
     }
 
-    // ── Round 2: Structured JSON extraction ────────────────────────────────
-    // One LLM call sees all search results and outputs typed schema.
-    // The LLM handles suffix expansion, currency normalisation,
-    // annualisation (monthly × 12), and temporal selection — no rescue needed.
-    const combinedText = searchResultsContext
-      .map((r, i) => `=== Result ${i + 1} (query: "${r.query}") ===\n${r.text.slice(0, 1500)}`)
-      .join('\n\n');
-
-    const round2SystemPrompt = getSeedMetricExtractionPrompt({
-      cities: Object.keys(parsedData.cities),
-      histDecade,
-      currentYear
-    });
-
-    let schema = { cities: {} };
-    try {
-      const round2Response = await this.groqWithRetry({
-        url: this.llmUrl,
-        data: {
-          model: this.llmModel,
-          messages: [
-            { role: 'system', content: round2SystemPrompt },
-            { role: 'user', content: combinedText || '(no search results)' }
-          ],
-          response_format: { type: 'json_object' },
-          temperature: 0,
-          max_tokens: 1200
-        },
-        config: {
-          headers: {
-            'Authorization': `Bearer ${this.groqToken}`,
-            'Content-Type': 'application/json'
-          },
-          timeout: this.llmTimeouts.toolCall
-        }
-      }, 2, 'text');
-
-      let rawJson = round2Response.data.choices[0]?.message?.content?.trim() || '';
-      rawJson = cleanMarkdownJson(rawJson);
-      schema = JSON.parse(rawJson);
-      logger.debug(`🔬 Round 2: schema cities: ${Object.keys(schema.cities || {}).join(', ')}`);
-    } catch (err) {
-      console.warn(`⚠️ Round 2 extraction failed: ${err.message} — using empty schema`);
-    }
-
-    // Map schema → parsedData.cities (same shape buildSeedMetricTable expects)
-    for (const [cityKey, cityData] of Object.entries(schema.cities || {})) {
-      const norm = cityKey.toLowerCase().trim();
-      if (!parsedData.cities[norm]) {
-        parsedData.cities[norm] = {
-          current: { pricePerSqm: null, income: null },
-          historical: { pricePerSqm: null, income: null, decade: histDecade }
-        };
-      }
-      for (const period of ['current', 'historical']) {
-        const pd = cityData[period];
-        if (!pd) continue;
-        const bucket = parsedData.cities[norm][period];
-        const currency = pd.currency || 'USD';
-        // Fast path: explicit LCU/sqm stated in source
-        // Triangulation path: total price ÷ area (both stated in same source)
-        let resolvedPpsqm = (pd.pricePerSqm != null && isFinite(pd.pricePerSqm) && pd.pricePerSqm > 0)
-          ? pd.pricePerSqm : null;
-        if (!resolvedPpsqm && pd.totalPrice > 0 && pd.areaSqm > 0) {
-          resolvedPpsqm = pd.totalPrice / pd.areaSqm;
-          logger.debug(`🔬 R2: ${norm}/${period}/pricePerSqm triangulated = ${Math.round(resolvedPpsqm)} ${currency}`);
-        }
-        if (resolvedPpsqm && !bucket.pricePerSqm) {
-          bucket.pricePerSqm = { value: Math.round(resolvedPpsqm), currency };
-          logger.debug(`🔬 R2: ${norm}/${period}/pricePerSqm = ${Math.round(resolvedPpsqm)} ${currency}`);
-        }
-        if (pd.income != null && isFinite(pd.income) && pd.income > 0 && !bucket.income) {
-          bucket.income = { value: Math.round(pd.income), currency, type: 'single' };
-          logger.debug(`🔬 R2: ${norm}/${period}/income = ${Math.round(pd.income)} ${currency}`);
-        }
-      }
-    }
-
-    // ── Round 3: Demand-driven gap-fill ───────────────────────────────────
-    // Only fires for null fields — one targeted Brave search per gap, max 8 total.
-    // Schema-driven: we know exactly what's missing and why to search for it.
-    const gapFills = [];
-    for (const [city, data] of Object.entries(parsedData.cities)) {
-      const country = CITY_TO_COUNTRY[city];
-      for (const period of ['current', 'historical']) {
-        const yearToken = period === 'current' ? String(currentYear) : histDecade;
-        if (!data[period]?.income) {
-          gapFills.push({ city, country: country || city, period, field: 'income', yearToken });
-        }
-        if (!data[period]?.pricePerSqm) {
-          gapFills.push({ city, country: country || city, period, field: 'pricePerSqm', yearToken });
-        }
-      }
-    }
-
-    if (gapFills.length > 0) {
-      logger.debug(`🔍 Round 3: ${gapFills.length} gap(s) — ${gapFills.map(g => `${g.city}/${g.period}/${g.field}`).join(', ')}`);
-
-      const gapResults = await Promise.all(gapFills.slice(0, 8).map(async (gap, idx) => {
-        await new Promise(r => setTimeout(r, idx * 1100));
-        const query = gap.field === 'income'
-          ? `${gap.country} average income ${gap.yearToken} annual`
-          : `${gap.city} residential property price per sqm ${gap.yearToken}`;
-
-        logger.debug(`🔍 Gap-fill ${idx + 1}: "${query}"`);
-        const braveResult = await this.searchBrave(query, clientIp);
-        if (!braveResult?.trim()) return null;
-
-        const gapSystemPrompt = getSeedMetricGapFillPrompt({
-          field: gap.field, city: gap.city, period: gap.period, yearToken: gap.yearToken
-        });
-
-        try {
-          const gapResponse = await this.groqWithRetry({
-            url: this.llmUrl,
-            data: {
-              model: this.llmModel,
-              messages: [
-                { role: 'system', content: gapSystemPrompt },
-                { role: 'user', content: `Query: "${query}"\n\n${braveResult.slice(0, 2500)}` }
-              ],
-              response_format: { type: 'json_object' },
-              temperature: 0,
-              max_tokens: 150
-            },
-            config: {
-              headers: {
-                'Authorization': `Bearer ${this.groqToken}`,
-                'Content-Type': 'application/json'
-              },
-              timeout: 12000
-            }
-          }, 1, 'text');
-
-          let raw = gapResponse.data.choices[0]?.message?.content?.trim() || '';
-          raw = cleanMarkdownJson(raw);
-          return { ...gap, extracted: JSON.parse(raw) };
-        } catch (err) {
-          console.warn(`⚠️ Gap-fill failed ${gap.city}/${gap.period}/${gap.field}: ${err.message}`);
-          return null;
-        }
-      }));
-
-      for (const result of gapResults) {
-        if (!result?.extracted) continue;
-        const { city, period, field, extracted } = result;
-        const bucket = parsedData.cities[city]?.[period];
-        if (!bucket || bucket[field]) continue;
-
-        if (field === 'income') {
-          const { value, currency } = extracted;
-          if (!value || !isFinite(value) || value <= 0) continue;
-          bucket.income = { value: Math.round(value), currency: currency || 'USD', type: 'single' };
-          logger.debug(`🔍 Gap-fill hit: ${city}/${period}/income = ${Math.round(value)} ${currency || '?'}`);
-        } else {
-          // pricePerSqm: fast path or triangulation
-          const { pricePerSqm, totalPrice, areaSqm, currency } = extracted;
-          let resolved = (pricePerSqm != null && isFinite(pricePerSqm) && pricePerSqm > 0) ? pricePerSqm : null;
-          if (!resolved && totalPrice > 0 && areaSqm > 0) {
-            resolved = totalPrice / areaSqm;
-            logger.debug(`🔍 Gap-fill triangulated: ${city}/${period}/pricePerSqm = ${Math.round(resolved)} ${currency || '?'}`);
-          }
-          if (!resolved || !isFinite(resolved) || resolved <= 0) continue;
-          bucket.pricePerSqm = { value: Math.round(resolved), currency: currency || 'USD' };
-          logger.debug(`🔍 Gap-fill hit: ${city}/${period}/pricePerSqm = ${Math.round(resolved)} ${currency || '?'}`);
-        }
-      }
-    }
+    await Promise.all(pendingExtractions);
 
     for (const [city, data] of Object.entries(parsedData.cities)) {
       const _cp = data.current?.pricePerSqm?.value, _ci = data.current?.income?.value;

@@ -214,139 +214,50 @@ Distribute your search budget evenly across all cities — do not exhaust search
 }
 
 /**
- * Round 2 extraction prompt — given all Brave search results, output a typed JSON schema.
- * The LLM handles suffix expansion, currency, annualization, and temporal selection.
- * @param {object} opts
- * @param {string[]} opts.cities - Lowercase city names being analysed
- * @param {string} opts.histDecade - e.g. "2000s"
- * @param {number} opts.currentYear - e.g. 2026
- * @returns {string} System prompt for the structured extraction call
+ * Micro-extract prompt — one search result → one number or null.
+ * Used per-search: the LLM sees only one Brave result, has no cross-city context,
+ * and cannot hallucinate values it hasn't seen. null = null.
+ *
+ * @returns {string} System prompt for the micro-extraction call
  */
-function getSeedMetricExtractionPrompt({ cities = [], histDecade = '2000s', currentYear = new Date().getFullYear() } = {}) {
-  const histDecadeNum = parseInt(histDecade) || (currentYear - 25);
-  const histDecadeEnd = histDecadeNum + 9;
-  const citiesList = cities.join(', ') || 'the cities mentioned';
-  return `You are a data extraction engine. Extract property price and income data from the search results below.
+function getMicroExtractPrompt() {
+  return `You are a number extraction engine. You will receive ONE search result.
+Extract EXACTLY ONE number from it. Output ONLY valid JSON — no markdown, no backticks, no explanation.
 
-Output ONLY valid JSON — no markdown, no backticks, no explanation:
+Output format:
+  Found something: {"value": <integer>, "type": "pricePerSqm"|"income", "currency": "<ISO code>"}
+  Nothing usable:  {"value": null}
 
-{
-  "cities": {
-    "<city_lowercase>": {
-      "current":    { "pricePerSqm": <integer|null>, "totalPrice": <integer|null>, "areaSqm": <number|null>, "currency": "<ISO code>", "income": <integer|null> },
-      "historical": { "pricePerSqm": <integer|null>, "totalPrice": <integer|null>, "areaSqm": <number|null>, "currency": "<ISO code>", "income": <integer|null> }
-    }
-  }
-}
+─── WHAT TO EXTRACT ───────────────────────────────────────────────────
 
-TARGET CITIES: ${citiesList}
-HISTORICAL PERIOD: ${histDecade} — only values explicitly dated ${histDecadeNum}–${histDecadeEnd}
-CURRENT PERIOD: most recent available
+pricePerSqm — residential property purchase price per square meter (LCU)
+  PATH A (explicit): source states a per-sqm / per-m² rate
+    e.g. "RM8,000/sqm" → value=8000, type="pricePerSqm", currency="MYR"
+  PATH B (triangulate): source states BOTH a total price AND the property area in the same sentence
+    Compute: total price ÷ area in sqm → output the result as value
+    Convert area if needed: sqft ÷ 10.764 = sqm | price/sqft × 10.764 = price/sqm
+    e.g. "RM790,000 for a 990 sqft unit" → 990÷10.764=91.95sqm → 790000÷91.95=8591 → value=8591
+  REJECT (no usable path, output null):
+    • Total property price with NO area stated
+    • Rental price (not purchase)
+    • Price-to-income ratio
 
-─── FIELD RULES ───────────────────────────────────────────────────────
-
-pricePerSqm — purchase price per square meter (fast path, integer)
-  Use when source EXPLICITLY states a per-sqm / per-m² / per-sqft rate.
-  psf → ppsqm: multiply psf × 10.764 | If per-sqft stated, convert: × 10.764
-  If no explicit per-unit-area rate, set null — use totalPrice + areaSqm instead.
-
-totalPrice + areaSqm — triangulation path (when no per-sqm rate is stated)
-  totalPrice: total purchase price of the property (integer, same currency)
-  areaSqm: floor area of that property in square meters (number)
-  Convert area to sqm if needed: sqft ÷ 10.764 | sqyd ÷ 1.196
-  ONLY populate if BOTH values appear together in the same source sentence.
-  Example: "RM790,000 for a 990 sqft unit" → totalPrice=790000, areaSqm=91.95
-  If area is not stated alongside the price, set both to null.
-
-income — average annual income per individual earner (integer, LCU)
-  ACCEPT: average income / average wage / average salary (annual, or monthly×12, or daily×260)
-  REJECT: GDP per capita, household income, minimum wage, dual-earner figures
+income — average annual income, individual earner (LCU)
+  ACCEPT: average income / average wage / average salary
+    Monthly → multiply by 12. Daily → multiply by 260. Annual → use as-is.
+  REJECT: GDP per capita | household income | minimum wage | dual-earner figures
 
 ─── HARD RULES ────────────────────────────────────────────────────────
 
-1. RAW INTEGERS — expand all suffixes before outputting:
+1. RAW INTEGER — expand all suffixes before outputting:
    K = ×1,000 | M = ×1,000,000 | B = ×1,000,000,000
-   "Rp22.1M" → 22100000 | "RM790K" → 790000 | "THB 120K" → 120000
+   "Rp22.1M" → 22100000 | "RM8K" → 8000 | "THB 120K" → 120000
 
-2. LOCAL CURRENCY (LCU) — one currency per city per period, not USD:
-   Jakarta → IDR | Kuala Lumpur → MYR | Bangkok → THB | Tokyo → JPY | Seoul → KRW
-   If source only gives USD for a non-USD city → set currency to null.
+2. LOCAL CURRENCY (LCU) — not USD unless the city is in the United States:
+   Jakarta/Indonesia → IDR | Kuala Lumpur/Malaysia → MYR | Bangkok/Thailand → THB
+   Tokyo/Japan → JPY | Seoul/Korea → KRW | Singapore → SGD | Hong Kong → HKD
 
-3. HISTORICAL PERIOD LOCK — historical slot requires a value explicitly dated ${histDecadeNum}–${histDecadeEnd}.
-   "grew from Rp18M in 2002 to Rp104M today" + histDecade=${histDecade} → income=18000000
-   Undated figures or figures from outside ${histDecadeNum}–${histDecadeEnd} → null.
-   null is correct. Guessing is wrong.
-
-4. PLAUSIBILITY CHECK — if your extracted pricePerSqm is outside these ranges, you almost
-   certainly grabbed a total property price, not a per-sqm rate. Set it null and use totalPrice+areaSqm instead:
-   Jakarta IDR: 5,000,000–80,000,000 per sqm
-   Kuala Lumpur MYR: 2,000–25,000 per sqm
-   Bangkok THB: 40,000–350,000 per sqm
-   Tokyo JPY: 300,000–4,000,000 per sqm
-   Seoul KRW: 3,000,000–30,000,000 per sqm
-   Singapore SGD: 5,000–50,000 per sqm
-
-5. NO FABRICATION — every non-null value must be a number you can point to in the search text above.
-   If the text does not contain a usable value, output null. Do not invent or extrapolate.`;
-}
-
-/**
- * Round 3 gap-fill prompt — single field extraction for one city/period/field.
- * @param {object} opts
- * @param {string} opts.field - "income" or "pricePerSqm"
- * @param {string} opts.city - City name
- * @param {string} opts.period - "current" or "historical"
- * @param {string} opts.yearToken - e.g. "2000s" or "2026"
- * @returns {string} System prompt for the targeted gap-fill extraction call
- */
-function getSeedMetricGapFillPrompt({ field, city, period, yearToken }) {
-  const isIncome = field === 'income';
-  const target = isIncome
-    ? `annual single-earner income for ${city} in ${yearToken}`
-    : `residential property purchase price per sqm for ${city} in ${yearToken}`;
-  const isDecade = /^\d{4}s$/.test(yearToken);
-  const decadeNum = isDecade ? parseInt(yearToken) : null;
-  const decadeRange = decadeNum ? `${decadeNum}–${decadeNum + 9}` : yearToken;
-
-  if (isIncome) {
-    return `Extract one number from the search result below.
-Output ONLY valid JSON — no markdown: { "value": <integer or null>, "currency": "<ISO code or null>" }
-
-Looking for: ${target}
-
-Rules:
-- value must be a raw integer — expand all suffixes (K=×1000, M=×1000000, B=×1000000000)
-- currency must be the local currency (not USD unless the city is in the US)
-- ACCEPT: average income / average wage / average salary for an individual earner (annual, or monthly×12, or daily×260)
-- REJECT: GDP per capita, household income, minimum wage, dual-earner figures
-${isDecade ? `- value must be explicitly dated within ${decadeRange} — undated figures or figures from outside this range → null` : '- use the most recent available figure'}
-- null is correct when the text does not contain the target value. Do not guess.`;
-  }
-
-  // pricePerSqm: support both fast path (explicit LCU/sqm) and triangulation (total + area)
-  return `Extract property price data from the search result below.
-Output ONLY valid JSON — no markdown:
-{ "pricePerSqm": <integer or null>, "totalPrice": <integer or null>, "areaSqm": <number or null>, "currency": "<ISO code or null>" }
-
-Looking for: ${target}
-
-Rules:
-- All numbers are raw integers/numbers — expand suffixes (K=×1000, M=×1000000, B=×1000000000)
-- currency = local currency (not USD unless city is US-based)
-
-pricePerSqm (fast path):
-  Set if source EXPLICITLY states a per-sqm / per-m² rate.
-  psf rate → multiply by 10.764 to get per-sqm.
-
-totalPrice + areaSqm (triangulation — when no explicit per-sqm rate):
-  Set BOTH if the same source sentence gives property price AND property area.
-  Convert area to sqm if needed: sqft ÷ 10.764
-  Example: "RM790,000 for a 990 sqft unit" → totalPrice=790000, areaSqm=91.95
-  If area is not stated alongside the price → leave both null.
-
-${isDecade ? `- value must be explicitly dated within ${decadeRange} — figures from outside this range → all null` : '- use the most recent available figure'}
-- If no usable data found: { "pricePerSqm": null, "totalPrice": null, "areaSqm": null, "currency": null }
-- null is correct. Do not guess.`;
+3. null is always better than a guess. Every non-null value must come from the search text.`;
 }
 
 module.exports = {
@@ -358,6 +269,5 @@ module.exports = {
   buildSearchQueries,
   buildFallbackSearchQueries,
   buildGatherPromptBlock,
-  getSeedMetricExtractionPrompt,
-  getSeedMetricGapFillPrompt
+  getMicroExtractPrompt
 };
