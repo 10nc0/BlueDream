@@ -61,7 +61,7 @@ const PIPELINE_STEPS = {
 const { AttachmentIngestion } = require('./attachment-ingestion');
 const { analyzeImageWithGroqVision, processChemistryContent, classifyScholasticDomain } = require('./attachment-cascade');
 const { createQueryTimestamp, buildTemporalContent } = require('./time-format');
-const { buildSeedMetricTable, validateSeedMetricOutput, parseTFR, injectTFRColumn } = require('./seed-metric-calculator');
+const { buildSeedMetricTable, validateSeedMetricOutput, parseTFR, injectTFRColumn, rescueDroppedSuffix, usdSanityRescue } = require('./seed-metric-calculator');
 const { cleanMarkdownJson, EMPTY_TABLE_ROW_REGEX } = require('./parse-helpers');
 const { buildGatherPromptBlock } = require('../prompts/seed-metric');
 
@@ -1292,7 +1292,14 @@ Rules:
 - Household/dual income is NOT single-earner — ignore it.
 - GDP per capita is NOT income — ignore it.
 - If no usable number found: output {"value": null}
-- null is always better than a guess. Every number must come from the search text.`;
+- null is always better than a guess. Every number must come from the search text.
+- CRITICAL — always output the fully-expanded raw integer, never an abbreviated form.
+  Expand suffixes BEFORE outputting the value:
+    K or k  = ×1,000        (e.g. "Rp54K"   → 54000,   "RM8K"    → 8000)
+    M or m  = ×1,000,000    (e.g. "Rp5.5M"  → 5500000, "RM57K"   → 57000)
+    B or b  = ×1,000,000,000
+    "thousand" = ×1,000 | "million" = ×1,000,000 | "billion" = ×1,000,000,000
+  Examples: "Rp54,000/sqm" → 54000 | "Rp5.5M/sqm" → 5500000 | "RM57K/yr" → 57000`;
 
     const pendingExtractions = [];
 
@@ -1387,6 +1394,14 @@ Rules:
 
             if (extracted.value != null && isFinite(extracted.value) && extracted.value > 0) {
               const currency = extracted.currency || 'USD';
+              const rawValue = extracted.value;
+              // L2: Regex rescue — re-scan Brave text for K/M/B suffix LLM may have dropped
+              extracted.value = rescueDroppedSuffix(extracted.value, braveText);
+              // L3: USD-range sanity — if value is still implausibly tiny, apply ×1000
+              extracted.value = usdSanityRescue(extracted.value, currency, metricType);
+              if (extracted.value !== rawValue) {
+                logger.debug(`🔧 Suffix rescue: ${rawValue} → ${extracted.value} ${currency} (${metricType})`);
+              }
               const resolvedType = (extracted.type === 'pricePerSqm' || extracted.type === 'income')
                 ? extracted.type : metricType;
               if (!parsedData.cities[matchedCity]) {
@@ -1469,6 +1484,14 @@ Rules:
 
             if (extracted.value != null && isFinite(extracted.value) && extracted.value > 0) {
               const currency = extracted.currency || 'USD';
+              const rawValue = extracted.value;
+              // L2: Regex rescue — re-scan Brave text for K/M/B suffix LLM may have dropped
+              extracted.value = rescueDroppedSuffix(extracted.value, braveResult);
+              // L3: USD-range sanity — if value is still implausibly tiny, apply ×1000
+              extracted.value = usdSanityRescue(extracted.value, currency, 'income');
+              if (extracted.value !== rawValue) {
+                logger.debug(`🔧 Suffix rescue (fallback): ${rawValue} → ${extracted.value} ${currency} (income)`);
+              }
               if (!data[period].income) {
                 data[period].income = { value: extracted.value, currency, type: 'single' };
                 logger.debug(`🔄 Fallback hit: ${city}/${period}/income = ${extracted.value} ${currency} (via ${country})`);
