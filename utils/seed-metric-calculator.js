@@ -209,7 +209,11 @@ function buildSeedMetricTable(parsedData, historicalDecade = String(new Date().g
 
     const histPriceSqm = data.historical?.pricePerSqm?.value;
     const histCurrency = data.historical?.pricePerSqm?.currency || data.historical?.income?.currency || 'USD';
-    const histIncome = data.historical?.income?.value;
+    // Temporal contamination guard: if historical income == current income exactly,
+    // Brave returned a current-era figure for the historical query — treat as null.
+    // No real city has had zero nominal income change over a 25-year span.
+    const rawHistIncome = data.historical?.income?.value;
+    const histIncome = (rawHistIncome != null && rawHistIncome === currIncome) ? null : rawHistIncome;
     const histMetric = calculateSeedMetric(histPriceSqm, histIncome);
     const currMetric = calculateSeedMetric(currPriceSqm, currIncome);
     
@@ -277,7 +281,7 @@ function validateSeedMetricOutput(output, historicalDecade = String(new Date().g
 
   const hasTableHeader = /(?:\|\s*)?City\s*\|.*Period\s*\|.*Regime\s*\|?\s*(?:TFR\s*\|)?/i.test(output);
   if (!hasTableHeader) {
-    issues.push('FORBIDDEN: Missing table header. Output MUST use | City | Period | LCU/sqm | 700sqm Price | Income | Years | Regime | format.');
+    issues.push('FORBIDDEN: Missing table header. Output MUST use | City | Period | $/sqm | 700sqm Price | Income | Years | Regime | format.');
   }
 
   const tableRows = output.match(/^(?:\|)?[^|\n-][^|\n]*(?:\|[^|\n]*){4,}\|?$/gm);
@@ -300,7 +304,7 @@ function validateSeedMetricOutput(output, historicalDecade = String(new Date().g
   
   const hasPIColumn = /\|\s*P\/I\s*\|/i.test(output);
   if (hasPIColumn) {
-    issues.push('FORBIDDEN: Table has P/I column. Use LCU/sqm column instead. Years = (LCU/sqm × 700) ÷ Income.');
+    issues.push('FORBIDDEN: Table has P/I column. Use $/sqm column instead. Years = ($/sqm × 700) ÷ Income.');
   }
   
   const hasCityColumn = /\|\s*City\s*\|/i.test(output);
@@ -360,7 +364,7 @@ function validateSeedMetricOutput(output, historicalDecade = String(new Date().g
   
   const proseIndicators = output.match(/(?:Fast forward|Using the Seed Metric|we can calculate|we can estimate|However,|it's essential|In conclusion|assuming a|Comparing the two|Assuming an|The median|approximately \d|50 years ago)/gi);
   if (proseIndicators && proseIndicators.length >= 2) {
-    issues.push('FORBIDDEN: Contains prose paragraphs instead of table. Must use | City | Period | LCU/sqm | ... | Regime | format.');
+    issues.push('FORBIDDEN: Contains prose paragraphs instead of table. Must use | City | Period | $/sqm | ... | Regime | format.');
   }
   
   const paragraphs = output.split(/\n\n+/).filter(p => p.trim().length > 50);
@@ -397,9 +401,9 @@ function validateSeedMetricOutput(output, historicalDecade = String(new Date().g
   }
   
   const rawPIUsed = /(?:price[\s-]*to[\s-]*income|P\/I)\s*(?:ratio)?\s*(?:is|=|:)\s*[\d.]+/i.test(output);
-  const hasSqmColumn = /\|\s*(?:LCU\/sqm|\$\/sqm)\s*\|/i.test(output);
+  const hasSqmColumn = /\|\s*\$\/sqm\s*\|/i.test(output);
   if (rawPIUsed && !hasSqmColumn) {
-    issues.push('Raw P/I ratio used without LCU/sqm source data. Must use (LCU/sqm × 700) ÷ income formula.');
+    issues.push('Raw P/I ratio used without $/sqm source data. Must use ($/sqm × 700) ÷ income formula.');
   }
   
   if (/\d+\s*sqft/i.test(output) && !has700sqm) {
@@ -412,6 +416,50 @@ function validateSeedMetricOutput(output, historicalDecade = String(new Date().g
   };
 }
 
+// ─── Suffix hardening helpers (used by pipeline-orchestrator micro-extraction) ──
+
+/**
+ * Apply K/M/B/CJK multiplier to a numeric value based on a suffix string.
+ * Example: applyMultiplier(54, 'K') → 54000
+ */
+function applyMultiplier(value, raw) {
+  if (!raw) return value;
+  if (/billion|bn/i.test(raw))               return value * 1_000_000_000;
+  if (/million|mil\b|\b[Mm]\b|億/i.test(raw)) return value * 1_000_000;
+  if (/万|만/i.test(raw))                      return value * 10_000;
+  if (/\bk\b|thousand/i.test(raw))            return value * 1_000;
+  return value;
+}
+
+/**
+ * Regex rescue: if the micro-extraction LLM returned a bare integer (dropping a
+ * K/M/B suffix that was in the raw Brave text), detect and re-apply the suffix.
+ * Example: LLM returns 54, raw text has "Rp54K/sqm" → returns 54000.
+ */
+function rescueDroppedSuffix(value, text) {
+  if (!value || !text) return value;
+  const baseStr = String(Math.round(value)).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const m = text.match(new RegExp(`${baseStr}(?:[.,]\\d+)?\\s*([KkMmBb]|million|billion|thousand)`, 'i'));
+  if (!m) return value;
+  const rescued = applyMultiplier(value, m[1]);
+  return rescued;
+}
+
+/**
+ * USD-equivalent sanity check. If the extracted value converts to an implausibly
+ * tiny USD amount, assume a K suffix was dropped and apply ×1000 correction.
+ * Thresholds (conservative): pricePerSqm < $0.01/sqm | income < $10/year
+ */
+function usdSanityRescue(value, currency, type) {
+  const usdRate = CURRENCY_REGISTRY[currency]?.usdRate ?? 1;
+  const usdEquiv = value * usdRate;
+  const threshold = type === 'pricePerSqm' ? 0.01 : 10;
+  if (usdEquiv < threshold) {
+    return value * 1_000;
+  }
+  return value;
+}
+
 module.exports = {
   calculateSeedMetric,
   formatCurrency,
@@ -419,4 +467,7 @@ module.exports = {
   validateSeedMetricOutput,
   parseTFR,
   injectTFRColumn,
+  applyMultiplier,
+  rescueDroppedSuffix,
+  usdSanityRescue,
 };

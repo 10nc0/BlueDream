@@ -78,7 +78,7 @@ const AUDIT_STAGE_0_NYAN = AUDIT_STAGE_0_STRICT;
 const AUDIT_FINANCIAL_PHYSICS = `
 FINANCIAL PHYSICS AUDIT (Extension):
 6. TEMPORAL REALITY: Are all "Actual" figures dated BEFORE today's date?
-7. SEED METRIC VALIDITY: Is Years calculated as (LCU/sqm × 700) ÷ single-earner income? NO P/I ratio substitution allowed.
+7. SEED METRIC VALIDITY: Is Years calculated as ($/sqm × 700) ÷ single-earner income? NO P/I ratio substitution allowed.
 8. NO CIRCULAR REASONING: Is land price NOT derived from home price, GDP, or national averages?
 9. CURRENCY CONSISTENCY: Are all monetary values in consistent units (no mixing)?
 10. FLOW DIRECTION: Are +Income/-Cost signs applied correctly?`;
@@ -165,18 +165,18 @@ SEED METRIC AUDIT (MANDATORY for ~nyan responses):
    - 10-25yr = "Extraction" (stretched but manageable)
    - >25yr = "Fatalism" (extraction economy, fertility suppression)
    - Look for these exact words OR equivalent descriptions near each years value
-12. FORMULA CHECK: MUST be (LCU/sqm × 700) ÷ income. NO P/I ratio column or substitution allowed.
+12. FORMULA CHECK: MUST be ($/sqm × 700) ÷ income. NO P/I ratio column or substitution allowed.
 
 ⛔ INSTANT FAIL PATTERNS (mark as FIXABLE immediately if found):
 - "unverified historical" or "historical data is unverified" → FIXABLE
 - "cannot determine directional change" or "cannot accurately determine" → FIXABLE
 - "no historical data available" or "lack of historical data" → FIXABLE
-- "No data on" or "no precise" LCU/sqm for historical period → FIXABLE (must ESTIMATE)
+- "No data on" or "no precise" $/sqm for historical period → FIXABLE (must ESTIMATE)
 - Missing any mention of ~50yr ago timeframe (1970s, 1975, etc.) → FIXABLE
 - Years-to-own shown WITHOUT regime labels (Optimism/Extraction/Fatalism) → FIXABLE
 - P/I ratio used anywhere (column, prose, or threshold) → FIXABLE
 - Output is prose paragraphs instead of markdown table → FIXABLE
-- Missing LCU/sqm column or table header row → FIXABLE
+- Missing $/sqm column or table header row → FIXABLE
 - Only current data shown without ~50yr historical comparison rows → FIXABLE
 - Separate tables per city instead of ONE unified table with City column → FIXABLE
 - Regime label does NOT match Years value (e.g., 13yr labeled "Optimism" instead of "Extraction") → FIXABLE
@@ -321,8 +321,8 @@ SPECIAL CORRECTION RULES:
 
 FOR SEED METRIC (~nyan) CORRECTIONS:
 - If audit says "missing historical data" → You MUST add ~50yr historical estimates
-- Use proxy methods: historical records from 1970s-1980s (use LCU/sqm + income from the SAME year)
-- ONLY formula: Years = (LCU/sqm × 700) ÷ single-earner income. NO P/I ratio allowed.
+- Use proxy methods: historical records from 1970s-1980s (use $/sqm + income from the SAME year)
+- ONLY formula: Years = ($/sqm × 700) ÷ single-earner income. NO P/I ratio allowed.
 - Example: "In 1975, Singapore: 3 years (Optimism). Today: 15 years (Fatalism). This represents a 5x worsening in affordability."
 - NEVER say "cannot determine" or "unverified" for historical data. ESTIMATE using available proxies.
 - Show directional change: "improved from X to Y" or "worsened from X to Y"

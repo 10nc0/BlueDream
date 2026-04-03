@@ -61,9 +61,9 @@ const PIPELINE_STEPS = {
 const { AttachmentIngestion } = require('./attachment-ingestion');
 const { analyzeImageWithGroqVision, processChemistryContent, classifyScholasticDomain } = require('./attachment-cascade');
 const { createQueryTimestamp, buildTemporalContent } = require('./time-format');
-const { buildSeedMetricTable, validateSeedMetricOutput, parseTFR, injectTFRColumn } = require('./seed-metric-calculator');
+const { buildSeedMetricTable, validateSeedMetricOutput, parseTFR, injectTFRColumn, rescueDroppedSuffix, usdSanityRescue } = require('./seed-metric-calculator');
 const { cleanMarkdownJson, EMPTY_TABLE_ROW_REGEX } = require('./parse-helpers');
-const { buildGatherPromptBlock, getMicroExtractPrompt } = require('../prompts/seed-metric');
+const { buildGatherPromptBlock } = require('../prompts/seed-metric');
 
 function extractVisionSearchTerms(visionDescription) {
   if (!visionDescription || visionDescription.length < 20) return null;
@@ -1259,7 +1259,10 @@ Rules:
       return;
     }
 
-    // ── Execute tool calls (up to 12): per-search micro-extraction follows ──
+    // ── Execute tool calls + per-search micro-extraction (agent swarm) ────
+    // For each Brave search: fetch result → fire tiny LLM to extract ONE number → slot into parsedData.
+    // Each LLM call sees exactly ONE Brave result for ONE city/metric — zero cross-city contamination.
+    // Speed: Groq Llama ~200-400ms per micro-extraction, fires during Brave rate-limit wait.
     const callsToRun = toolCalls.slice(0, 12);
     const sourceUrls = [];
 
@@ -1269,6 +1272,7 @@ Rules:
           return match ? match[1].trim().toLowerCase() : null;
         }).filter(Boolean))]
       : [];
+    const histDecadeNum = parseInt(histDecade) || (currentYear - 25);
 
     const parsedData = { cities: {}, parseLog: [] };
     for (const city of cities) {
@@ -1278,13 +1282,32 @@ Rules:
       };
     }
 
-    // ── Execute tool calls: per-search micro-extraction ────────────────────
-    // One search result → one tiny LLM call → one number or null.
-    // LLM sees only one Brave result at a time — zero cross-city context,
-    // zero hallucination surface. City/period/metric type are determined
-    // deterministically from the search query string. null = null.
-    const histDecadeNum = parseInt(histDecade) || (currentYear - 25);
-    const microExtractPrompt = getMicroExtractPrompt();
+    const microExtractPrompt = `You are a number extraction engine. You will receive ONE search result about a specific city.
+Extract EXACTLY ONE number from it. Output ONLY valid JSON — no markdown, no backticks, no explanation.
+
+Rules:
+- If you find a residential property PURCHASE price per sqm (or can derive it from total price ÷ area, or from price/sqft × 10.764): output {"value": <number>, "type": "pricePerSqm", "currency": "<ISO code>"}
+- If you find average/median individual annual income (or monthly × 12): output {"value": <number>, "type": "income", "currency": "<ISO code>"}
+- Monthly rent is NOT purchase price — ignore it.
+- Household/dual income is NOT single-earner — ignore it.
+- GDP per capita is NOT income — ignore it.
+- If no usable number found: output {"value": null}
+- null is always better than a guess. Every number must come from the search text.
+- CRITICAL — always output the fully-expanded raw integer, never an abbreviated form.
+  Expand suffixes BEFORE outputting the value:
+    K or k  = ×1,000        (e.g. "Rp54K"   → 54000,   "RM8K"    → 8000)
+    M or m  = ×1,000,000    (e.g. "Rp5.5M"  → 5500000, "RM57K"   → 57000)
+    B or b  = ×1,000,000,000
+    "thousand" = ×1,000 | "million" = ×1,000,000 | "billion" = ×1,000,000,000
+  Examples: "Rp54,000/sqm" → 54000 | "Rp5.5M/sqm" → 5500000 | "RM57K/yr" → 57000
+- TEMPORAL — the search query tells you the target time period. If the text mentions values
+  for multiple years (e.g. "grew from X in 2003 to Y in 2025"), extract the value CLOSEST
+  to the year or decade in the search query — NOT the most recent one.
+  Example: query="Jakarta average income 2000s", text="rose from Rp18M in 2002 to Rp104M today"
+  → extract 18000000 (nearest to 2000s), NOT 104000000 (current).
+  Example: query="Jakarta average income 2026", text="rose from Rp18M in 2002 to Rp104M today"
+  → extract 104000000 (nearest to 2026).`;
+
     const pendingExtractions = [];
 
     for (let i = 0; i < callsToRun.length; i++) {
@@ -1318,16 +1341,15 @@ Rules:
         braveText = String(result || '');
       }
 
-      // Deterministic routing: city / period / metric type from query string
       const queryLower = searchQuery.toLowerCase();
       let matchedCity = null;
       for (const city of cities) {
         const expanded = CITY_EXPAND[city] || city;
         const escapedCity = city.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         const escapedExpanded = expanded.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const cityBoundary = new RegExp(`(?:^|\\s|[^a-z])${escapedCity}(?:$|\\s|[^a-z])`, 'i');
-        const expandedBoundary = new RegExp(`(?:^|\\s|[^a-z])${escapedExpanded}(?:$|\\s|[^a-z])`, 'i');
-        if (expandedBoundary.test(queryLower) || (city.length > 2 && cityBoundary.test(queryLower))) {
+        const cityWordBoundary = new RegExp(`(?:^|\\s|[^a-z])${escapedCity}(?:$|\\s|[^a-z])`, 'i');
+        const expandedWordBoundary = new RegExp(`(?:^|\\s|[^a-z])${escapedExpanded}(?:$|\\s|[^a-z])`, 'i');
+        if (expandedWordBoundary.test(queryLower) || (city.length > 2 && cityWordBoundary.test(queryLower))) {
           matchedCity = city;
           break;
         }
@@ -1340,17 +1362,17 @@ Rules:
           }
         }
       }
-
       const isIncome = /income|salary|wage|earnings/i.test(searchQuery);
       const metricType = isIncome ? 'income' : 'pricePerSqm';
+      const histYearStart = histDecadeNum;
+      const histYearEnd = histDecadeNum + 15;
       const queryYears = [...searchQuery.matchAll(/\b(19\d{2}|20\d{2})\b/g)].map(m => parseInt(m[1]));
-      const hasHistoricalYear = queryYears.some(y => y >= histDecadeNum && y <= histDecadeNum + 15);
+      const hasHistoricalYear = queryYears.some(y => y >= histYearStart && y <= histYearEnd);
       const hasAnyOldYear = queryYears.some(y => y < currentYear - 5);
       const isHistorical = hasHistoricalYear || hasAnyOldYear || new RegExp(`${histDecade}|\\d{4}s|historical`, 'i').test(searchQuery);
       const period = isHistorical ? 'historical' : 'current';
 
       if (matchedCity && braveText.trim()) {
-        const capturedI = i;
         const extractionPromise = (async () => {
           try {
             const extractResponse = await this.groqWithRetry({
@@ -1379,6 +1401,14 @@ Rules:
 
             if (extracted.value != null && isFinite(extracted.value) && extracted.value > 0) {
               const currency = extracted.currency || 'USD';
+              const rawValue = extracted.value;
+              // L2: Regex rescue — re-scan Brave text for K/M/B suffix LLM may have dropped
+              extracted.value = rescueDroppedSuffix(extracted.value, braveText);
+              // L3: USD-range sanity — if value is still implausibly tiny, apply ×1000
+              extracted.value = usdSanityRescue(extracted.value, currency, metricType);
+              if (extracted.value !== rawValue) {
+                logger.debug(`🔧 Suffix rescue: ${rawValue} → ${extracted.value} ${currency} (${metricType})`);
+              }
               const resolvedType = (extracted.type === 'pricePerSqm' || extracted.type === 'income')
                 ? extracted.type : metricType;
               if (!parsedData.cities[matchedCity]) {
@@ -1390,21 +1420,22 @@ Rules:
               const bucket = parsedData.cities[matchedCity][period];
               if (!bucket[resolvedType]) {
                 if (resolvedType === 'income') {
-                  bucket[resolvedType] = { value: Math.round(extracted.value), currency, type: 'single' };
+                  bucket[resolvedType] = { value: extracted.value, currency, type: 'single' };
                 } else {
-                  bucket[resolvedType] = { value: Math.round(extracted.value), currency };
+                  bucket[resolvedType] = { value: extracted.value, currency };
                 }
-                logger.debug(`👁️ Extract #${capturedI + 1}: ${matchedCity}/${period}/${resolvedType} = ${Math.round(extracted.value)} ${currency}`);
+                logger.debug(`👁️ Extract #${i + 1}: ${matchedCity}/${period}/${resolvedType} = ${extracted.value} ${currency}`);
               } else {
-                logger.debug(`👁️ Extract #${capturedI + 1}: ${matchedCity}/${period}/${resolvedType} already filled, skipping`);
+                logger.debug(`👁️ Extract #${i + 1}: ${matchedCity}/${period}/${resolvedType} already filled, skipping`);
               }
             } else {
-              logger.debug(`👁️ Extract #${capturedI + 1}: ${matchedCity}/${period}/${metricType} = null`);
+              logger.debug(`👁️ Extract #${i + 1}: ${matchedCity}/${period}/${metricType} = null`);
             }
           } catch (err) {
             console.warn(`⚠️ Extract #${i + 1} failed: ${err.message}`);
           }
         })();
+
         pendingExtractions.push(extractionPromise);
       } else {
         logger.debug(`👁️ Extract #${i + 1}: no city match or empty result, skipping`);
@@ -1416,6 +1447,75 @@ Rules:
     }
 
     await Promise.all(pendingExtractions);
+
+    const incomeFallbacks = [];
+    for (const [city, data] of Object.entries(parsedData.cities)) {
+      const country = CITY_TO_COUNTRY[city];
+      if (!country) continue;
+
+      for (const period of ['current', 'historical']) {
+        if (data[period]?.income) continue;
+        const yearToken = period === 'current' ? String(currentYear) : histDecade;
+        const fallbackQuery = `${country} average income ${yearToken}`;
+        logger.debug(`🔄 Income fallback: ${city}/${period} → "${fallbackQuery}"`);
+
+        incomeFallbacks.push((async () => {
+          try {
+            await new Promise(r => setTimeout(r, 1100));
+            const braveResult = await this.searchBrave(fallbackQuery, input.clientIp || '127.0.0.1');
+            if (!braveResult?.trim()) return;
+
+            const extractResponse = await this.groqWithRetry({
+              url: this.llmUrl,
+              data: {
+                model: this.llmModel,
+                messages: [
+                  { role: 'system', content: microExtractPrompt },
+                  { role: 'user', content: `Search query: "${fallbackQuery}"\n\nSearch results:\n${braveResult.slice(0, 3000)}` }
+                ],
+                temperature: 0,
+                max_tokens: 100
+              },
+              config: {
+                headers: {
+                  'Authorization': `Bearer ${this.groqToken}`,
+                  'Content-Type': 'application/json'
+                },
+                timeout: 10000
+              }
+            }, 1, 'text');
+
+            let rawJson = extractResponse.data.choices[0]?.message?.content?.trim() || '';
+            rawJson = cleanMarkdownJson(rawJson);
+            const extracted = JSON.parse(rawJson);
+
+            if (extracted.value != null && isFinite(extracted.value) && extracted.value > 0) {
+              const currency = extracted.currency || 'USD';
+              const rawValue = extracted.value;
+              // L2: Regex rescue — re-scan Brave text for K/M/B suffix LLM may have dropped
+              extracted.value = rescueDroppedSuffix(extracted.value, braveResult);
+              // L3: USD-range sanity — if value is still implausibly tiny, apply ×1000
+              extracted.value = usdSanityRescue(extracted.value, currency, 'income');
+              if (extracted.value !== rawValue) {
+                logger.debug(`🔧 Suffix rescue (fallback): ${rawValue} → ${extracted.value} ${currency} (income)`);
+              }
+              if (!data[period].income) {
+                data[period].income = { value: extracted.value, currency, type: 'single' };
+                logger.debug(`🔄 Fallback hit: ${city}/${period}/income = ${extracted.value} ${currency} (via ${country})`);
+              }
+            } else {
+              logger.debug(`🔄 Fallback miss: ${city}/${period}/income still null (${country})`);
+            }
+          } catch (err) {
+            console.warn(`⚠️ Income fallback failed for ${city}/${period}: ${err.message}`);
+          }
+        })());
+      }
+    }
+
+    if (incomeFallbacks.length > 0) {
+      await Promise.all(incomeFallbacks);
+    }
 
     for (const [city, data] of Object.entries(parsedData.cities)) {
       const _cp = data.current?.pricePerSqm?.value, _ci = data.current?.income?.value;
@@ -1663,7 +1763,7 @@ Rules:
     // Seed Metric direct output: bypass audit (data calculated with deterministic proxy rules)
     if (state.seedMetricDirectOutput) {
       logger.debug(`🏠 Seed Metric direct output - bypassing audit (proxy math applied)`);
-      state.auditResult = { verdict: 'BYPASS', confidence: 95, reason: 'Deterministic LCU/sqm × 700 proxy calculation' };
+      state.auditResult = { verdict: 'BYPASS', confidence: 95, reason: 'Deterministic $/sqm × 700 proxy calculation' };
       return;
     }
     

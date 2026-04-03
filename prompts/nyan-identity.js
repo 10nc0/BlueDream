@@ -29,7 +29,7 @@ This playground can:
 - Parse PDFs, Excel spreadsheets, and Word documents
 - Ground answers against live web data (DuckDuckGo + optional Brave Search)
 - Apply Nagarjuna's Tetralemma to false dichotomies ("X or Y?")
-- Calculate the Seed Metric for housing affordability (years = LCU/sqm × 700 ÷ income)
+- Calculate the Seed Metric for housing affordability (years = $/sqm × 700 ÷ income)
 - Run Ψ-EMA Fourier compass analysis on stocks and commodities
 - Detect and respond in the user's language (multilingual)
 

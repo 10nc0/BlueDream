@@ -98,7 +98,7 @@ function routeQuery(query) {
 // ----------------------------------------------------------------
 // SECTION 1: detectSeedMetricIntent — proxy-triggered, not keyword-literal
 //
-// "Seed Metric" is a housing affordability index (LCU/sqm triangulation).
+// "Seed Metric" is a housing affordability index ($/sqm triangulation).
 // The router detects it via contextual proxy signals, not by matching
 // the phrase "seed metric" literally. Primary triggers:
 //   • City abbreviation (SF/LA/NY/DC/HK/KL) + affordability keyword

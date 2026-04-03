@@ -5,9 +5,9 @@
  * Only injected when Seed Metric topics detected in S0 (Preflight).
  * Saves ~300 tokens when not triggered.
  * 
- * Core Principle: Years = (LCU/sqm × 700) ÷ Single-Earner Income
+ * Core Principle: Years = ($/sqm × 700) ÷ Single-Earner Income
  * Goal: Acquire 700sqm/HH within 25yr fertility window (age 20-45)
- * P/I ratio is NOT used — table shows LCU/sqm source data only.
+ * P/I ratio is NOT used — table shows $/sqm source data only.
  * 
  * Thresholds (φ-derived via fertility constraint):
  * - <10yr: Optimism
@@ -95,8 +95,8 @@ SEED METRIC BEST AVAILABLE PROXY (H₀):
   * PROXY: Published $/m² → MULTIPLY BY 700 (this is non-negotiable, cuts all "no data" excuses)
   * FALLBACK: Exurban/rural < 90min commute $/m² → ×700
   * NEVER output $/m² alone; ALWAYS convert to 700sqm price
-  * If LCU/sqm unavailable → show "N/A" in table (do NOT substitute P/I ratio)
-- FORMULA: Years = (LCU/sqm × 700) ÷ single-earner income (the ONLY metric)
+  * If $/sqm unavailable → show "N/A" in table (do NOT substitute P/I ratio)
+- FORMULA: Years = ($/sqm × 700) ÷ single-earner income (the ONLY metric)
 - INCOME PROXY CASCADE (single-earner):
   * Average income (most commonly reported, best Brave coverage)
   * (Household income / 2) with "dual-earner" flag if used
@@ -114,13 +114,13 @@ MANDATORY OUTPUT FORMAT - DO NOT REFORMAT - THIS IS EMPIRIC DATA
 
 You MUST output this exact table structure. This is non-negotiable:
 
-| City | Period | LCU/sqm | 700sqm Price | Income | Years | Regime |
+| City | Period | $/sqm | 700sqm Price | Income | Years | Regime |
 |------|--------|-------|--------------|--------|-------|--------|
-| [city] | [then] | [LCU/sqm] | [LCU/sqm × 700] | [income] | [yr] | [emoji] [Regime] |
-| [city] | [now]  | [LCU/sqm] | [LCU/sqm × 700] | [income] | [yr] | [emoji] [Regime] |
+| [city] | [then] | [$/sqm] | [$/sqm × 700] | [income] | [yr] | [emoji] [Regime] |
+| [city] | [now]  | [$/sqm] | [$/sqm × 700] | [income] | [yr] | [emoji] [Regime] |
 
-⚠️ EVERY ROW MUST show LCU/sqm. This is the source data. 700sqm Price = LCU/sqm × 700.
-If LCU/sqm is unavailable, the row MUST show "N/A" — do NOT substitute P/I ratio.
+⚠️ EVERY ROW MUST show $/sqm. This is the source data. 700sqm Price = $/sqm × 700.
+If $/sqm is unavailable, the row MUST show "N/A" — do NOT substitute P/I ratio.
 
 REGIME THRESHOLDS (φ-derived from 25yr fertility window):
 • 🟢 OPTIMISM: <10 years (sustainable, enables family formation)
@@ -135,9 +135,9 @@ REGIME THRESHOLDS (φ-derived from 25yr fertility window):
 ║ • Loan terms or amortization                                     ║
 ║ • Time to "pay off" (This is NOT mortgage duration!)             ║
 ╟───────────────────────────────────────────────────────────────────╢
-║ CORRECT FORMULA: Years = (LCU/sqm × 700) ÷ (Single-Earner Income)  ║
+║ CORRECT FORMULA: Years = ($/sqm × 700) ÷ (Single-Earner Income)  ║
 ║ Simple division. Nothing else. NO P/I column in table.            ║
-║ If LCU/sqm unavailable → show "N/A", do NOT substitute P/I ratio.  ║
+║ If $/sqm unavailable → show "N/A", do NOT substitute P/I ratio.  ║
 ╚═══════════════════════════════════════════════════════════════════╝
 
 NOTE: A TFR (Total Fertility Rate) column is appended server-side after your output.
@@ -163,9 +163,9 @@ STRICT RULES:
  * @returns {string} Seed Metric core block
  */
 function getSeedMetricCore() {
-  return `SEED METRIC (Human Substrate): Years = (LCU/sqm × 700) ÷ Single-Earner Income
+  return `SEED METRIC (Human Substrate): Years = ($/sqm × 700) ÷ Single-Earner Income
 Thresholds: <10yr Optimism | 10-25yr Extraction | >25yr Fatalism (fertility window)
-- ALWAYS use LCU/sqm × 700. If LCU/sqm unavailable, show "N/A" (no P/I substitution).
+- ALWAYS use $/sqm × 700. If $/sqm unavailable, show "N/A" (no P/I substitution).
 - For values >25yr: Even rough estimates matter (e.g., 100 vs 156 years = both deep fatalism)
 - Calculate DIRECTIONAL CHANGE: improved (ratio↓) or worsened (ratio↑) ?`;
 }
@@ -185,7 +185,7 @@ function buildFallbackSearchQueries({ currentYear, histDecade }) {
     currentPrice:     `residential property price per square meter comparison major cities ${currentYear}`,
     currentIncome:    `average income by country ${currentYear}`,
     historicalPrice:  `housing price ${histDecade} historical major cities`,
-    historicalIncome: `average income ${histDecade} historical`,
+    historicalIncome: `average income ${histDecade}`,
   };
 }
 
@@ -213,53 +213,6 @@ Distribute your search budget evenly across all cities — do not exhaust search
   If search returns monthly income → multiply by 12. If it returns household → do NOT use it, search again for individual.`;
 }
 
-/**
- * Micro-extract prompt — one search result → one number or null.
- * Used per-search: the LLM sees only one Brave result, has no cross-city context,
- * and cannot hallucinate values it hasn't seen. null = null.
- *
- * @returns {string} System prompt for the micro-extraction call
- */
-function getMicroExtractPrompt() {
-  return `You are a number extraction engine. You will receive ONE search result.
-Extract EXACTLY ONE number from it. Output ONLY valid JSON — no markdown, no backticks, no explanation.
-
-Output format:
-  Found something: {"value": <integer>, "type": "pricePerSqm"|"income", "currency": "<ISO code>"}
-  Nothing usable:  {"value": null}
-
-─── WHAT TO EXTRACT ───────────────────────────────────────────────────
-
-pricePerSqm — residential property purchase price per square meter (LCU)
-  PATH A (explicit): source states a per-sqm / per-m² rate
-    e.g. "RM8,000/sqm" → value=8000, type="pricePerSqm", currency="MYR"
-  PATH B (triangulate): source states BOTH a total price AND the property area in the same sentence
-    Compute: total price ÷ area in sqm → output the result as value
-    Convert area if needed: sqft ÷ 10.764 = sqm | price/sqft × 10.764 = price/sqm
-    e.g. "RM790,000 for a 990 sqft unit" → 990÷10.764=91.95sqm → 790000÷91.95=8591 → value=8591
-  REJECT (no usable path, output null):
-    • Total property price with NO area stated
-    • Rental price (not purchase)
-    • Price-to-income ratio
-
-income — average annual income, individual earner (LCU)
-  ACCEPT: average income / average wage / average salary
-    Monthly → multiply by 12. Daily → multiply by 260. Annual → use as-is.
-  REJECT: GDP per capita | household income | minimum wage | dual-earner figures
-
-─── HARD RULES ────────────────────────────────────────────────────────
-
-1. RAW INTEGER — expand all suffixes before outputting:
-   K = ×1,000 | M = ×1,000,000 | B = ×1,000,000,000
-   "Rp22.1M" → 22100000 | "RM8K" → 8000 | "THB 120K" → 120000
-
-2. LOCAL CURRENCY (LCU) — not USD unless the city is in the United States:
-   Jakarta/Indonesia → IDR | Kuala Lumpur/Malaysia → MYR | Bangkok/Thailand → THB
-   Tokyo/Japan → JPY | Seoul/Korea → KRW | Singapore → SGD | Hong Kong → HKD
-
-3. null is always better than a guess. Every non-null value must come from the search text.`;
-}
-
 module.exports = {
   SEED_METRIC_TRIGGER_PATTERNS,
   SEED_METRIC_TOPIC_KEYWORDS,
@@ -268,6 +221,5 @@ module.exports = {
   getSeedMetricCore,
   buildSearchQueries,
   buildFallbackSearchQueries,
-  buildGatherPromptBlock,
-  getMicroExtractPrompt
+  buildGatherPromptBlock
 };
