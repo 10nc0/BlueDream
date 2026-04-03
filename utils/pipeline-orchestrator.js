@@ -1299,7 +1299,14 @@ Rules:
     M or m  = ×1,000,000    (e.g. "Rp5.5M"  → 5500000, "RM57K"   → 57000)
     B or b  = ×1,000,000,000
     "thousand" = ×1,000 | "million" = ×1,000,000 | "billion" = ×1,000,000,000
-  Examples: "Rp54,000/sqm" → 54000 | "Rp5.5M/sqm" → 5500000 | "RM57K/yr" → 57000`;
+  Examples: "Rp54,000/sqm" → 54000 | "Rp5.5M/sqm" → 5500000 | "RM57K/yr" → 57000
+- TEMPORAL — the search query tells you the target time period. If the text mentions values
+  for multiple years (e.g. "grew from X in 2003 to Y in 2025"), extract the value CLOSEST
+  to the year or decade in the search query — NOT the most recent one.
+  Example: query="Jakarta average income 2000s", text="rose from Rp18M in 2002 to Rp104M today"
+  → extract 18000000 (nearest to 2000s), NOT 104000000 (current).
+  Example: query="Jakarta average income 2026", text="rose from Rp18M in 2002 to Rp104M today"
+  → extract 104000000 (nearest to 2026).`;
 
     const pendingExtractions = [];
 

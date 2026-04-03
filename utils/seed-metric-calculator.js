@@ -203,14 +203,18 @@ function buildSeedMetricTable(parsedData, historicalDecade = String(new Date().g
   for (const [city, data] of Object.entries(parsedData.cities || {})) {
     const cityTitle = city.charAt(0).toUpperCase() + city.slice(1);
     
-    const histPriceSqm = data.historical?.pricePerSqm?.value;
-    const histIncome = data.historical?.income?.value;
-    const histCurrency = data.historical?.pricePerSqm?.currency || data.historical?.income?.currency || 'USD';
-    const histMetric = calculateSeedMetric(histPriceSqm, histIncome);
-    
     const currPriceSqm = data.current?.pricePerSqm?.value;
     const currIncome = data.current?.income?.value;
     const currCurrency = data.current?.pricePerSqm?.currency || data.current?.income?.currency || 'USD';
+
+    const histPriceSqm = data.historical?.pricePerSqm?.value;
+    const histCurrency = data.historical?.pricePerSqm?.currency || data.historical?.income?.currency || 'USD';
+    // Temporal contamination guard: if historical income == current income exactly,
+    // Brave returned a current-era figure for the historical query — treat as null.
+    // No real city has had zero nominal income change over a 25-year span.
+    const rawHistIncome = data.historical?.income?.value;
+    const histIncome = (rawHistIncome != null && rawHistIncome === currIncome) ? null : rawHistIncome;
+    const histMetric = calculateSeedMetric(histPriceSqm, histIncome);
     const currMetric = calculateSeedMetric(currPriceSqm, currIncome);
     
     const histRegimeLabel = histMetric.regime !== 'N/A' ? `${histMetric.emoji} ${histMetric.regime}` : 'N/A';
