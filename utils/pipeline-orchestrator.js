@@ -1380,9 +1380,17 @@ Rules:
         if (!pd) continue;
         const bucket = parsedData.cities[norm][period];
         const currency = pd.currency || 'USD';
-        if (pd.pricePerSqm != null && isFinite(pd.pricePerSqm) && pd.pricePerSqm > 0 && !bucket.pricePerSqm) {
-          bucket.pricePerSqm = { value: Math.round(pd.pricePerSqm), currency };
-          logger.debug(`🔬 R2: ${norm}/${period}/pricePerSqm = ${Math.round(pd.pricePerSqm)} ${currency}`);
+        // Fast path: explicit LCU/sqm stated in source
+        // Triangulation path: total price ÷ area (both stated in same source)
+        let resolvedPpsqm = (pd.pricePerSqm != null && isFinite(pd.pricePerSqm) && pd.pricePerSqm > 0)
+          ? pd.pricePerSqm : null;
+        if (!resolvedPpsqm && pd.totalPrice > 0 && pd.areaSqm > 0) {
+          resolvedPpsqm = pd.totalPrice / pd.areaSqm;
+          logger.debug(`🔬 R2: ${norm}/${period}/pricePerSqm triangulated = ${Math.round(resolvedPpsqm)} ${currency}`);
+        }
+        if (resolvedPpsqm && !bucket.pricePerSqm) {
+          bucket.pricePerSqm = { value: Math.round(resolvedPpsqm), currency };
+          logger.debug(`🔬 R2: ${norm}/${period}/pricePerSqm = ${Math.round(resolvedPpsqm)} ${currency}`);
         }
         if (pd.income != null && isFinite(pd.income) && pd.income > 0 && !bucket.income) {
           bucket.income = { value: Math.round(pd.income), currency, type: 'single' };
@@ -1459,16 +1467,26 @@ Rules:
       for (const result of gapResults) {
         if (!result?.extracted) continue;
         const { city, period, field, extracted } = result;
-        const { value, currency } = extracted;
-        if (!value || !isFinite(value) || value <= 0) continue;
         const bucket = parsedData.cities[city]?.[period];
         if (!bucket || bucket[field]) continue;
+
         if (field === 'income') {
+          const { value, currency } = extracted;
+          if (!value || !isFinite(value) || value <= 0) continue;
           bucket.income = { value: Math.round(value), currency: currency || 'USD', type: 'single' };
+          logger.debug(`🔍 Gap-fill hit: ${city}/${period}/income = ${Math.round(value)} ${currency || '?'}`);
         } else {
-          bucket.pricePerSqm = { value: Math.round(value), currency: currency || 'USD' };
+          // pricePerSqm: fast path or triangulation
+          const { pricePerSqm, totalPrice, areaSqm, currency } = extracted;
+          let resolved = (pricePerSqm != null && isFinite(pricePerSqm) && pricePerSqm > 0) ? pricePerSqm : null;
+          if (!resolved && totalPrice > 0 && areaSqm > 0) {
+            resolved = totalPrice / areaSqm;
+            logger.debug(`🔍 Gap-fill triangulated: ${city}/${period}/pricePerSqm = ${Math.round(resolved)} ${currency || '?'}`);
+          }
+          if (!resolved || !isFinite(resolved) || resolved <= 0) continue;
+          bucket.pricePerSqm = { value: Math.round(resolved), currency: currency || 'USD' };
+          logger.debug(`🔍 Gap-fill hit: ${city}/${period}/pricePerSqm = ${Math.round(resolved)} ${currency || '?'}`);
         }
-        logger.debug(`🔍 Gap-fill hit: ${city}/${period}/${field} = ${Math.round(value)} ${currency || '?'}`);
       }
     }
 
@@ -1718,7 +1736,7 @@ Rules:
     // Seed Metric direct output: bypass audit (data calculated with deterministic proxy rules)
     if (state.seedMetricDirectOutput) {
       logger.debug(`🏠 Seed Metric direct output - bypassing audit (proxy math applied)`);
-      state.auditResult = { verdict: 'BYPASS', confidence: 95, reason: 'Deterministic $/sqm × 700 proxy calculation' };
+      state.auditResult = { verdict: 'BYPASS', confidence: 95, reason: 'Deterministic LCU/sqm × 700 proxy calculation' };
       return;
     }
     

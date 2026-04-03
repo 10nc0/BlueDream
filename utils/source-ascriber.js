@@ -19,7 +19,7 @@ function ascribeSource(flags = {}) {
 
   if (mode === 'nyan-identity')  return `Nyan Identity Registry v${REGISTRY_VERSION} — https://github.com/10nc0/BlueDream`;
   if (psiEmaDirectOutput)        return 'yfinance + SEC EDGAR (live data)';
-  if (seedMetricDirectOutput)    return 'Brave Search — live $/sqm triangulation';
+  if (seedMetricDirectOutput)    return 'Brave Search — live LCU/sqm triangulation';
   if (mode === 'forex')          return 'fawazahmed0 — live FX rates';
 
   if (didSearch) {

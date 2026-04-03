@@ -277,7 +277,7 @@ function validateSeedMetricOutput(output, historicalDecade = String(new Date().g
 
   const hasTableHeader = /(?:\|\s*)?City\s*\|.*Period\s*\|.*Regime\s*\|?\s*(?:TFR\s*\|)?/i.test(output);
   if (!hasTableHeader) {
-    issues.push('FORBIDDEN: Missing table header. Output MUST use | City | Period | $/sqm | 700sqm Price | Income | Years | Regime | format.');
+    issues.push('FORBIDDEN: Missing table header. Output MUST use | City | Period | LCU/sqm | 700sqm Price | Income | Years | Regime | format.');
   }
 
   const tableRows = output.match(/^(?:\|)?[^|\n-][^|\n]*(?:\|[^|\n]*){4,}\|?$/gm);
@@ -300,7 +300,7 @@ function validateSeedMetricOutput(output, historicalDecade = String(new Date().g
   
   const hasPIColumn = /\|\s*P\/I\s*\|/i.test(output);
   if (hasPIColumn) {
-    issues.push('FORBIDDEN: Table has P/I column. Use $/sqm column instead. Years = ($/sqm × 700) ÷ Income.');
+    issues.push('FORBIDDEN: Table has P/I column. Use LCU/sqm column instead. Years = (LCU/sqm × 700) ÷ Income.');
   }
   
   const hasCityColumn = /\|\s*City\s*\|/i.test(output);
@@ -360,7 +360,7 @@ function validateSeedMetricOutput(output, historicalDecade = String(new Date().g
   
   const proseIndicators = output.match(/(?:Fast forward|Using the Seed Metric|we can calculate|we can estimate|However,|it's essential|In conclusion|assuming a|Comparing the two|Assuming an|The median|approximately \d|50 years ago)/gi);
   if (proseIndicators && proseIndicators.length >= 2) {
-    issues.push('FORBIDDEN: Contains prose paragraphs instead of table. Must use | City | Period | $/sqm | ... | Regime | format.');
+    issues.push('FORBIDDEN: Contains prose paragraphs instead of table. Must use | City | Period | LCU/sqm | ... | Regime | format.');
   }
   
   const paragraphs = output.split(/\n\n+/).filter(p => p.trim().length > 50);
@@ -397,9 +397,9 @@ function validateSeedMetricOutput(output, historicalDecade = String(new Date().g
   }
   
   const rawPIUsed = /(?:price[\s-]*to[\s-]*income|P\/I)\s*(?:ratio)?\s*(?:is|=|:)\s*[\d.]+/i.test(output);
-  const hasSqmColumn = /\|\s*\$\/sqm\s*\|/i.test(output);
+  const hasSqmColumn = /\|\s*(?:LCU\/sqm|\$\/sqm)\s*\|/i.test(output);
   if (rawPIUsed && !hasSqmColumn) {
-    issues.push('Raw P/I ratio used without $/sqm source data. Must use ($/sqm × 700) ÷ income formula.');
+    issues.push('Raw P/I ratio used without LCU/sqm source data. Must use (LCU/sqm × 700) ÷ income formula.');
   }
   
   if (/\d+\s*sqft/i.test(output) && !has700sqm) {
