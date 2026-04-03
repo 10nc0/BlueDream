@@ -1456,7 +1456,9 @@ Rules:
       for (const period of ['current', 'historical']) {
         if (data[period]?.income) continue;
         const yearToken = period === 'current' ? String(currentYear) : histDecade;
-        const fallbackQuery = `${country} average income ${yearToken}`;
+        const fallbackQuery = period === 'current'
+          ? `${country} average income ${yearToken}`
+          : `${country} average income ${yearToken} World Bank ILO historical`;
         logger.debug(`🔄 Income fallback: ${city}/${period} → "${fallbackQuery}"`);
 
         incomeFallbacks.push((async () => {

@@ -101,6 +101,9 @@ SEED METRIC BEST AVAILABLE PROXY (H₀):
   * Average income (most commonly reported, best Brave coverage)
   * (Household income / 2) with "dual-earner" flag if used
   * Occupational wage survey as fallback
+  * HISTORICAL income: target World Bank, ILO, or national statistics bureau for period-specific data.
+    Query pattern: "[country] average income [decade] World Bank" or "ILO [country] wages [decade]"
+    These yield decade-specific figures; generic queries return current-era figures contaminated by recency bias.
 - Goal: Acquire 700sqm/HH residential real estate within 25yr fertility window (age 20-45)
 - HISTORICAL PERIOD: Search for data from the ${histDecade}. Use "${histDecade}" in your brave_search calls for historical data.
 - CURRENT PERIOD: Search for most recent available data (~${curYear}).
@@ -176,7 +179,7 @@ function buildSearchQueries({ city, currencyName, currentYear, histYear, histDec
     currentPrice:     `${city} residential property price per square meter${currSuffix} ${currentYear}`,
     currentIncome:    `${city} average income ${currentYear}`,
     historicalPrice:  `${city} housing price ${histDecade} historical per sqm`,
-    historicalIncome: `${city} average income ${histDecade}`,
+    historicalIncome: `${city} average income ${histDecade} World Bank ILO`,
   };
 }
 
@@ -185,7 +188,7 @@ function buildFallbackSearchQueries({ currentYear, histDecade }) {
     currentPrice:     `residential property price per square meter comparison major cities ${currentYear}`,
     currentIncome:    `average income by country ${currentYear}`,
     historicalPrice:  `housing price ${histDecade} historical major cities`,
-    historicalIncome: `average income ${histDecade}`,
+    historicalIncome: `average income ${histDecade} World Bank ILO historical`,
   };
 }
 
