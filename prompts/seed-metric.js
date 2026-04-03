@@ -101,9 +101,6 @@ SEED METRIC BEST AVAILABLE PROXY (H₀):
   * Average income (most commonly reported, best Brave coverage)
   * (Household income / 2) with "dual-earner" flag if used
   * Occupational wage survey as fallback
-  * HISTORICAL income: target World Bank, ILO, or national statistics bureau for period-specific data.
-    Query pattern: "[country] average income [decade] World Bank" or "ILO [country] wages [decade]"
-    These yield decade-specific figures; generic queries return current-era figures contaminated by recency bias.
 - Goal: Acquire 700sqm/HH residential real estate within 25yr fertility window (age 20-45)
 - HISTORICAL PERIOD: Search for data from the ${histDecade}. Use "${histDecade}" in your brave_search calls for historical data.
 - CURRENT PERIOD: Search for most recent available data (~${curYear}).
@@ -179,7 +176,7 @@ function buildSearchQueries({ city, currencyName, currentYear, histYear, histDec
     currentPrice:     `${city} residential property price per square meter${currSuffix} ${currentYear}`,
     currentIncome:    `${city} average income ${currentYear}`,
     historicalPrice:  `${city} housing price ${histDecade} historical per sqm`,
-    historicalIncome: `${city} average income ${histDecade} World Bank ILO`,
+    historicalIncome: `${city} average income ${histDecade}`,
   };
 }
 
@@ -188,7 +185,7 @@ function buildFallbackSearchQueries({ currentYear, histDecade }) {
     currentPrice:     `residential property price per square meter comparison major cities ${currentYear}`,
     currentIncome:    `average income by country ${currentYear}`,
     historicalPrice:  `housing price ${histDecade} historical major cities`,
-    historicalIncome: `average income ${histDecade} World Bank ILO historical`,
+    historicalIncome: `average income ${histDecade} historical`,
   };
 }
 
@@ -216,6 +213,103 @@ Distribute your search budget evenly across all cities — do not exhaust search
   If search returns monthly income → multiply by 12. If it returns household → do NOT use it, search again for individual.`;
 }
 
+/**
+ * Round 2 extraction prompt — given all Brave search results, output a typed JSON schema.
+ * The LLM handles suffix expansion, currency, annualization, and temporal selection.
+ * @param {object} opts
+ * @param {string[]} opts.cities - Lowercase city names being analysed
+ * @param {string} opts.histDecade - e.g. "2000s"
+ * @param {number} opts.currentYear - e.g. 2026
+ * @returns {string} System prompt for the structured extraction call
+ */
+function getSeedMetricExtractionPrompt({ cities = [], histDecade = '2000s', currentYear = new Date().getFullYear() } = {}) {
+  const histDecadeNum = parseInt(histDecade) || (currentYear - 25);
+  const histDecadeEnd = histDecadeNum + 9;
+  const citiesList = cities.join(', ') || 'the cities mentioned';
+  return `You are a precision data extraction engine. You have received Brave Search results for ${citiesList}.
+
+Extract pricePerSqm and income into this JSON schema. Output ONLY valid JSON — no markdown, no backticks, no explanation.
+
+{
+  "cities": {
+    "<city_lowercase>": {
+      "current": {
+        "pricePerSqm": { "value": <integer|null>, "currency": "<ISO code>", "source": "<brief source>" },
+        "income":      { "value": <integer|null>, "currency": "<ISO code>", "unit": "annual", "source_year": <integer|null> }
+      },
+      "historical": {
+        "pricePerSqm": { "value": <integer|null>, "currency": "<ISO code>", "source": "<brief source>" },
+        "income":      { "value": <integer|null>, "currency": "<ISO code>", "unit": "annual", "source_year": <integer|null> }
+      }
+    }
+  }
+}
+
+TARGET CITIES: ${citiesList}
+HISTORICAL PERIOD: ${histDecade} (source_year must be ${histDecadeNum}–${histDecadeEnd})
+CURRENT PERIOD: most recent available (~${currentYear - 1} or ${currentYear})
+
+SCHEMA RULES — each rule prevents a specific class of error:
+
+1. VALUES ARE RAW INTEGERS. Expand all suffixes before outputting:
+   K or k = ×1,000 | M or m = ×1,000,000 | B or b = ×1,000,000,000
+   "Rp22.1M" → 22100000 | "RM8K" → 8000 | "USD 1.2M" → 1200000
+
+2. CURRENCY MUST BE LOCAL (LCU), not USD.
+   Jakarta/Indonesia → IDR | Kuala Lumpur/Malaysia → MYR | Tokyo → JPY | Seoul → KRW | Bangkok → THB
+   If a source only reports USD for a non-USD city, omit the field (set value to null).
+
+3. INCOME MUST BE ANNUAL SINGLE-EARNER.
+   Monthly source → multiply by 12. Daily source → multiply by 260.
+   Household income → divide by 2 ONLY if no individual figure exists (note in source field).
+   GDP per capita → NOT income, ignore.
+   Minimum wage → NOT average income, ignore unless it is the only available figure.
+
+4. HISTORICAL source_year MUST fall within ${histDecade} (${histDecadeNum}–${histDecadeEnd}).
+   If text says "grew from X in ${histDecadeNum + 2} to Y in ${currentYear}": use X, source_year=${histDecadeNum + 2}.
+   If all values in the text are from outside ${histDecadeNum}–${histDecadeEnd}: set value to null.
+
+5. pricePerSqm is PURCHASE PRICE **per square meter** — NOT total property price.
+   If Brave says "apartment listed for RM7.9 million" that is the TOTAL unit price, NOT per sqm.
+   To convert: total price ÷ unit area in sqm (only if the area is stated in the same text).
+   Prefer explicit "RM X,000/sqm" or "USD X per square meter" quotes.
+   Plausible per-sqm ranges for reference: Jakarta IDR 5M-50M | KL RM3K-20K | Bangkok THB 50K-300K | Tokyo JPY 500K-3M | NYC USD 5K-30K.
+   If the only figure you see is a total property price with no stated area, set value to null.
+
+6. When in doubt, set value to null. Every non-null value must be traceable to the search text.`;
+}
+
+/**
+ * Round 3 gap-fill prompt — single field extraction for one city/period/field.
+ * @param {object} opts
+ * @param {string} opts.field - "income" or "pricePerSqm"
+ * @param {string} opts.city - City name
+ * @param {string} opts.period - "current" or "historical"
+ * @param {string} opts.yearToken - e.g. "2000s" or "2026"
+ * @returns {string} System prompt for the targeted gap-fill extraction call
+ */
+function getSeedMetricGapFillPrompt({ field, city, period, yearToken }) {
+  const isIncome = field === 'income';
+  const target = isIncome
+    ? `annual single-earner income for ${city} in ${yearToken}`
+    : `residential property purchase price per sqm for ${city} in ${yearToken}`;
+  const isDecade = /^\d{4}s$/.test(yearToken);
+  const decadeNum = isDecade ? parseInt(yearToken) : null;
+  const decadeRange = decadeNum ? `${decadeNum}–${decadeNum + 9}` : yearToken;
+
+  return `Extract one value from this search result.
+Output ONLY valid JSON — no markdown: { "value": <integer or null>, "currency": "<ISO code or null>" }
+
+Target: ${target}
+
+Rules:
+- value is a raw integer (expand K/M/B: K=×1000, M=×1000000, B=×1000000000)
+- currency is the local currency code (not USD unless the city is US-based)
+${isIncome ? '- income must be annual (monthly ×12, daily ×260)\n- GDP per capita and minimum wage are NOT average income — ignore them\n- Household income is NOT single-earner — divide by 2 only if no individual figure exists' : '- purchase price only — rental price is not purchase price'}
+${isDecade ? `- source must be from ${decadeRange} — if only values from outside this range exist, return null` : `- use the most recent figure available`}
+- If no confident value found: { "value": null, "currency": null }`;
+}
+
 module.exports = {
   SEED_METRIC_TRIGGER_PATTERNS,
   SEED_METRIC_TOPIC_KEYWORDS,
@@ -224,5 +318,7 @@ module.exports = {
   getSeedMetricCore,
   buildSearchQueries,
   buildFallbackSearchQueries,
-  buildGatherPromptBlock
+  buildGatherPromptBlock,
+  getSeedMetricExtractionPrompt,
+  getSeedMetricGapFillPrompt
 };

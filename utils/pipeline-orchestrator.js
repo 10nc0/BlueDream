@@ -44,7 +44,7 @@ const { detectPathogens, generateClinicalReport, generatePhysicalAuditDisclaimer
 const { DataPackage, globalPackageStore, STAGE_IDS } = require('./data-package');
 const { globalCheckpointStore, buildResumableSnapshot, applySnapshot } = require('./pipeline-checkpoint');
 const { getLLMBackend, getAuditBackend } = require('../config/constants');
-const { CITY_EXPAND, COUNTRY_TO_CITY, CITY_TO_COUNTRY } = require('./geo-data');
+const { CITY_TO_COUNTRY } = require('./geo-data');
 const { MAX_CONTENT_CHARS } = require('./config-constants');
 
 const PIPELINE_STEPS = {
@@ -61,9 +61,9 @@ const PIPELINE_STEPS = {
 const { AttachmentIngestion } = require('./attachment-ingestion');
 const { analyzeImageWithGroqVision, processChemistryContent, classifyScholasticDomain } = require('./attachment-cascade');
 const { createQueryTimestamp, buildTemporalContent } = require('./time-format');
-const { buildSeedMetricTable, validateSeedMetricOutput, parseTFR, injectTFRColumn, rescueDroppedSuffix, usdSanityRescue } = require('./seed-metric-calculator');
+const { buildSeedMetricTable, validateSeedMetricOutput, parseTFR, injectTFRColumn } = require('./seed-metric-calculator');
 const { cleanMarkdownJson, EMPTY_TABLE_ROW_REGEX } = require('./parse-helpers');
-const { buildGatherPromptBlock } = require('../prompts/seed-metric');
+const { buildGatherPromptBlock, getSeedMetricExtractionPrompt, getSeedMetricGapFillPrompt } = require('../prompts/seed-metric');
 
 function extractVisionSearchTerms(visionDescription) {
   if (!visionDescription || visionDescription.length < 20) return null;
@@ -1259,10 +1259,8 @@ Rules:
       return;
     }
 
-    // ── Execute tool calls + per-search micro-extraction (agent swarm) ────
-    // For each Brave search: fetch result → fire tiny LLM to extract ONE number → slot into parsedData.
-    // Each LLM call sees exactly ONE Brave result for ONE city/metric — zero cross-city contamination.
-    // Speed: Groq Llama ~200-400ms per micro-extraction, fires during Brave rate-limit wait.
+    // ── Execute tool calls: collect all Brave results (Round 1 execution) ──
+    // No per-search micro-extraction. All results feed into Round 2 as a batch.
     const callsToRun = toolCalls.slice(0, 12);
     const sourceUrls = [];
 
@@ -1272,7 +1270,6 @@ Rules:
           return match ? match[1].trim().toLowerCase() : null;
         }).filter(Boolean))]
       : [];
-    const histDecadeNum = parseInt(histDecade) || (currentYear - 25);
 
     const parsedData = { cities: {}, parseLog: [] };
     for (const city of cities) {
@@ -1282,33 +1279,7 @@ Rules:
       };
     }
 
-    const microExtractPrompt = `You are a number extraction engine. You will receive ONE search result about a specific city.
-Extract EXACTLY ONE number from it. Output ONLY valid JSON — no markdown, no backticks, no explanation.
-
-Rules:
-- If you find a residential property PURCHASE price per sqm (or can derive it from total price ÷ area, or from price/sqft × 10.764): output {"value": <number>, "type": "pricePerSqm", "currency": "<ISO code>"}
-- If you find average/median individual annual income (or monthly × 12): output {"value": <number>, "type": "income", "currency": "<ISO code>"}
-- Monthly rent is NOT purchase price — ignore it.
-- Household/dual income is NOT single-earner — ignore it.
-- GDP per capita is NOT income — ignore it.
-- If no usable number found: output {"value": null}
-- null is always better than a guess. Every number must come from the search text.
-- CRITICAL — always output the fully-expanded raw integer, never an abbreviated form.
-  Expand suffixes BEFORE outputting the value:
-    K or k  = ×1,000        (e.g. "Rp54K"   → 54000,   "RM8K"    → 8000)
-    M or m  = ×1,000,000    (e.g. "Rp5.5M"  → 5500000, "RM57K"   → 57000)
-    B or b  = ×1,000,000,000
-    "thousand" = ×1,000 | "million" = ×1,000,000 | "billion" = ×1,000,000,000
-  Examples: "Rp54,000/sqm" → 54000 | "Rp5.5M/sqm" → 5500000 | "RM57K/yr" → 57000
-- TEMPORAL — the search query tells you the target time period. If the text mentions values
-  for multiple years (e.g. "grew from X in 2003 to Y in 2025"), extract the value CLOSEST
-  to the year or decade in the search query — NOT the most recent one.
-  Example: query="Jakarta average income 2000s", text="rose from Rp18M in 2002 to Rp104M today"
-  → extract 18000000 (nearest to 2000s), NOT 104000000 (current).
-  Example: query="Jakarta average income 2026", text="rose from Rp18M in 2002 to Rp104M today"
-  → extract 104000000 (nearest to 2026).`;
-
-    const pendingExtractions = [];
+    const searchResultsContext = [];
 
     for (let i = 0; i < callsToRun.length; i++) {
       const tc = callsToRun[i];
@@ -1341,104 +1312,8 @@ Rules:
         braveText = String(result || '');
       }
 
-      const queryLower = searchQuery.toLowerCase();
-      let matchedCity = null;
-      for (const city of cities) {
-        const expanded = CITY_EXPAND[city] || city;
-        const escapedCity = city.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const escapedExpanded = expanded.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const cityWordBoundary = new RegExp(`(?:^|\\s|[^a-z])${escapedCity}(?:$|\\s|[^a-z])`, 'i');
-        const expandedWordBoundary = new RegExp(`(?:^|\\s|[^a-z])${escapedExpanded}(?:$|\\s|[^a-z])`, 'i');
-        if (expandedWordBoundary.test(queryLower) || (city.length > 2 && cityWordBoundary.test(queryLower))) {
-          matchedCity = city;
-          break;
-        }
-      }
-      if (!matchedCity) {
-        for (const [country, city] of Object.entries(COUNTRY_TO_CITY)) {
-          if (cities.includes(city) && new RegExp(`\\b${country.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(queryLower)) {
-            matchedCity = city;
-            break;
-          }
-        }
-      }
-      const isIncome = /income|salary|wage|earnings/i.test(searchQuery);
-      const metricType = isIncome ? 'income' : 'pricePerSqm';
-      const histYearStart = histDecadeNum;
-      const histYearEnd = histDecadeNum + 15;
-      const queryYears = [...searchQuery.matchAll(/\b(19\d{2}|20\d{2})\b/g)].map(m => parseInt(m[1]));
-      const hasHistoricalYear = queryYears.some(y => y >= histYearStart && y <= histYearEnd);
-      const hasAnyOldYear = queryYears.some(y => y < currentYear - 5);
-      const isHistorical = hasHistoricalYear || hasAnyOldYear || new RegExp(`${histDecade}|\\d{4}s|historical`, 'i').test(searchQuery);
-      const period = isHistorical ? 'historical' : 'current';
-
-      if (matchedCity && braveText.trim()) {
-        const extractionPromise = (async () => {
-          try {
-            const extractResponse = await this.groqWithRetry({
-              url: this.llmUrl,
-              data: {
-                model: this.llmModel,
-                messages: [
-                  { role: 'system', content: microExtractPrompt },
-                  { role: 'user', content: `Search query: "${searchQuery}"\n\nSearch results:\n${braveText.slice(0, 3000)}` }
-                ],
-                temperature: 0,
-                max_tokens: 100
-              },
-              config: {
-                headers: {
-                  'Authorization': `Bearer ${this.groqToken}`,
-                  'Content-Type': 'application/json'
-                },
-                timeout: 10000
-              }
-            }, 1, 'text');
-
-            let rawJson = extractResponse.data.choices[0]?.message?.content?.trim() || '';
-            rawJson = cleanMarkdownJson(rawJson);
-            const extracted = JSON.parse(rawJson);
-
-            if (extracted.value != null && isFinite(extracted.value) && extracted.value > 0) {
-              const currency = extracted.currency || 'USD';
-              const rawValue = extracted.value;
-              // L2: Regex rescue — re-scan Brave text for K/M/B suffix LLM may have dropped
-              extracted.value = rescueDroppedSuffix(extracted.value, braveText);
-              // L3: USD-range sanity — if value is still implausibly tiny, apply ×1000
-              extracted.value = usdSanityRescue(extracted.value, currency, metricType);
-              if (extracted.value !== rawValue) {
-                logger.debug(`🔧 Suffix rescue: ${rawValue} → ${extracted.value} ${currency} (${metricType})`);
-              }
-              const resolvedType = (extracted.type === 'pricePerSqm' || extracted.type === 'income')
-                ? extracted.type : metricType;
-              if (!parsedData.cities[matchedCity]) {
-                parsedData.cities[matchedCity] = {
-                  current: { pricePerSqm: null, income: null },
-                  historical: { pricePerSqm: null, income: null, decade: histDecade }
-                };
-              }
-              const bucket = parsedData.cities[matchedCity][period];
-              if (!bucket[resolvedType]) {
-                if (resolvedType === 'income') {
-                  bucket[resolvedType] = { value: extracted.value, currency, type: 'single' };
-                } else {
-                  bucket[resolvedType] = { value: extracted.value, currency };
-                }
-                logger.debug(`👁️ Extract #${i + 1}: ${matchedCity}/${period}/${resolvedType} = ${extracted.value} ${currency}`);
-              } else {
-                logger.debug(`👁️ Extract #${i + 1}: ${matchedCity}/${period}/${resolvedType} already filled, skipping`);
-              }
-            } else {
-              logger.debug(`👁️ Extract #${i + 1}: ${matchedCity}/${period}/${metricType} = null`);
-            }
-          } catch (err) {
-            console.warn(`⚠️ Extract #${i + 1} failed: ${err.message}`);
-          }
-        })();
-
-        pendingExtractions.push(extractionPromise);
-      } else {
-        logger.debug(`👁️ Extract #${i + 1}: no city match or empty result, skipping`);
+      if (braveText.trim()) {
+        searchResultsContext.push({ query: searchQuery, text: braveText });
       }
 
       if (i < callsToRun.length - 1) {
@@ -1446,77 +1321,156 @@ Rules:
       }
     }
 
-    await Promise.all(pendingExtractions);
+    // ── Round 2: Structured JSON extraction ────────────────────────────────
+    // One LLM call sees all search results and outputs typed schema.
+    // The LLM handles suffix expansion, currency normalisation,
+    // annualisation (monthly × 12), and temporal selection — no rescue needed.
+    const combinedText = searchResultsContext
+      .map((r, i) => `=== Result ${i + 1} (query: "${r.query}") ===\n${r.text.slice(0, 1500)}`)
+      .join('\n\n');
 
-    const incomeFallbacks = [];
-    for (const [city, data] of Object.entries(parsedData.cities)) {
-      const country = CITY_TO_COUNTRY[city];
-      if (!country) continue;
+    const round2SystemPrompt = getSeedMetricExtractionPrompt({
+      cities: Object.keys(parsedData.cities),
+      histDecade,
+      currentYear
+    });
 
+    let schema = { cities: {} };
+    try {
+      const round2Response = await this.groqWithRetry({
+        url: this.llmUrl,
+        data: {
+          model: this.llmModel,
+          messages: [
+            { role: 'system', content: round2SystemPrompt },
+            { role: 'user', content: combinedText || '(no search results)' }
+          ],
+          response_format: { type: 'json_object' },
+          temperature: 0,
+          max_tokens: 1200
+        },
+        config: {
+          headers: {
+            'Authorization': `Bearer ${this.groqToken}`,
+            'Content-Type': 'application/json'
+          },
+          timeout: this.llmTimeouts.toolCall
+        }
+      }, 2, 'text');
+
+      let rawJson = round2Response.data.choices[0]?.message?.content?.trim() || '';
+      rawJson = cleanMarkdownJson(rawJson);
+      schema = JSON.parse(rawJson);
+      logger.debug(`🔬 Round 2: schema cities: ${Object.keys(schema.cities || {}).join(', ')}`);
+    } catch (err) {
+      console.warn(`⚠️ Round 2 extraction failed: ${err.message} — using empty schema`);
+    }
+
+    // Map schema → parsedData.cities (same shape buildSeedMetricTable expects)
+    for (const [cityKey, cityData] of Object.entries(schema.cities || {})) {
+      const norm = cityKey.toLowerCase().trim();
+      if (!parsedData.cities[norm]) {
+        parsedData.cities[norm] = {
+          current: { pricePerSqm: null, income: null },
+          historical: { pricePerSqm: null, income: null, decade: histDecade }
+        };
+      }
       for (const period of ['current', 'historical']) {
-        if (data[period]?.income) continue;
-        const yearToken = period === 'current' ? String(currentYear) : histDecade;
-        const fallbackQuery = period === 'current'
-          ? `${country} average income ${yearToken}`
-          : `${country} average income ${yearToken} World Bank ILO historical`;
-        logger.debug(`🔄 Income fallback: ${city}/${period} → "${fallbackQuery}"`);
-
-        incomeFallbacks.push((async () => {
-          try {
-            await new Promise(r => setTimeout(r, 1100));
-            const braveResult = await this.searchBrave(fallbackQuery, input.clientIp || '127.0.0.1');
-            if (!braveResult?.trim()) return;
-
-            const extractResponse = await this.groqWithRetry({
-              url: this.llmUrl,
-              data: {
-                model: this.llmModel,
-                messages: [
-                  { role: 'system', content: microExtractPrompt },
-                  { role: 'user', content: `Search query: "${fallbackQuery}"\n\nSearch results:\n${braveResult.slice(0, 3000)}` }
-                ],
-                temperature: 0,
-                max_tokens: 100
-              },
-              config: {
-                headers: {
-                  'Authorization': `Bearer ${this.groqToken}`,
-                  'Content-Type': 'application/json'
-                },
-                timeout: 10000
-              }
-            }, 1, 'text');
-
-            let rawJson = extractResponse.data.choices[0]?.message?.content?.trim() || '';
-            rawJson = cleanMarkdownJson(rawJson);
-            const extracted = JSON.parse(rawJson);
-
-            if (extracted.value != null && isFinite(extracted.value) && extracted.value > 0) {
-              const currency = extracted.currency || 'USD';
-              const rawValue = extracted.value;
-              // L2: Regex rescue — re-scan Brave text for K/M/B suffix LLM may have dropped
-              extracted.value = rescueDroppedSuffix(extracted.value, braveResult);
-              // L3: USD-range sanity — if value is still implausibly tiny, apply ×1000
-              extracted.value = usdSanityRescue(extracted.value, currency, 'income');
-              if (extracted.value !== rawValue) {
-                logger.debug(`🔧 Suffix rescue (fallback): ${rawValue} → ${extracted.value} ${currency} (income)`);
-              }
-              if (!data[period].income) {
-                data[period].income = { value: extracted.value, currency, type: 'single' };
-                logger.debug(`🔄 Fallback hit: ${city}/${period}/income = ${extracted.value} ${currency} (via ${country})`);
-              }
-            } else {
-              logger.debug(`🔄 Fallback miss: ${city}/${period}/income still null (${country})`);
-            }
-          } catch (err) {
-            console.warn(`⚠️ Income fallback failed for ${city}/${period}: ${err.message}`);
-          }
-        })());
+        const pd = cityData[period];
+        if (!pd) continue;
+        const bucket = parsedData.cities[norm][period];
+        const pps = pd.pricePerSqm;
+        if (pps?.value != null && isFinite(pps.value) && pps.value > 0 && !bucket.pricePerSqm) {
+          bucket.pricePerSqm = { value: Math.round(pps.value), currency: pps.currency || 'USD' };
+          logger.debug(`🔬 R2: ${norm}/${period}/pricePerSqm = ${Math.round(pps.value)} ${pps.currency || '?'}`);
+        }
+        const inc = pd.income;
+        if (inc?.value != null && isFinite(inc.value) && inc.value > 0 && !bucket.income) {
+          bucket.income = { value: Math.round(inc.value), currency: inc.currency || 'USD', type: 'single' };
+          logger.debug(`🔬 R2: ${norm}/${period}/income = ${Math.round(inc.value)} ${inc.currency || '?'}`);
+        }
       }
     }
 
-    if (incomeFallbacks.length > 0) {
-      await Promise.all(incomeFallbacks);
+    // ── Round 3: Demand-driven gap-fill ───────────────────────────────────
+    // Only fires for null fields — one targeted Brave search per gap, max 8 total.
+    // Schema-driven: we know exactly what's missing and why to search for it.
+    const gapFills = [];
+    for (const [city, data] of Object.entries(parsedData.cities)) {
+      const country = CITY_TO_COUNTRY[city];
+      for (const period of ['current', 'historical']) {
+        const yearToken = period === 'current' ? String(currentYear) : histDecade;
+        if (!data[period]?.income) {
+          gapFills.push({ city, country: country || city, period, field: 'income', yearToken });
+        }
+        if (!data[period]?.pricePerSqm) {
+          gapFills.push({ city, country: country || city, period, field: 'pricePerSqm', yearToken });
+        }
+      }
+    }
+
+    if (gapFills.length > 0) {
+      logger.debug(`🔍 Round 3: ${gapFills.length} gap(s) — ${gapFills.map(g => `${g.city}/${g.period}/${g.field}`).join(', ')}`);
+
+      const gapResults = await Promise.all(gapFills.slice(0, 8).map(async (gap, idx) => {
+        await new Promise(r => setTimeout(r, idx * 1100));
+        const query = gap.field === 'income'
+          ? `${gap.country} average income ${gap.yearToken} annual`
+          : `${gap.city} residential property price per sqm ${gap.yearToken}`;
+
+        logger.debug(`🔍 Gap-fill ${idx + 1}: "${query}"`);
+        const braveResult = await this.searchBrave(query, clientIp);
+        if (!braveResult?.trim()) return null;
+
+        const gapSystemPrompt = getSeedMetricGapFillPrompt({
+          field: gap.field, city: gap.city, period: gap.period, yearToken: gap.yearToken
+        });
+
+        try {
+          const gapResponse = await this.groqWithRetry({
+            url: this.llmUrl,
+            data: {
+              model: this.llmModel,
+              messages: [
+                { role: 'system', content: gapSystemPrompt },
+                { role: 'user', content: `Query: "${query}"\n\n${braveResult.slice(0, 2500)}` }
+              ],
+              response_format: { type: 'json_object' },
+              temperature: 0,
+              max_tokens: 150
+            },
+            config: {
+              headers: {
+                'Authorization': `Bearer ${this.groqToken}`,
+                'Content-Type': 'application/json'
+              },
+              timeout: 12000
+            }
+          }, 1, 'text');
+
+          let raw = gapResponse.data.choices[0]?.message?.content?.trim() || '';
+          raw = cleanMarkdownJson(raw);
+          return { ...gap, extracted: JSON.parse(raw) };
+        } catch (err) {
+          console.warn(`⚠️ Gap-fill failed ${gap.city}/${gap.period}/${gap.field}: ${err.message}`);
+          return null;
+        }
+      }));
+
+      for (const result of gapResults) {
+        if (!result?.extracted) continue;
+        const { city, period, field, extracted } = result;
+        const { value, currency } = extracted;
+        if (!value || !isFinite(value) || value <= 0) continue;
+        const bucket = parsedData.cities[city]?.[period];
+        if (!bucket || bucket[field]) continue;
+        if (field === 'income') {
+          bucket.income = { value: Math.round(value), currency: currency || 'USD', type: 'single' };
+        } else {
+          bucket.pricePerSqm = { value: Math.round(value), currency: currency || 'USD' };
+        }
+        logger.debug(`🔍 Gap-fill hit: ${city}/${period}/${field} = ${Math.round(value)} ${currency || '?'}`);
+      }
     }
 
     for (const [city, data] of Object.entries(parsedData.cities)) {
