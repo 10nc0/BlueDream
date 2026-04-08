@@ -445,21 +445,6 @@ function rescueDroppedSuffix(value, text) {
   return rescued;
 }
 
-/**
- * USD-equivalent sanity check. If the extracted value converts to an implausibly
- * tiny USD amount, assume a K suffix was dropped and apply ×1000 correction.
- * Thresholds (conservative): pricePerSqm < $0.01/sqm | income < $10/year
- */
-function usdSanityRescue(value, currency, type) {
-  const usdRate = CURRENCY_REGISTRY[currency]?.usdRate ?? 1;
-  const usdEquiv = value * usdRate;
-  const threshold = type === 'pricePerSqm' ? 0.01 : 10;
-  if (usdEquiv < threshold) {
-    return value * 1_000;
-  }
-  return value;
-}
-
 module.exports = {
   calculateSeedMetric,
   formatCurrency,
@@ -469,5 +454,4 @@ module.exports = {
   injectTFRColumn,
   applyMultiplier,
   rescueDroppedSuffix,
-  usdSanityRescue,
 };
