@@ -61,7 +61,7 @@ const PIPELINE_STEPS = {
 const { AttachmentIngestion } = require('./attachment-ingestion');
 const { analyzeImageWithGroqVision, processChemistryContent, classifyScholasticDomain } = require('./attachment-cascade');
 const { createQueryTimestamp, buildTemporalContent } = require('./time-format');
-const { buildSeedMetricTable, validateSeedMetricOutput, parseTFR, injectTFRColumn, rescueDroppedSuffix, usdSanityRescue } = require('./seed-metric-calculator');
+const { buildSeedMetricTable, validateSeedMetricOutput, parseTFR, injectTFRColumn, rescueDroppedSuffix } = require('./seed-metric-calculator');
 const { cleanMarkdownJson, EMPTY_TABLE_ROW_REGEX } = require('./parse-helpers');
 const { buildGatherPromptBlock } = require('../prompts/seed-metric');
 
@@ -1404,8 +1404,6 @@ Rules:
               const rawValue = extracted.value;
               // L2: Regex rescue — re-scan Brave text for K/M/B suffix LLM may have dropped
               extracted.value = rescueDroppedSuffix(extracted.value, braveText);
-              // L3: USD-range sanity — if value is still implausibly tiny, apply ×1000
-              extracted.value = usdSanityRescue(extracted.value, currency, metricType);
               if (extracted.value !== rawValue) {
                 logger.debug(`🔧 Suffix rescue: ${rawValue} → ${extracted.value} ${currency} (${metricType})`);
               }
@@ -1494,8 +1492,6 @@ Rules:
               const rawValue = extracted.value;
               // L2: Regex rescue — re-scan Brave text for K/M/B suffix LLM may have dropped
               extracted.value = rescueDroppedSuffix(extracted.value, braveResult);
-              // L3: USD-range sanity — if value is still implausibly tiny, apply ×1000
-              extracted.value = usdSanityRescue(extracted.value, currency, 'income');
               if (extracted.value !== rawValue) {
                 logger.debug(`🔧 Suffix rescue (fallback): ${rawValue} → ${extracted.value} ${currency} (income)`);
               }
