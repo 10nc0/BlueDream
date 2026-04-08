@@ -1,6 +1,7 @@
 const MetadataExtractor = require('../../lib/metadata-extractor');
 const { validate, schemas } = require('../../lib/validators');
 const { detectLanguage, getFtsConfig } = require('../../utils/language-detector');
+const phiBreathe = require('../../lib/phi-breathe');
 
 function register(app, deps) {
     const { pool, helpers, middleware, tenantMiddleware, logger } = deps;
@@ -34,6 +35,8 @@ function register(app, deps) {
             let dropResult;
             let extracted;
 
+            const stamp = phiBreathe.phiBreatheCount;
+
             if (existingDrop.rows.length > 0) {
                 const combinedText = existingDrop.rows[0].metadata_text + ' ' + metadata_text;
                 extracted = metadataExtractor.extract(combinedText);
@@ -43,18 +46,19 @@ function register(app, deps) {
                     SET metadata_text = $1,
                         extracted_tags = $2::text[],
                         extracted_dates = $3::text[],
+                        phi_breathe_stamp = $4,
                         updated_at = NOW()
-                    WHERE book_id = $4 AND discord_message_id = $5
+                    WHERE book_id = $5 AND discord_message_id = $6
                     RETURNING *
-                `, [combinedText, extracted.tags, extracted.dates, internalBookId, discord_message_id]);
+                `, [combinedText, extracted.tags, extracted.dates, stamp, internalBookId, discord_message_id]);
             } else {
                 extracted = metadataExtractor.extract(metadata_text);
 
                 dropResult = await client.query(`
-                    INSERT INTO ${tenantSchema}.drops (book_id, discord_message_id, metadata_text, extracted_tags, extracted_dates)
-                    VALUES ($1, $2, $3, $4::text[], $5::text[])
+                    INSERT INTO ${tenantSchema}.drops (book_id, discord_message_id, metadata_text, extracted_tags, extracted_dates, phi_breathe_stamp)
+                    VALUES ($1, $2, $3, $4::text[], $5::text[], $6)
                     RETURNING *
-                `, [internalBookId, discord_message_id, metadata_text, extracted.tags, extracted.dates]);
+                `, [internalBookId, discord_message_id, metadata_text, extracted.tags, extracted.dates, stamp]);
             }
 
             res.json({ success: true, drop: dropResult.rows[0], extracted });
@@ -111,6 +115,15 @@ function register(app, deps) {
             }
 
             const escapedTag = tag.replace(/[.+*?[\](){}|\\^$]/g, '\\$&');
+            const internalBookId = bookResult.rows[0].id;
+            const stamp = phiBreathe.phiBreatheCount;
+            const performedBy = req.user?.email || null;
+
+            await client.query(`
+                INSERT INTO ${tenantSchema}.drop_events
+                    (book_id, discord_message_id, event_type, event_data, performed_by)
+                VALUES ($1, $2, 'tag_removed', $3::jsonb, $4)
+            `, [internalBookId, discord_message_id, JSON.stringify({ tag, phi_breathe_stamp: stamp }), performedBy]);
 
             const dropResult = await client.query(`
                 UPDATE ${tenantSchema}.drops
@@ -119,7 +132,7 @@ function register(app, deps) {
                     updated_at = NOW()
                 WHERE book_id = $3 AND discord_message_id = $4
                 RETURNING *
-            `, [tag, escapedTag, bookResult.rows[0].id, discord_message_id]);
+            `, [tag, escapedTag, internalBookId, discord_message_id]);
 
             if (dropResult.rows.length === 0) {
                 return res.status(404).json({ error: 'Drop not found' });
@@ -152,6 +165,15 @@ function register(app, deps) {
             }
 
             const escapedDate = date.replace(/[.+*?[\](){}|\\^$]/g, '\\$&');
+            const internalBookId = bookResult.rows[0].id;
+            const stamp = phiBreathe.phiBreatheCount;
+            const performedBy = req.user?.email || null;
+
+            await client.query(`
+                INSERT INTO ${tenantSchema}.drop_events
+                    (book_id, discord_message_id, event_type, event_data, performed_by)
+                VALUES ($1, $2, 'date_removed', $3::jsonb, $4)
+            `, [internalBookId, discord_message_id, JSON.stringify({ date, phi_breathe_stamp: stamp }), performedBy]);
 
             const dropResult = await client.query(`
                 UPDATE ${tenantSchema}.drops
@@ -160,7 +182,7 @@ function register(app, deps) {
                     updated_at = NOW()
                 WHERE book_id = $3 AND discord_message_id = $4
                 RETURNING *
-            `, [date, escapedDate, bookResult.rows[0].id, discord_message_id]);
+            `, [date, escapedDate, internalBookId, discord_message_id]);
 
             if (dropResult.rows.length === 0) {
                 return res.status(404).json({ error: 'Drop not found' });
@@ -170,6 +192,35 @@ function register(app, deps) {
         } catch (error) {
             logger.error({ err: error }, 'Error removing date');
             res.status(500).json({ error: 'An internal error occurred. Please try again.' });
+        }
+    });
+
+    app.get('/api/drops/:book_id/:discord_message_id/events', requireAuth, setTenantContext, async (req, res, next) => {
+        try {
+            const tenantSchema = req.tenantContext?.tenantSchema || req.tenantSchema;
+            const { book_id, discord_message_id } = req.params;
+            const client = req.dbClient || pool;
+
+            const bookResult = await client.query(
+                `SELECT id FROM ${tenantSchema}.books WHERE fractal_id = $1`,
+                [book_id]
+            );
+
+            if (bookResult.rows.length === 0) {
+                return res.status(404).json({ error: 'Book not found' });
+            }
+
+            const eventsResult = await client.query(`
+                SELECT id, event_type, event_data, performed_by, created_at
+                FROM ${tenantSchema}.drop_events
+                WHERE book_id = $1 AND discord_message_id = $2
+                ORDER BY created_at ASC
+            `, [bookResult.rows[0].id, discord_message_id]);
+
+            res.json({ events: eventsResult.rows });
+        } catch (error) {
+            logger.error({ err: error }, 'Error fetching drop events');
+            next(error);
         }
     });
 

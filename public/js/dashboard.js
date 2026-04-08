@@ -8591,6 +8591,63 @@ function displayDrop(section, drop, extracted, fractalBookId) {
     // Show or hide display based on content
     if (tags.length > 0 || dates.length > 0) {
         display.classList.remove('hidden');
+
+        // Events history toggle (lazy-loads on first click)
+        const historyToggle = document.createElement('span');
+        historyToggle.className = 'drop-history-toggle';
+        historyToggle.dataset.messageId = drop.discord_message_id;
+        historyToggle.dataset.bookId = bookFractalId;
+        historyToggle.dataset.loaded = 'false';
+        historyToggle.textContent = 'history ▾';
+        historyToggle.title = 'Show change history';
+
+        const historyPanel = document.createElement('div');
+        historyPanel.className = 'drop-history-panel hidden';
+
+        historyToggle.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            if (historyPanel.classList.contains('hidden')) {
+                historyPanel.classList.remove('hidden');
+                historyToggle.textContent = 'history ▴';
+                if (historyToggle.dataset.loaded === 'false') {
+                    historyToggle.dataset.loaded = 'true';
+                    historyPanel.textContent = '…';
+                    try {
+                        const r = await window.authFetch(
+                            `/api/drops/${encodeURIComponent(bookFractalId)}/${encodeURIComponent(drop.discord_message_id)}/events`
+                        );
+                        const data = await r.json();
+                        const events = data.events || [];
+                        historyPanel.replaceChildren();
+                        if (events.length === 0) {
+                            const empty = document.createElement('span');
+                            empty.className = 'drop-history-empty';
+                            empty.textContent = 'no changes recorded';
+                            historyPanel.appendChild(empty);
+                        } else {
+                            events.forEach(ev => {
+                                const row = document.createElement('div');
+                                row.className = 'drop-history-row';
+                                const typeLabel = ev.event_type === 'tag_removed' ? '−tag' : ev.event_type === 'date_removed' ? '−date' : ev.event_type;
+                                const val = ev.event_data?.tag || ev.event_data?.date || '';
+                                const who = ev.performed_by ? ` · ${ev.performed_by}` : '';
+                                const when = new Date(ev.created_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' });
+                                row.textContent = `${typeLabel} ${val}${who} · ${when}`;
+                                historyPanel.appendChild(row);
+                            });
+                        }
+                    } catch (_) {
+                        historyPanel.textContent = 'failed to load history';
+                    }
+                }
+            } else {
+                historyPanel.classList.add('hidden');
+                historyToggle.textContent = 'history ▾';
+            }
+        });
+
+        display.appendChild(historyToggle);
+        display.appendChild(historyPanel);
     } else {
         display.classList.add('hidden');
     }
