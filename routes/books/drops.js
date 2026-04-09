@@ -1,5 +1,5 @@
 const MetadataExtractor = require('../../lib/metadata-extractor');
-const { validate, schemas } = require('../../lib/validators');
+const { validate, schemas, BOOK_ID_PATTERN } = require('../../lib/validators');
 const { detectLanguage, getFtsConfig } = require('../../utils/language-detector');
 const phiBreathe = require('../../lib/phi-breathe');
 
@@ -95,15 +95,11 @@ function register(app, deps) {
         }
     });
 
-    app.delete('/api/drops/tag', requireAuth, setTenantContext, async (req, res, next) => {
+    app.delete('/api/drops/tag', requireAuth, setTenantContext, validate(schemas.deleteDropTag), async (req, res, next) => {
         try {
             const tenantSchema = req.tenantContext?.tenantSchema || req.tenantSchema;
-            const { book_id, discord_message_id, tag } = req.body;
+            const { book_id, discord_message_id, tag } = req.validated;
             const client = req.dbClient || pool;
-
-            if (!book_id || !discord_message_id || !tag) {
-                return res.status(400).json({ error: 'Missing required fields' });
-            }
 
             const bookResult = await client.query(
                 `SELECT id FROM ${tenantSchema}.books WHERE fractal_id = $1`,
@@ -145,15 +141,11 @@ function register(app, deps) {
         }
     });
 
-    app.delete('/api/drops/date', requireAuth, setTenantContext, async (req, res) => {
+    app.delete('/api/drops/date', requireAuth, setTenantContext, validate(schemas.deleteDropDate), async (req, res) => {
         try {
             const tenantSchema = req.tenantContext?.tenantSchema || req.tenantSchema;
-            const { book_id, discord_message_id, date } = req.body;
+            const { book_id, discord_message_id, date } = req.validated;
             const client = req.dbClient || pool;
-
-            if (!book_id || !discord_message_id || !date) {
-                return res.status(400).json({ error: 'Missing required fields' });
-            }
 
             const bookResult = await client.query(
                 `SELECT id FROM ${tenantSchema}.books WHERE fractal_id = $1`,
@@ -201,6 +193,13 @@ function register(app, deps) {
             const { book_id, discord_message_id } = req.params;
             const client = req.dbClient || pool;
 
+            if (!BOOK_ID_PATTERN.test(book_id)) {
+                return res.status(400).json({ error: 'Invalid book ID format' });
+            }
+            if (!discord_message_id || discord_message_id.length > 100) {
+                return res.status(400).json({ error: 'Invalid message ID' });
+            }
+
             const bookResult = await client.query(
                 `SELECT id FROM ${tenantSchema}.books WHERE fractal_id = $1`,
                 [book_id]
@@ -233,6 +232,9 @@ function register(app, deps) {
 
             if (!query) {
                 return res.status(400).json({ error: 'Query parameter required' });
+            }
+            if (query.length > 500) {
+                return res.status(400).json({ error: 'Query too long (max 500 characters)' });
             }
 
             const bookResult = await client.query(
