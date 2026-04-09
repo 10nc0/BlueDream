@@ -1,5 +1,6 @@
 const { config } = require('../../config');
 const { verifyBookOwnership, checkShareRateLimit } = require('./shared');
+const { z } = require('../../lib/validators');
 
 function register(app, deps) {
     const { pool, helpers, middleware, logger } = deps;
@@ -35,7 +36,8 @@ function register(app, deps) {
             const { book_id } = req.params;
             const { email } = req.body;
 
-            if (!email || !email.includes('@')) {
+            const emailResult = z.string().email().safeParse(email);
+            if (!emailResult.success) {
                 return res.status(400).json({ error: 'Valid email required' });
             }
 

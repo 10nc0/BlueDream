@@ -23,6 +23,14 @@ function register(app, deps) {
             if (!Array.isArray(order) || order.length === 0) {
                 return res.status(400).json({ error: 'order array required' });
             }
+            for (const item of order) {
+                if (typeof item.fractal_id !== 'string' || !item.fractal_id) {
+                    return res.status(400).json({ error: 'Each item must have a fractal_id string' });
+                }
+                if (!Number.isInteger(item.sort_order) || item.sort_order < 0) {
+                    return res.status(400).json({ error: 'Each item must have a non-negative integer sort_order' });
+                }
+            }
             const tenantSchema = req.tenantSchema;
             await Promise.all(order.map(({ fractal_id, sort_order }) =>
                 pool.query(
