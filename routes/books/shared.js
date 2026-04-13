@@ -1,6 +1,6 @@
 const BOOK_LIST_COLS = `b.id, b.name, b.input_platform, b.output_platform, b.output_credentials,
     b.output_0n_url, b.outpipes_user, b.status, b.contact_info, b.tags, b.archived, b.fractal_id,
-    b.created_by_admin_id, b.created_at, b.updated_at, b.sort_order,
+    b.created_by_admin_id, b.created_at, b.updated_at, b.sort_order, b.monthly_email_backup,
     (SELECT br.join_code FROM core.book_registry br WHERE br.fractal_id = b.fractal_id LIMIT 1) AS join_code`;
 
 const BOOKS_CACHE = new Map();
