@@ -1,6 +1,7 @@
 const archiver = require('archiver');
 const axios = require('axios');
 const crypto = require('crypto');
+const { generateBookCsv } = require('../../utils/book-csv-export');
 
 function register(app, deps) {
     const { pool, bots, helpers, middleware, tenantMiddleware, logger } = deps;
@@ -165,6 +166,9 @@ function register(app, deps) {
 
             let attachmentStats = { total: 0, downloaded: 0, failed: 0 };
 
+            const CDN_BASE_DELAY_MS = 300;
+            const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
             for (const msg of messages) {
                 if (msg.attachments && msg.attachments.length > 0) {
                     const timestamp = new Date(msg._timestamp);
@@ -192,9 +196,16 @@ function register(app, deps) {
                             fileHashes.push({ path: folderPath, sha256: sha256(attachmentBuffer), size: attachmentBuffer.length });
                             archive.append(attachmentBuffer, { name: folderPath });
                             attachmentStats.downloaded++;
+
+                            const retryAfterHeader = response.headers?.['retry-after'] || response.headers?.['x-ratelimit-reset-after'];
+                            const delayMs = retryAfterHeader
+                                ? Math.max(parseFloat(retryAfterHeader) * 1000, CDN_BASE_DELAY_MS)
+                                : CDN_BASE_DELAY_MS;
+                            await sleep(delayMs);
                         } catch (err) {
                             attachmentStats.failed++;
                             logger.warn({ filename: attachment.filename, err }, 'Failed to download attachment');
+                            await sleep(CDN_BASE_DELAY_MS);
                         }
                     }
                 }
@@ -277,6 +288,44 @@ To verify file integrity, compare SHA256 hashes in manifest.json:
     const exportMiddleware = setTenantContext ? [requireAuth, setTenantContext] : [requireAuth];
     app.get('/api/books/:book_id/export', ...exportMiddleware, exportBookHandler);
     app.post('/api/books/:book_id/export', ...exportMiddleware, exportBookHandler);
+
+    app.get('/api/books/:book_id/export/csv', ...exportMiddleware, async (req, res) => {
+        const { book_id } = req.params;
+        try {
+            const client = req.dbClient || pool;
+            let tenantSchema = req.tenantContext?.tenantSchema || req.tenantSchema;
+            const isDev = req.tenantContext?.userRole === 'dev';
+
+            if (isDev) {
+                const reg = await client.query(
+                    `SELECT tenant_schema FROM core.book_registry WHERE fractal_id = $1 LIMIT 1`,
+                    [book_id]
+                );
+                if (reg.rows.length > 0) tenantSchema = reg.rows[0].tenant_schema;
+            }
+
+            const bookResult = await client.query(
+                `SELECT name FROM ${tenantSchema}.books WHERE fractal_id = $1`,
+                [book_id]
+            );
+            if (bookResult.rows.length === 0) {
+                return res.status(404).json({ error: 'Book not found in your tenant' });
+            }
+
+            const bookName = bookResult.rows[0].name;
+            const csv = await generateBookCsv(pool, tenantSchema, book_id, bookName, null, null);
+            const filename = `${bookName.replace(/[^a-z0-9]/gi, '_')}_export.csv`;
+
+            res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+            res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+            res.send(csv);
+        } catch (err) {
+            logger.error({ err, bookId: book_id }, 'Error creating CSV export');
+            if (!res.headersSent) {
+                res.status(500).json({ error: 'An internal error occurred. Please try again.' });
+            }
+        }
+    });
 
     app.get('/api/books/:book_id/closings', requireAuth, setTenantContext, async (req, res) => {
         const { book_id } = req.params;

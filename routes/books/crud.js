@@ -577,7 +577,7 @@ function register(app, deps) {
             const tenantSchema = req.tenantContext.tenantSchema;
             const userId = req.userId;
             const { id } = req.params;
-            const { name, inputPlatform, outputPlatform, inputCredentials, outputCredentials, contactInfo, tags, status, userOutputUrl, password } = req.body;
+            const { name, inputPlatform, outputPlatform, inputCredentials, outputCredentials, contactInfo, tags, status, userOutputUrl, password, monthly_email_backup } = req.body;
 
             if (userOutputUrl && userOutputUrl === NYANBOOK_LEDGER_WEBHOOK) {
                 return res.status(400).json({
@@ -641,6 +641,7 @@ function register(app, deps) {
             if (tags !== undefined) { updates.push(`tags = $${paramCount++}`); values.push(tags || []); }
             if (status !== undefined) { updates.push(`status = $${paramCount++}`); values.push(status); }
             if (userOutputUrl !== undefined) { updates.push(`output_0n_url = $${paramCount++}`); values.push(userOutputUrl); }
+            if (monthly_email_backup !== undefined) { updates.push(`monthly_email_backup = $${paramCount++}`); values.push(!!monthly_email_backup); }
 
             updates.push(`updated_at = NOW()`);
             values.push(id);

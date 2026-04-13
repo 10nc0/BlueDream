@@ -479,6 +479,14 @@
                     </div>
                     <small class="form-help">Optional - add tags to organize your books</small>
                 </div>
+                <!-- Monthly email backup opt-in: shown in edit mode only -->
+                <div class="form-group" id="monthlyEmailSection" style="display: none;">
+                    <label style="display: flex; align-items: center; gap: 0.6rem; cursor: pointer; user-select: none;">
+                        <input type="checkbox" id="monthlyEmailBackup" style="width: 16px; height: 16px; accent-color: #a78bfa; cursor: pointer; flex-shrink: 0;">
+                        <span style="color: #e2e8f0; font-size: 0.875rem;">Email me monthly backup and report ☑️</span>
+                    </label>
+                    <small class="form-help" style="margin-top: 0.25rem; display: block;">Sends a count summary and CSV of this month's messages to your account email on the 1st of each month.</small>
+                </div>
                 <div style="display: flex; gap: 1rem; margin-top: 1.5rem;">
                     <button type="button" class="btn cancel-modal-btn" style="flex: 1; background: rgba(148, 163, 184, 0.1); border: 1px solid rgba(148, 163, 184, 0.2); color: #94a3b8;" data-modal="botModal">Cancel</button>
                     <button type="submit" class="submit-btn" style="flex: 2;">Save Book</button>
