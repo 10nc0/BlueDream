@@ -390,7 +390,8 @@ Analyze the data and answer the user's question. Count carefully when asked abou
                 if (!audit_thread_id) {
                     return res.json({ success: true, logs: [], message: `No audit history yet for ${book_name}`, thread_id: null });
                 }
-                const logs = await horusBot.fetchAuditLogs(audit_thread_id, parseInt(limit));
+                const safeLimit = Math.max(1, Math.min(Number.isNaN(parseInt(limit, 10)) ? 25 : parseInt(limit, 10), 100));
+                const logs = await horusBot.fetchAuditLogs(audit_thread_id, safeLimit);
                 const stats = await horusBot.getAuditStats(audit_thread_id);
                 return res.json({ success: true, logs, stats, thread_id: audit_thread_id });
             }
@@ -403,7 +404,8 @@ Analyze the data and answer the user's question. Count carefully when asked abou
                 [tenantSchema]
             );
 
-            const perLimit = Math.max(5, Math.min(parseInt(limit), 25));
+            const parsedLimit = parseInt(limit, 10);
+            const perLimit = Math.max(5, Math.min(Number.isNaN(parsedLimit) ? 25 : parsedLimit, 25));
 
             const bookGroups = await Promise.all(
                 booksResult.rows.map(async (row) => {
