@@ -1412,6 +1412,7 @@
                 headerRight.appendChild(waBtn);
                 headerRight.appendChild(createIconBtn('editBook', 'Edit', 'rgba(251, 191, 36, 0.15)', '#fbbf24', '✏️'));
                 headerRight.appendChild(createIconBtn('downloadEntireBook', 'Download Entire Book', 'rgba(34, 197, 94, 0.15)', '#22c55e', '⬇️'));
+                headerRight.appendChild(createIconBtn('downloadBookCsv', 'Export as CSV', 'rgba(99, 102, 241, 0.15)', '#818cf8', '📄'));
                 headerRight.appendChild(createIconBtn('deleteBook', 'Delete', 'rgba(239, 68, 68, 0.15)', '#ef4444', '🗑️'));
             }
             headerBar.appendChild(headerRight);
@@ -1512,6 +1513,7 @@
                 btns.querySelectorAll('[data-show-whatsapp-activation]').forEach(b => b.dataset.showWhatsappActivation = fractalId);
                 btns.querySelectorAll('[data-edit-book]').forEach(b => b.dataset.editBook = fractalId);
                 btns.querySelectorAll('[data-download-entire-book]').forEach(b => b.dataset.downloadEntireBook = fractalId);
+                btns.querySelectorAll('[data-download-book-csv]').forEach(b => b.dataset.downloadBookCsv = fractalId);
                 btns.querySelectorAll('[data-delete-book]').forEach(b => b.dataset.deleteBook = fractalId);
             }
 
@@ -4645,6 +4647,8 @@
             setBotWebhooks([]);
             renderTags();
             renderWebhooks();
+            const _mesSec = document.getElementById('monthlyEmailSection');
+            if (_mesSec) _mesSec.style.display = 'none';
             document.getElementById('botModal').classList.add('active');
         }
 
@@ -4706,6 +4710,13 @@
             if (agentTokenSection) {
                 agentTokenSection.style.display = 'block';
                 loadAgentTokenStatus(fractalId);
+            }
+
+            const monthlyEmailSection = document.getElementById('monthlyEmailSection');
+            const monthlyEmailCheckbox = document.getElementById('monthlyEmailBackup');
+            if (monthlyEmailSection && monthlyEmailCheckbox) {
+                monthlyEmailSection.style.display = 'block';
+                monthlyEmailCheckbox.checked = book.monthly_email_backup !== false;
             }
             
             document.getElementById('botModal').classList.add('active');
@@ -4899,6 +4910,9 @@
             setBotWebhooks([]);
             userOutpipes = [];
 
+            const _mesSec = document.getElementById('monthlyEmailSection');
+            if (_mesSec) _mesSec.style.display = 'none';
+
             // Hide outpipes section and clear
             const outpipesSection = document.getElementById('outpipesSection');
             if (outpipesSection) outpipesSection.style.display = 'none';
@@ -5037,12 +5051,14 @@
                 
             }
             
+            const monthlyEmailCheckbox = document.getElementById('monthlyEmailBackup');
             const botData = {
                 name: bookName || 'New Book',
                 inputCredentials: {},
                 outputCredentials: outputCredentials,
                 tags: botTags,
-                status: 'active'
+                status: 'active',
+                ...(editingBookId && monthlyEmailCheckbox ? { monthly_email_backup: monthlyEmailCheckbox.checked } : {})
             };
             
             // Add userOutputUrl from first webhook (for output_0n_url column)
@@ -6402,6 +6418,36 @@
             } catch (error) {
                 console.error('❌ Download error:', error);
                 showDownloadStatus(`❌ Download failed: ${error.message}`, 'error');
+            }
+        }
+
+        async function downloadBookCsv(fractalId) {
+            try {
+                showDownloadStatus('📄 Preparing CSV export...', 'info');
+                const accessToken = localStorage.getItem('accessToken');
+                const response = await fetch(`/api/books/${fractalId}/export/csv`, {
+                    headers: { 'Authorization': `Bearer ${accessToken}` }
+                });
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                const blob = await response.blob();
+                const disposition = response.headers.get('content-disposition') || '';
+                const nameMatch = disposition.match(/filename="?([^"]+)"?/);
+                const filename = nameMatch ? nameMatch[1] : `${fractalId}_export.csv`;
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = filename;
+                document.body.appendChild(link);
+                link.click();
+                showDownloadStatus('✅ CSV exported', 'success');
+                setTimeout(() => { document.body.removeChild(link); URL.revokeObjectURL(url); }, 100);
+                setTimeout(() => {
+                    const statusEl = document.getElementById('downloadStatus');
+                    if (statusEl) statusEl.style.display = 'none';
+                }, 5000);
+            } catch (error) {
+                console.error('❌ CSV export error:', error);
+                showDownloadStatus(`❌ CSV export failed: ${error.message}`, 'error');
             }
         }
 
@@ -8947,6 +8993,14 @@ document.addEventListener('click', function(e) {
         e.preventDefault();
         const fractalId = target.getAttribute('data-download-entire-book');
         if (fractalId) downloadEntireBook(fractalId);
+        return;
+    }
+
+    // Export as CSV button
+    if (target.hasAttribute('data-download-book-csv')) {
+        e.preventDefault();
+        const fractalId = target.getAttribute('data-download-book-csv');
+        if (fractalId) downloadBookCsv(fractalId);
         return;
     }
     
