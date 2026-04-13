@@ -25,7 +25,7 @@ const CSV_HEADER = buildCsvRow([
     'message_id'
 ]);
 
-async function generateBookCsv(pool, tenantSchema, bookFractalId, bookName, since, until) {
+async function generateBookCsvRows(pool, tenantSchema, bookFractalId, bookName, since, until) {
     const schemaSafe = assertValidSchemaName(tenantSchema);
 
     const params = [bookFractalId];
@@ -49,7 +49,7 @@ async function generateBookCsv(pool, tenantSchema, bookFractalId, bookName, sinc
             params
         );
 
-        const rows = result.rows.map(row => buildCsvRow([
+        return result.rows.map(row => buildCsvRow([
             row.recorded_at ? new Date(row.recorded_at).toISOString() : '',
             bookName || '',
             row.sender_name || '',
@@ -58,12 +58,15 @@ async function generateBookCsv(pool, tenantSchema, bookFractalId, bookName, sinc
             row.attachment_cid || '',
             row.message_fractal_id || ''
         ]));
-
-        return [CSV_HEADER, ...rows].join('\n');
     } catch (err) {
         logger.warn({ err: err.message, tenantSchema, bookFractalId }, '📊 CSV export: anatta_messages query failed');
-        return CSV_HEADER + '\n';
+        return [];
     }
 }
 
-module.exports = { generateBookCsv };
+async function generateBookCsv(pool, tenantSchema, bookFractalId, bookName, since, until) {
+    const rows = await generateBookCsvRows(pool, tenantSchema, bookFractalId, bookName, since, until);
+    return [CSV_HEADER, ...rows].join('\n');
+}
+
+module.exports = { generateBookCsv, generateBookCsvRows, CSV_HEADER };
