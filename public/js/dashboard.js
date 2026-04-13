@@ -3459,226 +3459,266 @@
             }
         }
         
-        async function loadNyanAuditHistory(limit = 50) {
+        async function loadNyanAuditHistory(limit = 25) {
             const contentDiv = document.getElementById('nyanAuditHistoryContent');
             const paginationDiv = document.getElementById('nyanAuditHistoryPagination');
-            
+
+            const statusColors = {
+                'PASS': '#10b981', 'FAIL': '#ef4444', 'WARNING': '#f59e0b',
+                'REVIEW': '#6366f1', 'NYAN': '#22d3ee'
+            };
+
+            const isSourceTruncated = (text) => {
+                if (!text || text === 'No answer') return false;
+                if (text.endsWith('...')) return true;
+                if (text.length >= 490 && !/[.!?\n]$/.test(text.trim())) return true;
+                return false;
+            };
+
+            const buildLogItem = (log) => {
+                const parsed = log.parsed || {};
+                const status = parsed.status?.toUpperCase() || 'NYAN';
+                const statusColor = statusColors[status] || '#94a3b8';
+                const date = new Date(log.timestamp).toLocaleString();
+                const query = parsed.query || log.content || 'No query';
+                const answer = parsed.answer || 'No answer';
+                const confidence = parsed.confidence;
+                const queryNeedsTruncation = query.length > 150;
+                const answerNeedsTruncation = answer.length > 200;
+                const expandable = queryNeedsTruncation || answerNeedsTruncation;
+                let expanded = false;
+
+                const card = document.createElement('div');
+                card.className = 'audit-log-card';
+                card.style.cssText = 'padding: 0.875rem; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(148, 163, 184, 0.12); border-radius: 7px; margin-bottom: 0.625rem; transition: border-color 0.2s ease, background 0.2s ease;' + (expandable ? 'cursor: pointer;' : '');
+
+                const headerRow = document.createElement('div');
+                headerRow.style.cssText = 'display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.4rem;';
+
+                const leftGroup = document.createElement('div');
+                leftGroup.style.cssText = 'display: flex; align-items: center; gap: 0.5rem;';
+                const statusBadge = document.createElement('span');
+                statusBadge.style.cssText = `padding: 0.2rem 0.45rem; background: ${statusColor}20; border: 1px solid ${statusColor}; border-radius: 4px; color: ${statusColor}; font-weight: 600; font-size: 0.7rem;`;
+                statusBadge.textContent = status;
+                leftGroup.appendChild(statusBadge);
+                headerRow.appendChild(leftGroup);
+
+                const rightGroup = document.createElement('div');
+                rightGroup.style.cssText = 'display: flex; align-items: center; gap: 0.4rem;';
+                const dateSpan = document.createElement('span');
+                dateSpan.style.cssText = 'color: #64748b; font-size: 0.7rem;';
+                dateSpan.textContent = date;
+                rightGroup.appendChild(dateSpan);
+                if (expandable) {
+                    const expandIcon = document.createElement('span');
+                    expandIcon.style.cssText = 'color: #64748b; font-size: 0.6rem; transition: transform 0.2s ease;';
+                    expandIcon.textContent = '▼';
+                    expandIcon.className = 'audit-expand-icon';
+                    rightGroup.appendChild(expandIcon);
+                }
+                headerRow.appendChild(rightGroup);
+                card.appendChild(headerRow);
+
+                const bodyWrap = document.createElement('div');
+                bodyWrap.style.cssText = 'overflow: hidden; transition: max-height 0.3s ease;';
+
+                const queryDiv = document.createElement('div');
+                queryDiv.style.cssText = 'color: #94a3b8; font-size: 0.8rem; margin-bottom: 0.375rem;';
+                const queryStrong = document.createElement('strong');
+                queryStrong.textContent = 'Q: ';
+                queryDiv.appendChild(queryStrong);
+                const queryText = document.createElement('span');
+                queryText.textContent = queryNeedsTruncation ? query.substring(0, 150) + '...' : query;
+                queryDiv.appendChild(queryText);
+                bodyWrap.appendChild(queryDiv);
+
+                const answerDiv = document.createElement('div');
+                answerDiv.style.cssText = 'color: #e2e8f0; font-size: 0.8rem;';
+                const answerStrong = document.createElement('strong');
+                answerStrong.textContent = 'A: ';
+                answerDiv.appendChild(answerStrong);
+                const answerText = document.createElement('span');
+                answerText.textContent = answerNeedsTruncation ? answer.substring(0, 200) + '...' : answer;
+                answerDiv.appendChild(answerText);
+                bodyWrap.appendChild(answerDiv);
+
+                const truncatedIndicator = document.createElement('div');
+                truncatedIndicator.style.cssText = 'display: none; color: #f59e0b; font-size: 0.65rem; margin-top: 0.3rem; font-style: italic;';
+                truncatedIndicator.textContent = '⚠ response truncated at source';
+                bodyWrap.appendChild(truncatedIndicator);
+                card.appendChild(bodyWrap);
+
+                if (confidence) {
+                    const confDiv = document.createElement('div');
+                    confDiv.style.cssText = 'color: #64748b; font-size: 0.7rem; margin-top: 0.375rem;';
+                    confDiv.textContent = `Confidence: ${confidence}%`;
+                    card.appendChild(confDiv);
+                }
+
+                if (expandable) {
+                    requestAnimationFrame(() => { bodyWrap.style.maxHeight = bodyWrap.scrollHeight + 'px'; });
+                    card.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        expanded = !expanded;
+                        const icon = card.querySelector('.audit-expand-icon');
+                        if (expanded) {
+                            queryText.textContent = query;
+                            answerText.textContent = answer;
+                            if (isSourceTruncated(answer)) truncatedIndicator.style.display = 'block';
+                            card.style.borderColor = 'rgba(59, 130, 246, 0.3)';
+                            card.style.background = 'rgba(15, 23, 42, 0.8)';
+                            if (icon) icon.style.transform = 'rotate(180deg)';
+                        } else {
+                            queryText.textContent = queryNeedsTruncation ? query.substring(0, 150) + '...' : query;
+                            answerText.textContent = answerNeedsTruncation ? answer.substring(0, 200) + '...' : answer;
+                            truncatedIndicator.style.display = 'none';
+                            card.style.borderColor = 'rgba(148, 163, 184, 0.12)';
+                            card.style.background = 'rgba(15, 23, 42, 0.6)';
+                            if (icon) icon.style.transform = 'rotate(0deg)';
+                        }
+                        bodyWrap.style.maxHeight = bodyWrap.scrollHeight + 'px';
+                    });
+                }
+                return card;
+            };
+
+            const buildBookSection = (bookGroup) => {
+                const { book, audits } = bookGroup;
+                const hasAudits = audits && audits.length > 0;
+                const isLegacy = !!book.is_legacy;
+
+                const section = document.createElement('div');
+                section.style.cssText = isLegacy
+                    ? 'margin-bottom: 0.75rem; border: 1px solid rgba(245, 158, 11, 0.2); border-radius: 8px; overflow: hidden;'
+                    : 'margin-bottom: 0.75rem; border: 1px solid rgba(148, 163, 184, 0.15); border-radius: 8px; overflow: hidden;';
+
+                const headerBtn = document.createElement('button');
+                headerBtn.style.cssText = isLegacy
+                    ? 'width: 100%; display: flex; align-items: center; justify-content: space-between; padding: 0.625rem 0.875rem; background: rgba(120, 53, 15, 0.25); border: none; cursor: pointer; text-align: left; transition: background 0.15s ease;'
+                    : 'width: 100%; display: flex; align-items: center; justify-content: space-between; padding: 0.625rem 0.875rem; background: rgba(15, 23, 42, 0.8); border: none; cursor: pointer; text-align: left; transition: background 0.15s ease;';
+                headerBtn.onmouseenter = () => { headerBtn.style.background = isLegacy ? 'rgba(120, 53, 15, 0.4)' : 'rgba(30, 41, 59, 0.9)'; };
+                headerBtn.onmouseleave = () => { headerBtn.style.background = isOpen
+                    ? (isLegacy ? 'rgba(120, 53, 15, 0.4)' : 'rgba(30, 41, 59, 0.9)')
+                    : (isLegacy ? 'rgba(120, 53, 15, 0.25)' : 'rgba(15, 23, 42, 0.8)'); };
+
+                const nameSpan = document.createElement('span');
+                nameSpan.style.cssText = isLegacy
+                    ? 'color: #fbbf24; font-size: 0.875rem; font-weight: 600; display: flex; align-items: center; gap: 0.5rem;'
+                    : 'color: #e2e8f0; font-size: 0.875rem; font-weight: 600;';
+                nameSpan.textContent = isLegacy ? `📜 ${book.name}` : `📚 ${book.name}`;
+                if (isLegacy) {
+                    const legacyTag = document.createElement('span');
+                    legacyTag.style.cssText = 'padding: 0.1rem 0.35rem; background: rgba(245, 158, 11, 0.15); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 3px; color: #f59e0b; font-size: 0.6rem; font-weight: 500;';
+                    legacyTag.textContent = 'pre-migration';
+                    nameSpan.appendChild(legacyTag);
+                }
+                headerBtn.appendChild(nameSpan);
+
+                const rightMeta = document.createElement('span');
+                rightMeta.style.cssText = 'display: flex; align-items: center; gap: 0.5rem;';
+                const countBadge = document.createElement('span');
+                countBadge.style.cssText = hasAudits
+                    ? (isLegacy
+                        ? 'padding: 0.15rem 0.4rem; background: rgba(245, 158, 11, 0.15); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 4px; color: #f59e0b; font-size: 0.65rem; font-weight: 600;'
+                        : 'padding: 0.15rem 0.4rem; background: rgba(34, 211, 238, 0.15); border: 1px solid rgba(34, 211, 238, 0.3); border-radius: 4px; color: #22d3ee; font-size: 0.65rem; font-weight: 600;')
+                    : 'padding: 0.15rem 0.4rem; background: rgba(100, 116, 139, 0.1); border: 1px solid rgba(100, 116, 139, 0.2); border-radius: 4px; color: #64748b; font-size: 0.65rem;';
+                countBadge.textContent = hasAudits ? `${audits.length} log${audits.length !== 1 ? 's' : ''}` : 'no history';
+                rightMeta.appendChild(countBadge);
+
+                const chevron = document.createElement('span');
+                chevron.style.cssText = 'color: #64748b; font-size: 0.6rem; transition: transform 0.2s ease;';
+                chevron.textContent = '▼';
+                rightMeta.appendChild(chevron);
+                headerBtn.appendChild(rightMeta);
+                section.appendChild(headerBtn);
+
+                const body = document.createElement('div');
+                body.style.cssText = 'overflow: hidden; transition: max-height 0.25s ease;';
+
+                const bodyInner = document.createElement('div');
+                bodyInner.style.cssText = 'padding: 0.75rem;';
+
+                if (hasAudits) {
+                    audits.forEach(log => bodyInner.appendChild(buildLogItem(log)));
+                } else {
+                    const emptyMsg = document.createElement('p');
+                    emptyMsg.style.cssText = 'color: #64748b; font-size: 0.8rem; text-align: center; padding: 0.75rem 0; margin: 0;';
+                    emptyMsg.textContent = 'No audit history yet — run your first AI check for this book.';
+                    bodyInner.appendChild(emptyMsg);
+                }
+
+                body.appendChild(bodyInner);
+                section.appendChild(body);
+
+                let isOpen = hasAudits;
+
+                const applyOpenState = (open, animate) => {
+                    if (open) {
+                        body.style.maxHeight = body.scrollHeight + 'px';
+                        chevron.style.transform = 'rotate(180deg)';
+                        headerBtn.style.background = 'rgba(30, 41, 59, 0.9)';
+                    } else {
+                        body.style.maxHeight = '0px';
+                        chevron.style.transform = 'rotate(0deg)';
+                        headerBtn.style.background = 'rgba(15, 23, 42, 0.8)';
+                    }
+                };
+
+                requestAnimationFrame(() => {
+                    if (isOpen) {
+                        body.style.maxHeight = body.scrollHeight + 'px';
+                        chevron.style.transform = 'rotate(180deg)';
+                        headerBtn.style.background = 'rgba(30, 41, 59, 0.9)';
+                    } else {
+                        body.style.maxHeight = '0px';
+                    }
+                });
+
+                headerBtn.addEventListener('click', () => {
+                    isOpen = !isOpen;
+                    applyOpenState(isOpen, true);
+                });
+
+                return section;
+            };
+
             try {
                 const response = await window.authFetch(`/api/nyan-ai/discord-history?limit=${limit}`);
-                
+
                 if (!response.ok) {
                     const text = await response.text();
                     let errorMsg = 'Failed to load history';
-                    try {
-                        const errData = JSON.parse(text);
-                        errorMsg = errData.error || errorMsg;
-                    } catch (e) {
-                        errorMsg = `Server error (${response.status})`;
-                    }
+                    try { errorMsg = JSON.parse(text).error || errorMsg; } catch (e) { errorMsg = `Server error (${response.status})`; }
                     throw new Error(errorMsg);
                 }
-                
+
                 const data = await response.json();
-                
-                if (data.message || !data.logs || data.logs.length === 0) {
+
+                if (!data.books || data.books.length === 0) {
                     const emptyDiv = document.createElement('div');
-                    emptyDiv.style.cssText = 'text-align: center; padding: 2rem; color: #94a3b8;';
-                    const iconDiv = document.createElement('div');
-                    iconDiv.style.cssText = 'font-size: 3rem; margin-bottom: 1rem;';
-                    iconDiv.textContent = '👁️';
-                    emptyDiv.appendChild(iconDiv);
-                    const p1 = document.createElement('p');
-                    p1.textContent = 'No audit history yet.';
-                    emptyDiv.appendChild(p1);
-                    const p2 = document.createElement('p');
-                    p2.style.cssText = 'font-size: 0.875rem; margin-top: 0.5rem;';
-                    p2.textContent = 'Run your first AI check to see results here.';
-                    emptyDiv.appendChild(p2);
+                    emptyDiv.style.cssText = 'text-align: center; padding: 2.5rem; color: #94a3b8;';
+                    emptyDiv.innerHTML = '<div style="font-size:2.5rem;margin-bottom:0.75rem;">👁️</div><p>No books found.</p><p style="font-size:0.8rem;margin-top:0.375rem;">Create your first book to start logging AI audits.</p>';
                     contentDiv.replaceChildren(emptyDiv);
                     paginationDiv.replaceChildren();
                     return;
                 }
-                
-                const statusColors = {
-                    'PASS': '#10b981',
-                    'FAIL': '#ef4444',
-                    'WARNING': '#f59e0b',
-                    'REVIEW': '#6366f1'
-                };
-                
-                const buildStatsDiv = () => {
-                    if (!data.stats || data.stats.total === 0) return null;
-                    const statsDiv = document.createElement('div');
-                    statsDiv.style.cssText = 'display: flex; gap: 0.75rem; margin-bottom: 1rem; flex-wrap: wrap;';
-                    
-                    const statItems = [
-                        { icon: '✅', label: 'Pass', value: data.stats.pass, bg: 'rgba(16, 185, 129, 0.15)', border: 'rgba(16, 185, 129, 0.3)', color: '#10b981' },
-                        { icon: '❌', label: 'Fail', value: data.stats.fail, bg: 'rgba(239, 68, 68, 0.15)', border: 'rgba(239, 68, 68, 0.3)', color: '#ef4444' },
-                        { icon: '⚠️', label: 'Warning', value: data.stats.warning, bg: 'rgba(245, 158, 11, 0.15)', border: 'rgba(245, 158, 11, 0.3)', color: '#f59e0b' },
-                        { icon: '🔍', label: 'Review', value: data.stats.review, bg: 'rgba(99, 102, 241, 0.15)', border: 'rgba(99, 102, 241, 0.3)', color: '#6366f1' },
-                        { icon: '🎯', label: 'Avg', value: `${data.stats.averageConfidence}%`, bg: 'rgba(148, 163, 184, 0.15)', border: 'rgba(148, 163, 184, 0.3)', color: '#94a3b8' }
-                    ];
-                    
-                    statItems.forEach(item => {
-                        const el = document.createElement('div');
-                        el.style.cssText = `padding: 0.5rem 0.75rem; background: ${item.bg}; border: 1px solid ${item.border}; border-radius: 6px; color: ${item.color}; font-size: 0.8rem;`;
-                        el.textContent = `${item.icon} ${item.label}: ${item.value}`;
-                        statsDiv.appendChild(el);
-                    });
-                    return statsDiv;
-                };
-                
-                const isSourceTruncated = (text) => {
-                    if (!text || text === 'No answer') return false;
-                    if (text.endsWith('...')) return true;
-                    if (text.length >= 490 && !/[.!?\n]$/.test(text.trim())) return true;
-                    return false;
-                };
 
-                const buildLogItem = (log) => {
-                    const parsed = log.parsed || {};
-                    const status = parsed.status?.toUpperCase() || 'UNKNOWN';
-                    const statusColor = statusColors[status] || '#94a3b8';
-                    const date = new Date(log.timestamp).toLocaleString();
-                    const query = parsed.query || log.content || 'No query';
-                    const answer = parsed.answer || 'No answer';
-                    const confidence = parsed.confidence;
-                    const bookContext = parsed.bookContext;
-                    const queryNeedsTruncation = query.length > 150;
-                    const answerNeedsTruncation = answer.length > 200;
-                    const expandable = queryNeedsTruncation || answerNeedsTruncation;
-                    let expanded = false;
-                    
-                    const card = document.createElement('div');
-                    card.className = 'audit-log-card';
-                    card.style.cssText = 'padding: 1rem; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(148, 163, 184, 0.15); border-radius: 8px; margin-bottom: 0.75rem; transition: border-color 0.2s ease, background 0.2s ease;' + (expandable ? 'cursor: pointer;' : '');
-                    
-                    const headerRow = document.createElement('div');
-                    headerRow.style.cssText = 'display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem;';
-                    
-                    const leftGroup = document.createElement('div');
-                    leftGroup.style.cssText = 'display: flex; align-items: center; gap: 0.75rem;';
-                    const statusBadge = document.createElement('span');
-                    statusBadge.style.cssText = `padding: 0.25rem 0.5rem; background: ${statusColor}20; border: 1px solid ${statusColor}; border-radius: 4px; color: ${statusColor}; font-weight: 600; font-size: 0.75rem;`;
-                    statusBadge.textContent = status;
-                    leftGroup.appendChild(statusBadge);
-                    
-                    if (bookContext) {
-                        const bookSpan = document.createElement('span');
-                        bookSpan.style.cssText = 'color: #60a5fa; font-size: 0.75rem;';
-                        bookSpan.textContent = `📚 ${bookContext}`;
-                        leftGroup.appendChild(bookSpan);
-                    }
-                    headerRow.appendChild(leftGroup);
-                    
-                    const rightGroup = document.createElement('div');
-                    rightGroup.style.cssText = 'display: flex; align-items: center; gap: 0.5rem;';
-                    const dateSpan = document.createElement('span');
-                    dateSpan.style.cssText = 'color: #64748b; font-size: 0.75rem;';
-                    dateSpan.textContent = date;
-                    rightGroup.appendChild(dateSpan);
-                    if (expandable) {
-                        const expandIcon = document.createElement('span');
-                        expandIcon.style.cssText = 'color: #64748b; font-size: 0.65rem; transition: transform 0.2s ease;';
-                        expandIcon.textContent = '▼';
-                        expandIcon.className = 'audit-expand-icon';
-                        rightGroup.appendChild(expandIcon);
-                    }
-                    headerRow.appendChild(rightGroup);
-                    card.appendChild(headerRow);
-                    
-                    const bodyWrap = document.createElement('div');
-                    bodyWrap.style.cssText = 'overflow: hidden; transition: max-height 0.3s ease;';
-                    
-                    const queryDiv = document.createElement('div');
-                    queryDiv.style.cssText = 'color: #94a3b8; font-size: 0.875rem; margin-bottom: 0.5rem;';
-                    const queryStrong = document.createElement('strong');
-                    queryStrong.textContent = 'Query: ';
-                    queryDiv.appendChild(queryStrong);
-                    const queryText = document.createElement('span');
-                    queryText.textContent = queryNeedsTruncation ? query.substring(0, 150) + '...' : query;
-                    queryDiv.appendChild(queryText);
-                    bodyWrap.appendChild(queryDiv);
-                    
-                    const answerDiv = document.createElement('div');
-                    answerDiv.style.cssText = 'color: #e2e8f0; font-size: 0.875rem;';
-                    const answerStrong = document.createElement('strong');
-                    answerStrong.textContent = 'Answer: ';
-                    answerDiv.appendChild(answerStrong);
-                    const answerText = document.createElement('span');
-                    answerText.textContent = answerNeedsTruncation ? answer.substring(0, 200) + '...' : answer;
-                    answerDiv.appendChild(answerText);
-                    bodyWrap.appendChild(answerDiv);
-                    
-                    const truncatedIndicator = document.createElement('div');
-                    truncatedIndicator.style.cssText = 'display: none; color: #f59e0b; font-size: 0.7rem; margin-top: 0.375rem; font-style: italic;';
-                    truncatedIndicator.textContent = '⚠ response truncated at source';
-                    bodyWrap.appendChild(truncatedIndicator);
-                    
-                    card.appendChild(bodyWrap);
-                    
-                    if (confidence) {
-                        const confDiv = document.createElement('div');
-                        confDiv.style.cssText = 'color: #64748b; font-size: 0.75rem; margin-top: 0.5rem;';
-                        confDiv.textContent = `Confidence: ${confidence}%`;
-                        card.appendChild(confDiv);
-                    }
-                    
-                    if (expandable) {
-                        requestAnimationFrame(() => {
-                            bodyWrap.style.maxHeight = bodyWrap.scrollHeight + 'px';
-                        });
-                        card.addEventListener('click', (e) => {
-                            e.stopPropagation();
-                            expanded = !expanded;
-                            const icon = card.querySelector('.audit-expand-icon');
-                            if (expanded) {
-                                queryText.textContent = query;
-                                answerText.textContent = answer;
-                                if (isSourceTruncated(answer)) {
-                                    truncatedIndicator.style.display = 'block';
-                                }
-                                card.style.borderColor = 'rgba(59, 130, 246, 0.3)';
-                                card.style.background = 'rgba(15, 23, 42, 0.8)';
-                                if (icon) icon.style.transform = 'rotate(180deg)';
-                                bodyWrap.style.maxHeight = bodyWrap.scrollHeight + 'px';
-                            } else {
-                                queryText.textContent = queryNeedsTruncation ? query.substring(0, 150) + '...' : query;
-                                answerText.textContent = answerNeedsTruncation ? answer.substring(0, 200) + '...' : answer;
-                                truncatedIndicator.style.display = 'none';
-                                card.style.borderColor = 'rgba(148, 163, 184, 0.15)';
-                                card.style.background = 'rgba(15, 23, 42, 0.6)';
-                                if (icon) icon.style.transform = 'rotate(0deg)';
-                                bodyWrap.style.maxHeight = bodyWrap.scrollHeight + 'px';
-                            }
-                        });
-                    }
-                    
-                    return card;
-                };
-                
                 const fragment = document.createDocumentFragment();
-                const statsDiv = buildStatsDiv();
-                if (statsDiv) fragment.appendChild(statsDiv);
-                data.logs.forEach(log => fragment.appendChild(buildLogItem(log)));
+                data.books.forEach(group => fragment.appendChild(buildBookSection(group)));
                 contentDiv.replaceChildren(fragment);
-                
-                const paginationSpan = document.createElement('span');
-                paginationSpan.style.cssText = 'color: #64748b; font-size: 0.75rem;';
-                paginationSpan.textContent = `👁️ Powered by Horus | Showing ${data.logs.length} logs`;
-                paginationDiv.replaceChildren(paginationSpan);
-                
+
+                const totalLogs = data.books.reduce((s, g) => s + (g.audits?.length || 0), 0);
+                const activeBooks = data.books.filter(g => g.audits && g.audits.length > 0).length;
+                const footerSpan = document.createElement('span');
+                footerSpan.style.cssText = 'color: #64748b; font-size: 0.7rem;';
+                footerSpan.textContent = `👁️ Powered by Horus · ${data.books.length} book${data.books.length !== 1 ? 's' : ''} · ${totalLogs} recent log${totalLogs !== 1 ? 's' : ''}`;
+                paginationDiv.replaceChildren(footerSpan);
+
             } catch (error) {
                 console.error('Failed to load Nyan AI audit history:', error);
                 const errDiv = document.createElement('div');
                 errDiv.style.cssText = 'text-align: center; padding: 2rem; color: #ef4444;';
-                const errIcon = document.createElement('div');
-                errIcon.style.cssText = 'font-size: 2rem; margin-bottom: 0.5rem;';
-                errIcon.textContent = '⚠️';
-                errDiv.appendChild(errIcon);
-                const errP = document.createElement('p');
-                errP.textContent = error.message;
-                errDiv.appendChild(errP);
+                errDiv.innerHTML = `<div style="font-size:1.75rem;margin-bottom:0.5rem;">⚠️</div><p>${error.message}</p>`;
                 contentDiv.replaceChildren(errDiv);
                 paginationDiv.replaceChildren();
             }
