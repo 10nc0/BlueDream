@@ -205,7 +205,11 @@ function register(app, deps) {
                         } catch (err) {
                             attachmentStats.failed++;
                             logger.warn({ filename: attachment.filename, err }, 'Failed to download attachment');
-                            await sleep(CDN_BASE_DELAY_MS);
+                            const errRetryHeader = err?.response?.headers?.['retry-after'] || err?.response?.headers?.['x-ratelimit-reset-after'];
+                            const errDelayMs = errRetryHeader
+                                ? Math.max(parseFloat(errRetryHeader) * 1000, CDN_BASE_DELAY_MS)
+                                : CDN_BASE_DELAY_MS;
+                            await sleep(errDelayMs);
                         }
                     }
                 }

@@ -4647,6 +4647,8 @@
             setBotWebhooks([]);
             renderTags();
             renderWebhooks();
+            const _mesSec = document.getElementById('monthlyEmailSection');
+            if (_mesSec) _mesSec.style.display = 'none';
             document.getElementById('botModal').classList.add('active');
         }
 
@@ -4907,6 +4909,9 @@
             setBotTags([]);
             setBotWebhooks([]);
             userOutpipes = [];
+
+            const _mesSec = document.getElementById('monthlyEmailSection');
+            if (_mesSec) _mesSec.style.display = 'none';
 
             // Hide outpipes section and clear
             const outpipesSection = document.getElementById('outpipesSection');
