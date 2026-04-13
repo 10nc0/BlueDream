@@ -445,7 +445,34 @@ Analyze the data and answer the user's question. Count carefully when asked abou
                 })
             );
 
-            res.json({ success: true, books: bookGroups });
+            // Legacy: fetch from tenant-level ai_log_thread_id (pre-#97 history).
+            // These logs predate per-book threads; shown as a distinct group at the bottom.
+            let allGroups = bookGroups;
+            try {
+                const tenantRow = await pool.query(
+                    `SELECT ai_log_thread_id FROM core.tenant_catalog WHERE tenant_schema = $1`,
+                    [tenantSchema]
+                );
+                const legacyThreadId = tenantRow.rows[0]?.ai_log_thread_id;
+                if (legacyThreadId) {
+                    const legacyAudits = await horusBot.fetchAuditLogs(legacyThreadId, perLimit);
+                    // Only surface the legacy group if there are actual audit entries (skip init message)
+                    const auditOnly = legacyAudits.filter(l => l.type === 'audit');
+                    if (auditOnly.length > 0) {
+                        allGroups = [
+                            ...bookGroups,
+                            {
+                                book: { fractal_id: null, name: 'Legacy Audit Log', audit_thread_id: legacyThreadId, is_legacy: true },
+                                audits: auditOnly
+                            }
+                        ];
+                    }
+                }
+            } catch (legacyErr) {
+                logger.warn({ err: legacyErr.message }, 'Legacy audit thread fetch failed (non-blocking)');
+            }
+
+            res.json({ success: true, books: allGroups });
         } catch (error) {
             logger.error({ err: error }, 'Discord history error');
             res.status(500).json({ error: 'An internal error occurred. Please try again.' });

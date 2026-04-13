@@ -3585,25 +3585,42 @@
             const buildBookSection = (bookGroup) => {
                 const { book, audits } = bookGroup;
                 const hasAudits = audits && audits.length > 0;
+                const isLegacy = !!book.is_legacy;
 
                 const section = document.createElement('div');
-                section.style.cssText = 'margin-bottom: 0.75rem; border: 1px solid rgba(148, 163, 184, 0.15); border-radius: 8px; overflow: hidden;';
+                section.style.cssText = isLegacy
+                    ? 'margin-bottom: 0.75rem; border: 1px solid rgba(245, 158, 11, 0.2); border-radius: 8px; overflow: hidden;'
+                    : 'margin-bottom: 0.75rem; border: 1px solid rgba(148, 163, 184, 0.15); border-radius: 8px; overflow: hidden;';
 
                 const headerBtn = document.createElement('button');
-                headerBtn.style.cssText = 'width: 100%; display: flex; align-items: center; justify-content: space-between; padding: 0.625rem 0.875rem; background: rgba(15, 23, 42, 0.8); border: none; cursor: pointer; text-align: left; transition: background 0.15s ease;';
-                headerBtn.onmouseenter = () => { headerBtn.style.background = 'rgba(30, 41, 59, 0.9)'; };
-                headerBtn.onmouseleave = () => { headerBtn.style.background = isOpen ? 'rgba(30, 41, 59, 0.9)' : 'rgba(15, 23, 42, 0.8)'; };
+                headerBtn.style.cssText = isLegacy
+                    ? 'width: 100%; display: flex; align-items: center; justify-content: space-between; padding: 0.625rem 0.875rem; background: rgba(120, 53, 15, 0.25); border: none; cursor: pointer; text-align: left; transition: background 0.15s ease;'
+                    : 'width: 100%; display: flex; align-items: center; justify-content: space-between; padding: 0.625rem 0.875rem; background: rgba(15, 23, 42, 0.8); border: none; cursor: pointer; text-align: left; transition: background 0.15s ease;';
+                headerBtn.onmouseenter = () => { headerBtn.style.background = isLegacy ? 'rgba(120, 53, 15, 0.4)' : 'rgba(30, 41, 59, 0.9)'; };
+                headerBtn.onmouseleave = () => { headerBtn.style.background = isOpen
+                    ? (isLegacy ? 'rgba(120, 53, 15, 0.4)' : 'rgba(30, 41, 59, 0.9)')
+                    : (isLegacy ? 'rgba(120, 53, 15, 0.25)' : 'rgba(15, 23, 42, 0.8)'); };
 
                 const nameSpan = document.createElement('span');
-                nameSpan.style.cssText = 'color: #e2e8f0; font-size: 0.875rem; font-weight: 600;';
-                nameSpan.textContent = `📚 ${book.name}`;
+                nameSpan.style.cssText = isLegacy
+                    ? 'color: #fbbf24; font-size: 0.875rem; font-weight: 600; display: flex; align-items: center; gap: 0.5rem;'
+                    : 'color: #e2e8f0; font-size: 0.875rem; font-weight: 600;';
+                nameSpan.textContent = isLegacy ? `📜 ${book.name}` : `📚 ${book.name}`;
+                if (isLegacy) {
+                    const legacyTag = document.createElement('span');
+                    legacyTag.style.cssText = 'padding: 0.1rem 0.35rem; background: rgba(245, 158, 11, 0.15); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 3px; color: #f59e0b; font-size: 0.6rem; font-weight: 500;';
+                    legacyTag.textContent = 'pre-migration';
+                    nameSpan.appendChild(legacyTag);
+                }
                 headerBtn.appendChild(nameSpan);
 
                 const rightMeta = document.createElement('span');
                 rightMeta.style.cssText = 'display: flex; align-items: center; gap: 0.5rem;';
                 const countBadge = document.createElement('span');
                 countBadge.style.cssText = hasAudits
-                    ? 'padding: 0.15rem 0.4rem; background: rgba(34, 211, 238, 0.15); border: 1px solid rgba(34, 211, 238, 0.3); border-radius: 4px; color: #22d3ee; font-size: 0.65rem; font-weight: 600;'
+                    ? (isLegacy
+                        ? 'padding: 0.15rem 0.4rem; background: rgba(245, 158, 11, 0.15); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 4px; color: #f59e0b; font-size: 0.65rem; font-weight: 600;'
+                        : 'padding: 0.15rem 0.4rem; background: rgba(34, 211, 238, 0.15); border: 1px solid rgba(34, 211, 238, 0.3); border-radius: 4px; color: #22d3ee; font-size: 0.65rem; font-weight: 600;')
                     : 'padding: 0.15rem 0.4rem; background: rgba(100, 116, 139, 0.1); border: 1px solid rgba(100, 116, 139, 0.2); border-radius: 4px; color: #64748b; font-size: 0.65rem;';
                 countBadge.textContent = hasAudits ? `${audits.length} log${audits.length !== 1 ? 's' : ''}` : 'no history';
                 rightMeta.appendChild(countBadge);
