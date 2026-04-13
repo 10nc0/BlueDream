@@ -190,8 +190,30 @@ Analyze the data and answer the user's question. Count carefully when asked abou
                 // Time is the in-thread index (Discord snowflake); no duplicate noise.
                 try {
                     const primaryBook = bookContext.books[0];
-                    const primaryBookName = primaryBook.name || 'Unknown';
-                    const primaryFractalId = primaryBook.fractalId || primaryBook.fractal_id;
+                    let primaryBookName = primaryBook.name || 'Unknown';
+                    let primaryFractalId = primaryBook.fractalId || primaryBook.fractal_id;
+
+                    // Dev/admin drain: reroute to oldest book in tenant so dev testing
+                    // noise does not contaminate tenant-owned queried-book audit threads.
+                    // Tenant thread (ai_log_thread_id) remains as legacy read archive.
+                    const isDevQuerier = userRole === 'dev' || userRole === 'admin';
+                    if (isDevQuerier) {
+                        const drainRow = await pool.query(
+                            `SELECT fractal_id, book_name FROM core.book_registry
+                             WHERE tenant_schema = $1 AND status IN ('active', 'inactive')
+                             ORDER BY created_at ASC LIMIT 1`,
+                            [tenantSchema]
+                        );
+                        if (!drainRow.rows.length) {
+                            // No books in tenant — skip Discord write entirely
+                            logger.debug({ userRole, tenantSchema }, 'Dev audit drain: no books in tenant, skipping Discord write');
+                            primaryFractalId = null;
+                        } else {
+                            primaryFractalId = drainRow.rows[0].fractal_id;
+                            primaryBookName  = drainRow.rows[0].book_name;
+                            logger.debug({ userRole, drainFractalId: primaryFractalId }, 'Dev audit drain: rerouted to oldest book');
+                        }
+                    }
 
                     let threadId = null;
 
