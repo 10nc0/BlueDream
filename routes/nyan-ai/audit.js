@@ -456,8 +456,9 @@ Analyze the data and answer the user's question. Count carefully when asked abou
                 const legacyThreadId = tenantRow.rows[0]?.ai_log_thread_id;
                 if (legacyThreadId) {
                     const legacyAudits = await horusBot.fetchAuditLogs(legacyThreadId, perLimit);
-                    // Only surface the legacy group if there are actual audit entries (skip init message)
-                    const auditOnly = legacyAudits.filter(l => l.type === 'audit');
+                    // fetchAuditLogs returns {id, timestamp, content, embeds, parsed?} — no `type`.
+                    // Filter to entries with embeds = real audit results; skip plain-text init messages.
+                    const auditOnly = legacyAudits.filter(l => l.embeds && l.embeds.length > 0);
                     if (auditOnly.length > 0) {
                         allGroups = [
                             ...bookGroups,
