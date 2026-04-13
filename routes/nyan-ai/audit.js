@@ -184,29 +184,49 @@ Analyze the data and answer the user's question. Count carefully when asked abou
 
             logger.info({ processingMs: processingTime, userId: req.userId }, 'Nyan AI Audit complete');
 
-            if (idrisBot && idrisBot.isReady() && tenantSchema && bookContext) {
+            if (idrisBot && idrisBot.isReady() && tenantSchema && bookContext && bookContext.books.length > 0) {
+                // Write to the first (primary) book's per-book audit thread only.
+                // Multi-book queries: one entry, first book is the canonical log coordinate.
+                // Time is the in-thread index (Discord snowflake); no duplicate noise.
                 try {
-                    const tenantInfo = await pool.query(
-                        `SELECT id, ai_log_thread_id, audit_mirror_thread_id, audit_mirror_webhook_url FROM core.tenant_catalog WHERE tenant_schema = $1`,
-                        [tenantSchema]
-                    );
-                    if (tenantInfo.rows.length > 0) {
-                        const catalogId = tenantInfo.rows[0].id;
-                        let threadId = tenantInfo.rows[0]?.ai_log_thread_id;
-                        const mirrorThreadId = tenantInfo.rows[0]?.audit_mirror_thread_id;
-                        const mirrorWebhookUrl = tenantInfo.rows[0]?.audit_mirror_webhook_url;
+                    const primaryBook = bookContext.books[0];
+                    const primaryBookName = primaryBook.name || 'Unknown';
+                    const primaryFractalId = primaryBook.fractalId || primaryBook.fractal_id;
 
-                        if (!threadId) {
-                            const tenantId = parseInt(tenantSchema.replace('tenant_', ''));
-                            const threadInfo = await idrisBot.createAILogThread(tenantId, tenantSchema);
-                            threadId = threadInfo.threadId;
-                            await pool.query(
-                                `UPDATE core.tenant_catalog SET ai_log_thread_id = $1, ai_log_channel_id = $2 WHERE id = $3`,
-                                [threadInfo.threadId, threadInfo.channelId, catalogId]
-                            );
+                    let threadId = null;
+
+                    if (primaryFractalId) {
+                        const bookRow = await pool.query(
+                            `SELECT id, audit_thread_id FROM core.book_registry WHERE fractal_id = $1 AND tenant_schema = $2`,
+                            [primaryFractalId, tenantSchema]
+                        );
+
+                        if (bookRow.rows.length > 0) {
+                            const registryId = bookRow.rows[0].id;
+                            threadId = bookRow.rows[0].audit_thread_id;
+
+                            if (!threadId) {
+                                // Atomic test-and-set: only one process wins
+                                const threadInfo = await idrisBot.createBookAuditThread(primaryFractalId, primaryBookName);
+                                const writeResult = await pool.query(
+                                    `UPDATE core.book_registry SET audit_thread_id = $1 WHERE id = $2 AND audit_thread_id IS NULL RETURNING audit_thread_id`,
+                                    [threadInfo.threadId, registryId]
+                                );
+                                if (writeResult.rows.length > 0) {
+                                    threadId = writeResult.rows[0].audit_thread_id;
+                                } else {
+                                    // Another process provisioned first — re-read
+                                    const reread = await pool.query(
+                                        `SELECT audit_thread_id FROM core.book_registry WHERE id = $1`,
+                                        [registryId]
+                                    );
+                                    threadId = reread.rows[0]?.audit_thread_id || null;
+                                }
+                            }
                         }
+                    }
 
-                        const primaryBookName = bookContext.books[0]?.name || 'Unknown';
+                    if (threadId) {
                         const bookNames = bookContext.books.map(b => b.name).join(', ');
                         const auditPayload = {
                             status: 'NYAN',
@@ -223,16 +243,24 @@ Analyze the data and answer the user's question. Count carefully when asked abou
                             bookName: primaryBookName
                         };
                         await idrisBot.postAuditResult(threadId, auditPayload, query, primaryBookName);
-                        logger.info({ threadId }, 'Nyan AI Audit logged to Discord thread');
+                        logger.info({ threadId, fractalId: primaryFractalId }, 'Nyan AI Audit logged to per-book thread');
 
-                        if (mirrorWebhookUrl) {
-                            try {
+                        // Mirror outpipe — tenant-level, unchanged
+                        try {
+                            const mirrorInfo = await pool.query(
+                                `SELECT audit_mirror_thread_id, audit_mirror_webhook_url FROM core.tenant_catalog WHERE tenant_schema = $1`,
+                                [tenantSchema]
+                            );
+                            const mirrorThreadId = mirrorInfo.rows[0]?.audit_mirror_thread_id;
+                            const mirrorWebhookUrl = mirrorInfo.rows[0]?.audit_mirror_webhook_url;
+
+                            if (mirrorWebhookUrl) {
                                 const isDiscordMirror = /discord\.com\/api\/webhooks\//.test(mirrorWebhookUrl);
                                 if (isDiscordMirror) {
                                     const mirrorUrl = mirrorThreadId ? `${mirrorWebhookUrl}${mirrorWebhookUrl.includes('?') ? '&' : '?'}thread_id=${mirrorThreadId}` : mirrorWebhookUrl;
                                     await axios.post(mirrorUrl, {
                                         embeds: [{
-                                            title: `${auditPayload.status === 'NYAN' ? '🐱' : '📝'} Audit Mirror`,
+                                            title: `🐱 Audit Mirror`,
                                             color: idrisBot.getStatusColor(auditPayload.status),
                                             fields: [
                                                 { name: '📝 Query', value: query.length > 200 ? query.substring(0, 200) + '...' : query, inline: false },
@@ -265,21 +293,17 @@ Analyze the data and answer the user's question. Count carefully when asked abou
                                         });
                                     }
                                 }
-                                logger.info({ mirrorUrl: mirrorWebhookUrl.substring(0, 60), isDiscord: isDiscordMirror }, 'Nyan AI Audit mirrored');
-                            } catch (mirrorErr) {
-                                logger.warn({ mirrorUrl: mirrorWebhookUrl.substring(0, 60), err: mirrorErr.message }, 'Audit mirror post failed');
-                            }
-                        } else if (mirrorThreadId) {
-                            try {
+                                logger.info({ mirrorUrl: mirrorWebhookUrl.substring(0, 60) }, 'Nyan AI Audit mirrored');
+                            } else if (mirrorThreadId) {
                                 await idrisBot.postAuditResult(mirrorThreadId, auditPayload, query, primaryBookName);
                                 logger.info({ mirrorThreadId }, 'Nyan AI Audit mirrored to legacy thread');
-                            } catch (mirrorErr) {
-                                logger.warn({ mirrorThreadId, err: mirrorErr.message }, 'Legacy audit mirror post failed');
                             }
+                        } catch (mirrorErr) {
+                            logger.warn({ err: mirrorErr.message }, 'Audit mirror post failed (non-blocking)');
                         }
                     }
                 } catch (discordError) {
-                    logger.error({ err: discordError }, 'Failed to post Nyan AI audit to Discord');
+                    logger.error({ err: discordError }, 'Failed to post Nyan AI audit to per-book thread (non-blocking)');
                 }
             }
 
@@ -342,7 +366,7 @@ Analyze the data and answer the user's question. Count carefully when asked abou
     app.get('/api/nyan-ai/discord-history', requireAuth, async (req, res) => {
         try {
             const tenantSchema = req.tenantContext?.tenantSchema || req.tenantSchema;
-            const { limit = 50 } = req.query;
+            const { limit = 25, book_fractal_id } = req.query;
             const horusBot = bots?.horus;
 
             if (!tenantSchema) {
@@ -353,20 +377,51 @@ Analyze the data and answer the user's question. Count carefully when asked abou
                 return res.status(503).json({ error: 'AI audit log reader not available' });
             }
 
-            const tenantInfo = await pool.query(`
-                SELECT ai_log_thread_id FROM core.tenant_catalog WHERE tenant_schema = $1
-            `, [tenantSchema]);
-
-            const threadId = tenantInfo.rows[0]?.ai_log_thread_id;
-
-            if (!threadId) {
-                return res.json({ success: true, logs: [], message: 'No AI audit log thread exists yet' });
+            // --- Per-book mode: ?book_fractal_id=xxx ---
+            if (book_fractal_id) {
+                const bookRow = await pool.query(
+                    `SELECT book_name, audit_thread_id FROM core.book_registry WHERE fractal_id = $1 AND tenant_schema = $2`,
+                    [book_fractal_id, tenantSchema]
+                );
+                if (!bookRow.rows.length) {
+                    return res.status(404).json({ error: 'Book not found' });
+                }
+                const { audit_thread_id, book_name } = bookRow.rows[0];
+                if (!audit_thread_id) {
+                    return res.json({ success: true, logs: [], message: `No audit history yet for ${book_name}`, thread_id: null });
+                }
+                const logs = await horusBot.fetchAuditLogs(audit_thread_id, parseInt(limit));
+                const stats = await horusBot.getAuditStats(audit_thread_id);
+                return res.json({ success: true, logs, stats, thread_id: audit_thread_id });
             }
 
-            const logs = await horusBot.fetchAuditLogs(threadId, parseInt(limit));
-            const stats = await horusBot.getAuditStats(threadId);
+            // --- Universal mode: all books for this tenant, grouped ---
+            const booksResult = await pool.query(
+                `SELECT fractal_id, book_name, audit_thread_id FROM core.book_registry
+                 WHERE tenant_schema = $1 AND status IN ('active', 'inactive')
+                 ORDER BY created_at ASC`,
+                [tenantSchema]
+            );
 
-            res.json({ success: true, logs, stats, thread_id: threadId });
+            const perLimit = Math.max(5, Math.min(parseInt(limit), 25));
+
+            const bookGroups = await Promise.all(
+                booksResult.rows.map(async (row) => {
+                    const bookMeta = { fractal_id: row.fractal_id, name: row.book_name, audit_thread_id: row.audit_thread_id };
+                    if (!row.audit_thread_id) {
+                        return { book: bookMeta, audits: [] };
+                    }
+                    try {
+                        const audits = await horusBot.fetchAuditLogs(row.audit_thread_id, perLimit);
+                        return { book: bookMeta, audits };
+                    } catch (fetchErr) {
+                        logger.warn({ fractalId: row.fractal_id, err: fetchErr.message }, 'Horus fetch failed for book audit thread');
+                        return { book: bookMeta, audits: [] };
+                    }
+                })
+            );
+
+            res.json({ success: true, books: bookGroups });
         } catch (error) {
             logger.error({ err: error }, 'Discord history error');
             res.status(500).json({ error: 'An internal error occurred. Please try again.' });

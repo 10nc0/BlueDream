@@ -175,6 +175,43 @@ class IdrisBot {
         }
     }
 
+    async createBookAuditThread(fractalId, bookName) {
+        if (!this.client || !this.ready) {
+            throw new Error('Idris bot not initialized or not ready');
+        }
+        if (!this.webhookUrl) {
+            throw new Error('NYAN_AUDIT_WEBHOOK_URL not configured');
+        }
+
+        const channel = await this.getChannelFromWebhookUrl(this.webhookUrl);
+        const rawName = `📖 Book Audit — ${bookName} (${fractalId})`;
+        const threadName = rawName.substring(0, 100);
+
+        const thread = await channel.threads.create({
+            name: threadName,
+            autoArchiveDuration: 10080,
+            reason: `Auto-created AI audit thread for book: ${fractalId}`,
+            type: ChannelType.PublicThread
+        });
+
+        logger.info({ threadName, threadId: thread.id, fractalId }, '📖 Idris created book audit thread');
+
+        const HORUS_USER_ID = process.env.HORUS_BOT_USER_ID;
+        if (HORUS_USER_ID) {
+            try {
+                await thread.members.add(HORUS_USER_ID);
+            } catch (addErr) {
+                logger.warn({ err: addErr }, '⚠️ Failed to add Horus to book audit thread');
+            }
+        }
+
+        await this.postToThread(thread.id, {
+            content: `📖 **Book Audit Log Initialized**\n📅 Created: ${new Date().toISOString()}\n📚 Book: ${bookName}\n🔑 Fractal ID: ${fractalId}\n\n_All Nyan AI audit checks for this book will be logged here._`
+        });
+
+        return { threadId: thread.id, threadName, channelId: channel.id };
+    }
+
     async postAuditResult(threadId, auditResult, query, bookName = null) {
         const statusEmoji = AUDIT.STATUS_EMOJI;
 
