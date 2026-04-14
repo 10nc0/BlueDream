@@ -722,7 +722,7 @@ class PipelineOrchestrator {
     if (state.preflight.routingFlags?.needsRealtimeSearch && query) {
       logger.debug(`🌐 Real-time cascade: DDG → Brave for general query`);
       
-      let searchQuery = await this.extractCoreQuestion(query, input.conversationHistory);
+      let searchQuery = await this.extractCoreQuestion(query, input.conversationHistory || input.history || []);
       // Geo-localised search: append digest geo context so results reflect the user's location
       if (state.preflight.digestGeo && searchQuery && !searchQuery.toLowerCase().includes(state.preflight.digestGeo.toLowerCase())) {
         searchQuery = `${searchQuery} ${state.preflight.digestGeo}`;
@@ -2096,6 +2096,8 @@ Output ONLY the corrected table and summary lines:`;
       state.didSearch = true;
       // Extract URLs from retry search results and enrich with Firecrawl if configured
       const retryUrls = [...retrySearch.result.matchAll(/^   Source:\s*(https?:\/\/\S+)/gm)].map(m => m[1]);
+      // Update source URLs from the retry search — the first-pass sources are stale (bad query)
+      if (retryUrls.length > 0) state.searchSourceUrls = retryUrls;
       if (retryUrls.length > 0 && process.env.FIRECRAWL_API_KEY) {
         const { enrichUrls, substituteEnrichedSnippets } = require('./firecrawl-enricher');
         const enriched = await enrichUrls(retryUrls, { timeoutMs: 6000 });
