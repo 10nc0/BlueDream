@@ -7,6 +7,7 @@ const { createPipelineOrchestrator, fastStreamPersonality } = require('../../uti
 const { AI_MODELS, getLLMBackend } = require('../../config/constants');
 const { loadTools, getTool } = require('../../lib/tools/registry');
 const { cascade: searchCascade, cascadeMulti: searchCascadeMulti } = require('../../lib/tools/search-cascade');
+const { searchKernel } = require('../../lib/tools/search-kernel');
 
 const _llm = getLLMBackend();
 const PLAYGROUND_GROQ_TOKEN = resolveAIToken('playground');
@@ -82,6 +83,8 @@ const orchestrator = createPipelineOrchestrator({
     groqToken: resolveAIToken('playground'),
     auditToken: resolveAIToken('playground'),
     groqVisionToken: resolveAIToken('vision'),
+    searchKernel,
+    // Deprecated — kept for one-release backward compat; kernel takes precedence
     searchBrave,
     searchDuckDuckGo,
     searchCascade,

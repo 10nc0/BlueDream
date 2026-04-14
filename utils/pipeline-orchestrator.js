@@ -168,10 +168,12 @@ class PipelineOrchestrator {
     this.groqToken = config.groqToken;
     this.auditToken = config.auditToken || config.groqToken;
     this.groqVisionToken = config.groqVisionToken;
-    this.searchBrave = config.searchBrave;
-    this.searchDuckDuckGo = config.searchDuckDuckGo;
-    this.searchCascade = config.searchCascade;
-    this.searchCascadeMulti = config.searchCascadeMulti;
+    this.searchKernel = config.searchKernel;
+    // Deprecated: individual provider functions (kept for one-release backward compat)
+    this.searchBrave = config.searchBrave || null;
+    this.searchDuckDuckGo = config.searchDuckDuckGo || null;
+    this.searchCascade = config.searchCascade || null;
+    this.searchCascadeMulti = config.searchCascadeMulti || null;
     this.extractCoreQuestion = config.extractCoreQuestion;
     this.isIdentityQuery = config.isIdentityQuery;
     this.groqWithRetry = config.groqWithRetry;
@@ -190,6 +192,11 @@ class PipelineOrchestrator {
    * @returns {Promise<string[]>} Array of search results
    */
   async searchWithRateLimit(queries, clientIp, delayMs = 350) {
+    if (this.searchKernel) {
+      const { results } = await this.searchKernel.searchMulti({ queries, tier: 'premium', clientIp, delayMs });
+      return results;
+    }
+    // Legacy fallback (deprecated — remove after searchKernel is wired everywhere)
     if (this.searchCascadeMulti) {
       const { results } = await this.searchCascadeMulti({ queries, strategy: 'brave-first', clientIp, delayMs });
       return results;
@@ -197,16 +204,10 @@ class PipelineOrchestrator {
     const results = [];
     for (let i = 0; i < queries.length; i++) {
       const sq = queries[i];
-      let result = await this.searchBrave(sq, clientIp);
-      if (!result) {
-        result = await this.searchDuckDuckGo(sq);
-      }
-      if (result) {
-        results.push(`[${sq}]\n${result}`);
-      }
-      if (i < queries.length - 1) {
-        await new Promise(resolve => setTimeout(resolve, delayMs));
-      }
+      let result = this.searchBrave ? await this.searchBrave(sq, clientIp) : null;
+      if (!result && this.searchDuckDuckGo) result = await this.searchDuckDuckGo(sq);
+      if (result) results.push(`[${sq}]\n${result}`);
+      if (i < queries.length - 1) await new Promise(resolve => setTimeout(resolve, delayMs));
     }
     return results;
   }
@@ -416,14 +417,11 @@ class PipelineOrchestrator {
               
               if (keyTerms) {
                 logger.debug(`🔎 S-1: Vision search enrichment [${trigger}] — querying "${keyTerms}" (scholastic: ${scholastic.domain})`);
-                const visionSearch = this.searchCascade
-                  ? await this.searchCascade({ query: keyTerms, strategy: 'brave-first', clientIp: normalizedInput.clientIp })
-                  : await (async () => {
-                    const braveR = await this.searchBrave(keyTerms, normalizedInput.clientIp);
-                    if (braveR) return { result: braveR, provider: 'brave' };
-                    const ddgR = await this.searchDuckDuckGo(keyTerms);
-                    return { result: ddgR || null, provider: ddgR ? 'ddg' : null };
-                  })();
+                const visionSearch = this.searchKernel
+                  ? await this.searchKernel.search({ query: keyTerms, tier: 'premium', clientIp: normalizedInput.clientIp })
+                  : this.searchCascade
+                    ? await this.searchCascade({ query: keyTerms, strategy: 'brave-first', clientIp: normalizedInput.clientIp })
+                    : { result: null, provider: null };
                 
                 if (visionSearch.result) {
                   normalizedInput.extractedContent.push(
@@ -730,14 +728,11 @@ class PipelineOrchestrator {
         searchQuery = `${searchQuery} ${state.preflight.digestGeo}`;
         logger.debug(`🌍 Geo search: appended "${state.preflight.digestGeo}" to search query`);
       }
-      const cascadeResult = this.searchCascade
-        ? await this.searchCascade({ query: searchQuery, strategy: 'ddg-first', clientIp })
-        : await (async () => {
-          const ddgResult = await this.searchDuckDuckGo(searchQuery);
-          if (ddgResult) return { result: ddgResult, provider: 'ddg' };
-          const braveResult = await this.searchBrave(searchQuery, clientIp);
-          return { result: braveResult || null, provider: braveResult ? 'brave' : null };
-        })();
+      const cascadeResult = this.searchKernel
+        ? await this.searchKernel.search({ query: searchQuery, tier: 'standard', clientIp })
+        : this.searchCascade
+          ? await this.searchCascade({ query: searchQuery, strategy: 'ddg-first', clientIp })
+          : { result: null, provider: null };
       
       if (cascadeResult.result) {
         const _volRaw = classifyTemporalVolatility(input.query, state.preflight?.mode);
@@ -1362,12 +1357,16 @@ Rules:
       const searchQuery = args.query || '';
       logger.debug(`🦁 brave_search #${i + 1}: "${searchQuery}"`);
 
-      let result = await this.searchBrave(searchQuery, clientIp, { format: 'json' });
+      let result = this.searchKernel
+        ? (await this.searchKernel.search({ query: searchQuery, tier: 'premium', clientIp, format: 'json' })).result
+        : this.searchBrave ? await this.searchBrave(searchQuery, clientIp, { format: 'json' }) : null;
 
       if (result === null) {
         logger.debug(`🦁 brave_search #${i + 1}: null result, retrying after 1500ms...`);
         await new Promise(r => setTimeout(r, 1500));
-        result = await this.searchBrave(searchQuery, clientIp, { format: 'json' });
+        result = this.searchKernel
+          ? (await this.searchKernel.search({ query: searchQuery, tier: 'premium', clientIp, format: 'json' })).result
+          : this.searchBrave ? await this.searchBrave(searchQuery, clientIp, { format: 'json' }) : null;
       }
 
       let braveText = '';
@@ -1503,7 +1502,10 @@ Rules:
         incomeFallbacks.push((async () => {
           try {
             await new Promise(r => setTimeout(r, 1100));
-            const braveResult = await this.searchBrave(fallbackQuery, input.clientIp || '127.0.0.1');
+            const _incomeSearch = this.searchKernel
+              ? await this.searchKernel.search({ query: fallbackQuery, tier: 'premium', clientIp: input.clientIp || '127.0.0.1' })
+              : { result: this.searchBrave ? await this.searchBrave(fallbackQuery, input.clientIp || '127.0.0.1') : null };
+            const braveResult = _incomeSearch.result;
             if (!braveResult?.trim()) return;
 
             const extractResponse = await this.groqWithRetry({
@@ -1658,9 +1660,13 @@ Rules:
       tfrCapsule[cityKey] = { current: null, historical: null };
 
       try {
+        const _tfrSearch = async (q) => this.searchKernel
+          ? (await this.searchKernel.search({ query: q, tier: 'premium', clientIp })).result
+          : (this.searchBrave ? await this.searchBrave(q, clientIp) : null);
+
         const currentQuery = `"${city}" total fertility rate ${currentYear}`;
         logger.debug(`🐣 TFR search: "${currentQuery}"`);
-        const currentResult = await this.searchBrave(currentQuery, clientIp);
+        const currentResult = await _tfrSearch(currentQuery);
         tfrCapsule[cityKey].current = parseTFR(currentResult, city, currentYear);
 
         if (!tfrCapsule[cityKey].current && cityToCountry[cityKey]) {
@@ -1668,7 +1674,7 @@ Rules:
           await new Promise(r => setTimeout(r, 1100));
           const countryQuery = `${country} total fertility rate ${currentYear}`;
           logger.debug(`🐣 TFR country fallback: "${countryQuery}"`);
-          const countryResult = await this.searchBrave(countryQuery, clientIp);
+          const countryResult = await _tfrSearch(countryQuery);
           tfrCapsule[cityKey].current = parseTFR(countryResult, country, currentYear);
           if (tfrCapsule[cityKey].current) {
             logger.debug(`🐣 TFR fallback hit: ${city} current = ${tfrCapsule[cityKey].current} (via ${country})`);
@@ -1679,7 +1685,7 @@ Rules:
 
         const histQuery = `"${city}" total fertility rate ${historicalDecade}`;
         logger.debug(`🐣 TFR search: "${histQuery}"`);
-        const histResult = await this.searchBrave(histQuery, clientIp);
+        const histResult = await _tfrSearch(histQuery);
         const histTargetYear = historicalDecade.replace(/s$/, '');
         tfrCapsule[cityKey].historical = parseTFR(histResult, city, histTargetYear);
 
@@ -1688,7 +1694,7 @@ Rules:
           await new Promise(r => setTimeout(r, 1100));
           const countryHistQuery = `${country} total fertility rate ${historicalDecade}`;
           logger.debug(`🐣 TFR country fallback: "${countryHistQuery}"`);
-          const countryHistResult = await this.searchBrave(countryHistQuery, clientIp);
+          const countryHistResult = await _tfrSearch(countryHistQuery);
           tfrCapsule[cityKey].historical = parseTFR(countryHistResult, country, histTargetYear);
           if (tfrCapsule[cityKey].historical) {
             logger.debug(`🐣 TFR fallback hit: ${city} historical = ${tfrCapsule[cityKey].historical} (via ${country})`);
@@ -2078,14 +2084,11 @@ Output ONLY the corrected table and summary lines:`;
     logger.debug(`🔄 Retry ${state.retryCount}: Searching for better data...`);
     
     const searchQuery = await this.extractCoreQuestion(safeQuery);
-    const retrySearch = this.searchCascade
-      ? await this.searchCascade({ query: searchQuery, strategy: 'brave-first', clientIp })
-      : await (async () => {
-        const braveR = await this.searchBrave(searchQuery, clientIp);
-        if (braveR) return { result: braveR, provider: 'brave' };
-        const ddgR = await this.searchDuckDuckGo(searchQuery);
-        return { result: ddgR || null, provider: ddgR ? 'ddg' : null };
-      })();
+    const retrySearch = this.searchKernel
+      ? await this.searchKernel.search({ query: searchQuery, tier: 'premium', clientIp })
+      : this.searchCascade
+        ? await this.searchCascade({ query: searchQuery, strategy: 'brave-first', clientIp })
+        : { result: null, provider: null };
     
     if (retrySearch.result) {
       state.searchContext = retrySearch.result;
