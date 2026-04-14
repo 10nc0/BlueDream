@@ -293,12 +293,23 @@ async function preflightRouter(options) {
       logger.debug('⏱️ Digest: context.time=current → forceHighVolatility=true');
     }
     if (digest.context?.geo) {
-      result.digestGeo = digest.context.geo;
-      logger.debug(`🌍 Digest: geo context = "${digest.context.geo}"`);
+      // Normalize geo: plain ASCII words/spaces only, max 50 chars, no punctuation injection risk
+      const rawGeo = String(digest.context.geo).trim();
+      const safeGeo = rawGeo.replace(/[^a-zA-Z0-9\s\-,]/g, '').substring(0, 50).trim();
+      if (safeGeo) {
+        result.digestGeo = safeGeo;
+        logger.debug(`🌍 Digest: geo context = "${safeGeo}"`);
+      }
     }
     if (digest.context?.language && digest.context.language !== 'en') {
-      result.digestLanguage = digest.context.language;
-      logger.debug(`🗣️ Digest: language = "${digest.context.language}"`);
+      // Normalize language: ISO 639-1 two-letter code only (e.g. "id", "ms", "zh")
+      // Reject anything that doesn't match the pattern to prevent prompt injection
+      const rawLang = String(digest.context.language).trim().toLowerCase();
+      const safeLang = /^[a-z]{2}(-[a-z]{2})?$/.test(rawLang) ? rawLang : null;
+      if (safeLang) {
+        result.digestLanguage = safeLang;
+        logger.debug(`🗣️ Digest: language = "${safeLang}"`);
+      }
     }
   }
   
