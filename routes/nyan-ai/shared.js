@@ -31,28 +31,52 @@ loadTools();
 const searchDuckDuckGo = (...args) => { const t = getTool('duckduckgo'); return t ? t.execute(...args) : null; };
 const searchBrave      = (...args) => { const t = getTool('brave-search'); return t ? t.execute(...args) : null; };
 
-async function extractCoreQuestion(message) {
+// Pronouns that indicate a follow-up referencing a prior conversation subject.
+const PRONOUN_RE = /\b(he|she|his|her|they|their|them|it|its|this|that)\b/i;
+
+async function extractCoreQuestion(message, conversationHistory = []) {
     if (!message || typeof message !== 'string') return 'general query';
     const trimmed = message.trim();
     if (trimmed.length === 0) return 'general query';
-    if (!PLAYGROUND_GROQ_TOKEN || trimmed.length < 100) return trimmed.substring(0, 200);
+
+    const isShort = trimmed.length < 100;
+    // A pronoun in a short query with prior context → must resolve the reference.
+    // Guard: only fire when history exists so the shortcut is never broken for fresh sessions.
+    const hasPronoun = isShort && PRONOUN_RE.test(trimmed) && conversationHistory.length > 0;
+
+    // Short queries without pronouns take the fast path — no LLM call, no latency added.
+    if (!PLAYGROUND_GROQ_TOKEN || (isShort && !hasPronoun)) return trimmed.substring(0, 200);
 
     const isNyanProtocol = /\{money|city|land price|empire|collapse|extinction|inequality|φ|cycle|breath\}/i.test(message) ||
         /price.*income|land.*afford|fertility|700.*m²|housing.*cost/i.test(message);
 
-    try {
-        logger.debug({ messageLen: message.length }, '🧠 Extracting core question');
-        const systemPrompt = isNyanProtocol
+    // For pronoun-containing follow-ups, inject the last assistant turn as context.
+    let userContent = message.substring(0, 1000);
+    let systemPrompt;
+
+    if (hasPronoun) {
+        const lastAssistant = [...conversationHistory].reverse().find(m => m.role === 'assistant');
+        const contextSnippet = lastAssistant
+            ? `Recent context: ${lastAssistant.content.substring(0, 300)}\n\n`
+            : '';
+        userContent = `${contextSnippet}User question: ${message.substring(0, 500)}`;
+        systemPrompt = 'Given the recent conversation context and the user\'s follow-up question, extract a self-contained search query that resolves any pronouns or vague references. If not in English, translate to English. Return ONLY a short English search query (max 25 words). No explanation.';
+        logger.debug({ pronoun: true, historyLen: conversationHistory.length }, '🧠 Pronoun follow-up: injecting conversation context');
+    } else {
+        systemPrompt = isNyanProtocol
             ? 'Extract the core question about land price, housing affordability, or city cost. Include "50 years ago" or "historical" to get comparative data. Return ONLY a short English search query (max 30 words). No explanation.'
             : 'Extract the core question or topic from the user message. If the message is not in English, translate the topic to English. Return ONLY a short English search query (max 25 words). No explanation, just the English query.';
+    }
 
+    try {
+        logger.debug({ messageLen: message.length }, '🧠 Extracting core question');
         const response = await axios.post(
             _llm.url,
             {
                 model: _llm.model,
                 messages: [
                     { role: 'system', content: systemPrompt },
-                    { role: 'user', content: message.substring(0, 1000) }
+                    { role: 'user', content: userContent }
                 ],
                 temperature: 0.1,
                 max_tokens: 40
@@ -65,7 +89,7 @@ async function extractCoreQuestion(message) {
         const extractedQuery = response.data?.choices?.[0]?.message?.content?.trim();
         if (extractedQuery && extractedQuery.length > 3) {
             logger.debug({ extracted: extractedQuery }, '🧠 Core question extracted');
-            if (isNyanProtocol && !extractedQuery.toLowerCase().includes('ago') && !extractedQuery.toLowerCase().includes('historical')) {
+            if (isNyanProtocol && !hasPronoun && !extractedQuery.toLowerCase().includes('ago') && !extractedQuery.toLowerCase().includes('historical')) {
                 const enhancedQuery = extractedQuery + ' vs 50 years ago';
                 logger.debug({ enhanced: enhancedQuery }, '🧠 Historical context appended');
                 return enhancedQuery;

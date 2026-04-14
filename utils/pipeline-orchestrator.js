@@ -722,7 +722,7 @@ class PipelineOrchestrator {
     if (state.preflight.routingFlags?.needsRealtimeSearch && query) {
       logger.debug(`🌐 Real-time cascade: DDG → Brave for general query`);
       
-      let searchQuery = await this.extractCoreQuestion(query);
+      let searchQuery = await this.extractCoreQuestion(query, input.conversationHistory);
       // Geo-localised search: append digest geo context so results reflect the user's location
       if (state.preflight.digestGeo && searchQuery && !searchQuery.toLowerCase().includes(state.preflight.digestGeo.toLowerCase())) {
         searchQuery = `${searchQuery} ${state.preflight.digestGeo}`;
@@ -2083,7 +2083,7 @@ Output ONLY the corrected table and summary lines:`;
     
     logger.debug(`🔄 Retry ${state.retryCount}: Searching for better data...`);
     
-    const searchQuery = await this.extractCoreQuestion(safeQuery);
+    const searchQuery = await this.extractCoreQuestion(safeQuery, conversationHistory);
     const retrySearch = this.searchKernel
       ? await this.searchKernel.search({ query: searchQuery, tier: 'premium', clientIp })
       : this.searchCascade
