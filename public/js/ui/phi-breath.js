@@ -236,9 +236,9 @@ const PHI_BREATH = (function() {
         getBreathState,
         stop,
         
-        // Constants
-        φ,
-        BASE_DURATION,
+        // Constants — getters so they always reflect values resolved in init()
+        get φ() { return φ; },
+        get BASE_DURATION() { return BASE_DURATION; },
         
         // Calculated values
         get φ0() { return BASE_DURATION; },
