@@ -1101,56 +1101,7 @@ function detectCompoundQuery(query, hasPhotos = false, hasDocuments = false) {
     /[?!]\s+(?:and\s+)?(?=(?:what|how|can|could|do|does|is|are|tell|show|explain|describe)\s)/i,
   ];
 
-  let splitIndex = -1;
-  let splitLength = 0;
-
-  for (const pattern of SPLIT_PATTERNS) {
-    const match = trimmed.match(pattern);
-    if (match && match.index > 10 && match.index < trimmed.length - 10) {
-      splitIndex = match.index;
-      splitLength = match[0].length;
-      break;
-    }
-  }
-
-  if (splitIndex === -1) {
-    const hasTickerSignal = /\$[A-Z]{1,5}\b/.test(trimmed) || 
-      detectPsiEMAKeys(trimmed).shouldTrigger;
-    const hasImageSignal = hasPhotos && 
-      /\b(image|photo|picture|pic|screenshot|this|attached|uploaded)\b/i.test(trimmed);
-
-    if (hasTickerSignal && hasImageSignal) {
-      const imageRefPatterns = [
-        /[?.]?\s*(?:also\s+)?(?:and\s+)?(?:what|how|can|could|tell|show|explain|describe|analyze|look)\s.*\b(?:image|photo|picture|pic|screenshot|this|attached|uploaded)\b/i,
-        /\b(?:image|photo|picture|pic|screenshot|this|attached|uploaded)\b.*[?]/i,
-      ];
-
-      for (const pattern of imageRefPatterns) {
-        const match = trimmed.match(pattern);
-        if (match && match.index > 5) {
-          splitIndex = match.index;
-          splitLength = 0;
-          if (/^[?.\s]/.test(match[0])) {
-            splitIndex += 1;
-            splitLength = 0;
-          }
-          break;
-        }
-      }
-    }
-  }
-
-  if (splitIndex === -1) return null;
-
-  const part1Text = trimmed.slice(0, splitIndex).replace(/[?.!,\s]+$/, '').trim();
-  const part2Text = trimmed.slice(splitIndex + splitLength).trim();
-
-  if (part1Text.length < 5 || part2Text.length < 5) return null;
-
-  const part1HasTicker = /\$[A-Z]{1,5}\b/.test(part1Text) || detectPsiEMAKeys(part1Text).shouldTrigger;
-  const part2HasTicker = /\$[A-Z]{1,5}\b/.test(part2Text) || detectPsiEMAKeys(part2Text).shouldTrigger;
-  const part1HasImageRef = /\b(image|photo|picture|pic|screenshot|this|attached|uploaded)\b/i.test(part1Text);
-  const part2HasImageRef = /\b(image|photo|picture|pic|screenshot|this|attached|uploaded)\b/i.test(part2Text);
+  const MAX_PARTS = 5;
 
   function labelPart(text, hasTicker, hasImageRef) {
     if (hasTicker) return 'Price & Trend Analysis';
@@ -1163,27 +1114,82 @@ function detectCompoundQuery(query, hasPhotos = false, hasDocuments = false) {
     return 'General Query';
   }
 
-  const subQueries = [
-    {
-      query: part1Text,
-      label: labelPart(part1Text, part1HasTicker, part1HasImageRef),
-      includePhotos: part1HasImageRef && hasPhotos,
-      includeDocuments: /\b(document|pdf|file|excel|spreadsheet)\b/i.test(part1Text) && hasDocuments,
-    },
-    {
-      query: part2Text,
-      label: labelPart(part2Text, part2HasTicker, part2HasImageRef),
-      includePhotos: part2HasImageRef && hasPhotos,
-      includeDocuments: /\b(document|pdf|file|excel|spreadsheet)\b/i.test(part2Text) && hasDocuments,
-    },
-  ];
-
-  if (!subQueries[0].includePhotos && !subQueries[1].includePhotos && hasPhotos) {
-    subQueries[1].includePhotos = true;
-    if (subQueries[1].label === 'General Query') {
-      subQueries[1].label = 'Image Analysis';
-    }
+  function makePart(text) {
+    const hasTicker = /\$[A-Z]{1,5}\b/.test(text) || detectPsiEMAKeys(text).shouldTrigger;
+    const hasImageRef = /\b(image|photo|picture|pic|screenshot|this|attached|uploaded)\b/i.test(text);
+    return {
+      query: text,
+      label: labelPart(text, hasTicker, hasImageRef),
+      includePhotos: hasImageRef && hasPhotos,
+      includeDocuments: /\b(document|pdf|file|excel|spreadsheet)\b/i.test(text) && hasDocuments,
+      _hasTicker: hasTicker,
+      _hasImageRef: hasImageRef
+    };
   }
+
+  function findSplit(text) {
+    for (const pattern of SPLIT_PATTERNS) {
+      const match = text.match(pattern);
+      if (match && match.index > 10 && match.index < text.length - 10) {
+        return { index: match.index, length: match[0].length };
+      }
+    }
+    return null;
+  }
+
+  function findTickerImageSplit(text) {
+    const hasTickerSignal = /\$[A-Z]{1,5}\b/.test(text) || detectPsiEMAKeys(text).shouldTrigger;
+    const hasImageSignal = hasPhotos && /\b(image|photo|picture|pic|screenshot|this|attached|uploaded)\b/i.test(text);
+    if (!hasTickerSignal || !hasImageSignal) return null;
+
+    const imageRefPatterns = [
+      /[?.]?\s*(?:also\s+)?(?:and\s+)?(?:what|how|can|could|tell|show|explain|describe|analyze|look)\s.*\b(?:image|photo|picture|pic|screenshot|this|attached|uploaded)\b/i,
+      /\b(?:image|photo|picture|pic|screenshot|this|attached|uploaded)\b.*[?]/i,
+    ];
+    for (const pattern of imageRefPatterns) {
+      const match = text.match(pattern);
+      if (match && match.index > 5) {
+        const idx = /^[?.\s]/.test(match[0]) ? match.index + 1 : match.index;
+        return { index: idx, length: 0 };
+      }
+    }
+    return null;
+  }
+
+  // Iteratively split remainder until no more breaks found or MAX_PARTS reached
+  const parts = [];
+  let remainder = trimmed;
+
+  while (parts.length < MAX_PARTS - 1 && remainder.length >= 15) {
+    const split = findSplit(remainder) || (parts.length === 0 ? findTickerImageSplit(remainder) : null);
+    if (!split) break;
+
+    const head = remainder.slice(0, split.index).replace(/[?.!,\s]+$/, '').trim();
+    const tail = remainder.slice(split.index + split.length).trim();
+
+    if (head.length < 5 || tail.length < 5) break;
+
+    parts.push(makePart(head));
+    remainder = tail;
+  }
+
+  if (parts.length === 0) return null;
+
+  // Last piece is the final remainder
+  parts.push(makePart(remainder));
+
+  // Fallback: if no part got photos assigned but query has photos, give them to last part
+  const anyPhotos = parts.some(p => p.includePhotos);
+  if (!anyPhotos && hasPhotos) {
+    const last = parts[parts.length - 1];
+    last.includePhotos = true;
+    if (last.label === 'General Query') last.label = 'Image Analysis';
+  }
+
+  // Strip internal helper fields before returning
+  const subQueries = parts.map(({ query, label, includePhotos, includeDocuments }) =>
+    ({ query, label, includePhotos, includeDocuments })
+  );
 
   logger.debug(`🔀 COMPOUND QUERY DETECTED: Split into ${subQueries.length} sub-queries`);
   subQueries.forEach((sq, i) => {

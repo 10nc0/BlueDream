@@ -99,6 +99,7 @@ async function executeCompoundQuery(compoundParts, opts) {
     let totalConfidence = 0;
     let confidenceCount = 0;
     let anySearchRetry = false;
+    let carriedSessionLens = opts.sessionLens || {};
 
     for (let i = 0; i < compoundParts.length; i++) {
         const part = compoundParts[i];
@@ -115,12 +116,17 @@ async function executeCompoundQuery(compoundParts, opts) {
             extractedContent: part.includeDocuments ? (extractedContent || []) : [],
             history: history || [],
             clientIp,
+            sessionLens: carriedSessionLens,
             isVisionRequest: !!(part.includePhotos && photoList?.length > 0),
             ...(sseStage && { streaming: true, onStageChange: sseStage }),
             ...(contextAttachments && (part.includePhotos || part.includeDocuments) && { contextAttachments })
         };
 
         const subResult = await orchestrator.execute(subInput);
+        // Compound session lens across sub-queries in the same turn
+        if (subResult.sessionLens && Object.keys(subResult.sessionLens).length > 0) {
+            carriedSessionLens = subResult.sessionLens;
+        }
 
         if (subResult.success && subResult.answer) {
             const section = {

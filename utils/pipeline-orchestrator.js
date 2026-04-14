@@ -1,17 +1,18 @@
 /**
  * Pipeline Orchestrator - Unified AI Request Processing
  * 
- * 7-STAGE STATE MACHINE (S-1 to S6):
- * ┌─────────────────────────────────────────────────────────────────┐
- * │ S-1: Context Extraction  │ φ-8 message window, entity extraction │
- * │ S0:  Preflight           │ Mode detection, routing, data fetch   │
- * │ S1:  Context Build       │ Inject system prompts based on mode   │
- * │ S2:  Reasoning           │ LLM call (O(tokens), ~1500 tokens)    │
- * │ S3:  Audit               │ LLM call (O(tokens), ~800 tokens)     │
- * │ S4:  Retry               │ Search augmentation if audit rejected │
- * │ S5:  Personality         │ Regex cleanup (O(n), NOT an LLM call) │
- * │ S6:  Output              │ Finalize DataPackage, store in φ-8    │
- * └─────────────────────────────────────────────────────────────────┘
+ * 8-STAGE STATE MACHINE (S-1 to S6):
+ * ┌──────────────────────────────────────────────────────────────────────────┐
+ * │ S-1:  Context Extraction │ φ-8 message window, entity extraction        │
+ * │ S-1.5 Query Digest       │ intent C|R, subject, context, lens, sessions │
+ * │ S0:   Preflight          │ Mode detection, routing, data fetch           │
+ * │ S1:   Context Build      │ Inject system prompts based on mode           │
+ * │ S2:   Reasoning          │ LLM call (O(tokens), ~1500 tokens)            │
+ * │ S3:   Audit              │ LLM call (O(tokens), ~800 tokens)             │
+ * │ S4:   Retry              │ Search augmentation if audit rejected         │
+ * │ S5:   Personality        │ Regex cleanup (O(n), NOT an LLM call)        │
+ * │ S6:   Output             │ Finalize DataPackage, store in φ-8            │
+ * └──────────────────────────────────────────────────────────────────────────┘
  * 
  * COMPLEXITY ANALYSIS:
  * - Best case: 2 LLM calls (Reasoning + Audit)
@@ -44,11 +45,13 @@ const { detectPathogens, generateClinicalReport, generatePhysicalAuditDisclaimer
 const { DataPackage, globalPackageStore, STAGE_IDS } = require('./data-package');
 const { globalCheckpointStore, buildResumableSnapshot, applySnapshot } = require('./pipeline-checkpoint');
 const { getLLMBackend, getAuditBackend } = require('../config/constants');
+const { digestQuery } = require('./query-digest');
 const { CITY_EXPAND, COUNTRY_TO_CITY, CITY_TO_COUNTRY } = require('./geo-data');
 const { MAX_CONTENT_CHARS } = require('./config-constants');
 
 const PIPELINE_STEPS = {
   CONTEXT_EXTRACT: 'S-1',
+  DIGEST: 'S-1.5',
   PREFLIGHT: 'S0',
   CONTEXT_BUILD: 'S1', 
   REASONING: 'S2',
@@ -138,6 +141,8 @@ class PipelineState {
     this.error = null;
     this.dataPackage = new DataPackage(tenantId);
     this.hasImageAttachment = false;  // Set in S-1 for retry logic
+    this.digest = null;               // S-1.5 DigestResult
+    this.sessionLens = {};            // Accumulated lens vector across queries in this session
     
     // UNIFIED TIMESTAMP: Single source of truth for the entire pipeline
     // Captured once at construction, shared by temporal awareness, audit, and signature
@@ -214,6 +219,10 @@ class PipelineOrchestrator {
   async run(input) {
     const tenantId = input.clientIp || input.sessionId || 'anonymous';
     const state = new PipelineState(tenantId);
+    // Accept session lens from caller (e.g. executeCompoundQuery threading across sub-queries)
+    if (input.sessionLens && typeof input.sessionLens === 'object') {
+      state.sessionLens = { ...input.sessionLens };
+    }
     
     // Normalize input: streaming endpoint uses 'message', non-streaming uses 'query'
     // Also normalize 'history' to 'conversationHistory'
@@ -504,7 +513,26 @@ class PipelineOrchestrator {
       
       // Merge context with current query for enhanced detection
       const contextAwareQuery = mergeContextForTickerDetection(normalizedInput.query, state.contextResult);
-      
+
+      // ========================================
+      // STAGE -1.5: Query Digest (intent, subject, context, lens, session lens)
+      // Runs after S-1 so it has the normalised query; before S0 so routing can use it
+      // ========================================
+      if (!resumeFromStage) {
+        state.transition(PIPELINE_STEPS.DIGEST);
+        try {
+          const groqToken = process.env.PLAYGROUND_GROQ_TOKEN || process.env.GROQ_API_KEY;
+          state.digest = await digestQuery(contextAwareQuery, state.sessionLens, groqToken);
+          // Persist updated session lens so multi-question loops compound within the turn
+          if (state.digest.sessionLens) {
+            state.sessionLens = state.digest.sessionLens;
+          }
+        } catch (digestErr) {
+          logger.warn({ err: digestErr.message }, '⚠️ S-1.5 digest failed — pipeline continues without digest');
+          state.digest = null;
+        }
+      }
+
       // ========================================
       // STAGE 0: Preflight (mode detection, external data)
       // ========================================
@@ -639,7 +667,9 @@ class PipelineOrchestrator {
         passCount: state.retryCount + 1,
         sourceUrls: state.seedMetricSourceUrls || [],
         dataPackageId: state.dataPackage.id,
-        dataPackageSummary: state.dataPackage.toCompressedSummary()
+        dataPackageSummary: state.dataPackage.toCompressedSummary(),
+        digest: state.digest || null,
+        sessionLens: state.sessionLens || {}
       };
     } catch (err) {
       console.error(`❌ Pipeline error at ${state.step}: ${err.message}`);

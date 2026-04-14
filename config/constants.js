@@ -132,6 +132,16 @@ const LLM_BACKENDS = {
       extract:    3000
     }
   },
+  fast: {
+    url: GROQ_API_URL,
+    model: 'llama-3.1-8b-instant',
+    timeouts: {
+      reasoning:  5000,
+      toolCall:  10000,
+      audit:      5000,
+      extract:    2000
+    }
+  },
   auditor: {
     url: 'https://api.deepseek.com/v1/chat/completions',
     model: 'deepseek-reasoner',
@@ -147,6 +157,10 @@ const LLM_BACKENDS = {
 
 function getLLMBackend() {
   return LLM_BACKENDS.drafter;
+}
+
+function getFastLLMBackend() {
+  return LLM_BACKENDS.fast;
 }
 
 function getAuditBackend() {
@@ -296,5 +310,6 @@ module.exports = {
   MISC,
   LLM_BACKENDS,
   getLLMBackend,
+  getFastLLMBackend,
   getAuditBackend
 };
