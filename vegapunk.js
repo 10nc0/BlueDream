@@ -509,9 +509,14 @@ app.get('/', (req, res) => {
 
 app.get('/api/client-constants.js', (req, res) => {
     const { BOOK_ID_PATTERN } = require('./lib/validators');
+    const { PHI_BREATHE } = require('./config/constants');
     res.setHeader('Content-Type', 'application/javascript');
     res.setHeader('Cache-Control', 'public, max-age=3600');
-    res.send(`window.Nyan=window.Nyan||{};window.Nyan.BOOK_ID_PATTERN=${BOOK_ID_PATTERN};`);
+    res.send(
+        `window.Nyan=window.Nyan||{};` +
+        `window.Nyan.BOOK_ID_PATTERN=${BOOK_ID_PATTERN};` +
+        `window.Nyan.PHI_BREATHE={base:${PHI_BREATHE.BASE_INTERVAL_MS},phi:${PHI_BREATHE.PHI}};`
+    );
 });
 
 // Serve main dashboard - client-side JWT auth will handle access control

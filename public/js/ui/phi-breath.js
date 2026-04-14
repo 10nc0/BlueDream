@@ -17,9 +17,10 @@
 const PHI_BREATH = (function() {
     'use strict';
     
-    // Golden Ratio Constants
-    const φ = 1.618033988749895;
-    const BASE_DURATION = 4000; // 4s base cycle
+    // Golden Ratio Constants — sourced from server via window.Nyan.PHI_BREATHE (client-constants.js)
+    const _nyanPhi = window.Nyan && window.Nyan.PHI_BREATHE;
+    const φ = (_nyanPhi && _nyanPhi.phi) || 1.618033988749895;
+    const BASE_DURATION = (_nyanPhi && _nyanPhi.base) || 4000;
     
     // Breathing State
     let breathCount = 0;
