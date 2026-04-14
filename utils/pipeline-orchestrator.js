@@ -700,7 +700,8 @@ class PipelineOrchestrator {
       query: query || '',
       attachments: attachments || [],
       docContext: safeDocContext,
-      contextResult: contextResult || null  // Stage -1 output for context-aware routing
+      contextResult: contextResult || null,  // Stage -1 output for context-aware routing
+      digest: state.digest || null           // S-1.5 DigestResult for additive flag enrichment
     });
     
     state.mode = state.preflight.mode;
@@ -723,7 +724,12 @@ class PipelineOrchestrator {
     if (state.preflight.routingFlags?.needsRealtimeSearch && query) {
       logger.debug(`🌐 Real-time cascade: DDG → Brave for general query`);
       
-      const searchQuery = await this.extractCoreQuestion(query);
+      let searchQuery = await this.extractCoreQuestion(query);
+      // Geo-localised search: append digest geo context so results reflect the user's location
+      if (state.preflight.digestGeo && searchQuery && !searchQuery.toLowerCase().includes(state.preflight.digestGeo.toLowerCase())) {
+        searchQuery = `${searchQuery} ${state.preflight.digestGeo}`;
+        logger.debug(`🌍 Geo search: appended "${state.preflight.digestGeo}" to search query`);
+      }
       const cascadeResult = this.searchCascade
         ? await this.searchCascade({ query: searchQuery, strategy: 'ddg-first', clientIp })
         : await (async () => {
@@ -734,8 +740,13 @@ class PipelineOrchestrator {
         })();
       
       if (cascadeResult.result) {
-        const _vol = classifyTemporalVolatility(input.query, state.preflight?.mode);
+        const _volRaw = classifyTemporalVolatility(input.query, state.preflight?.mode);
+        // forceHighVolatility from digest (context.time='current') overrides mode-based classification
+        const _vol = state.preflight?.routingFlags?.forceHighVolatility ? 'high' : _volRaw;
         state.searchVolatility = _vol; // reused by stepContextBuild — avoids double classification
+        if (state.preflight?.routingFlags?.forceHighVolatility) {
+          logger.debug(`⏱️ Volatility forced to HIGH (digest context.time=current, was: ${_volRaw})`);
+        }
         const _volInstruction = _vol === 'high'
           ? 'Search results are your PRIMARY source for this query — training data is likely stale (changes in minutes/hours). Report quantitative facts (scores, prices, exact measurements) exactly as found and cite each one inline as [domain.com](full-url). For qualitative claims, synthesise across sources in your own words — no inline citations for prose.'
           : _vol === 'medium'

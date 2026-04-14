@@ -235,7 +235,7 @@ function formatMarketCap(marketCap) {
  * @returns {Promise<PreflightResult>}
  */
 async function preflightRouter(options) {
-  const { query = '', attachments = [], docContext = {}, contextResult = null } = options;
+  const { query = '', attachments = [], docContext = {}, contextResult = null, digest = null } = options;
   
   // ========================================
   // BLOB DETECTION: Extract main query from large text
@@ -265,14 +265,42 @@ async function preflightRouter(options) {
       needsRealtimeSearch: false,
       hasAttachments: attachments.length > 0,
       hasDocContext: Object.keys(docContext).length > 0,
-      isBlob: blobResult.isBlob
+      isBlob: blobResult.isBlob,
+      // Digest-derived flags (set below, additive — do not override existing mode logic)
+      isCreateIntent: false,
+      forceHighVolatility: false
     },
     stockContext: null,
     forexData: null,
     forexContext: null,
     codeContext: null,
+    // Digest context carried forward for pipeline consumers (geo → search, language → buildSystemContext)
+    digestGeo: null,
+    digestLanguage: null,
     error: null
   };
+
+  // ========================================
+  // DIGEST FLAGS: Apply DigestResult to routing (additive — existing modes unchanged)
+  // ========================================
+  if (digest) {
+    if (digest.intent === 'C') {
+      result.routingFlags.isCreateIntent = true;
+      logger.debug('📝 Digest: Create intent detected → isCreateIntent=true');
+    }
+    if (digest.context?.time === 'current') {
+      result.routingFlags.forceHighVolatility = true;
+      logger.debug('⏱️ Digest: context.time=current → forceHighVolatility=true');
+    }
+    if (digest.context?.geo) {
+      result.digestGeo = digest.context.geo;
+      logger.debug(`🌍 Digest: geo context = "${digest.context.geo}"`);
+    }
+    if (digest.context?.language && digest.context.language !== 'en') {
+      result.digestLanguage = digest.context.language;
+      logger.debug(`🗣️ Digest: language = "${digest.context.language}"`);
+    }
+  }
   
   try {
     // ========================================
@@ -1076,6 +1104,13 @@ function buildSystemContext(preflight, nyanProtocolPrompt, options = {}) {
       currentYear: preflight.currentYear
     }) });
     logger.debug(`🏠 Seed Metric proxy cascade injected (scavenger hunt map)`);
+  }
+
+  // Language hint: when digest detected a non-English query, mirror output language
+  // Injected last so it has high recency weight vs. other system messages
+  if (preflight.digestLanguage && preflight.digestLanguage !== 'en') {
+    messages.push({ role: 'system', content: `Respond in ${preflight.digestLanguage}.` });
+    logger.debug(`🗣️ Language hint injected: respond in ${preflight.digestLanguage}`);
   }
   
   return messages;
