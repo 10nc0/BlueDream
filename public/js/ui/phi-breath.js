@@ -49,8 +49,8 @@ const PHI_BREATH = (function() {
         // Resolve constants from backend at init time (client-constants.js should already be loaded)
         const _nyanPhi = window.Nyan && window.Nyan.PHI_BREATHE;
         if (_nyanPhi) {
-            if (_nyanPhi.phi) φ = _nyanPhi.phi;
-            if (_nyanPhi.base) { BASE_DURATION = _nyanPhi.base; currentCycleDuration = BASE_DURATION; }
+            if (typeof _nyanPhi.phi === 'number' && Number.isFinite(_nyanPhi.phi) && _nyanPhi.phi > 0) φ = _nyanPhi.phi;
+            if (typeof _nyanPhi.base === 'number' && Number.isFinite(_nyanPhi.base) && _nyanPhi.base > 0) { BASE_DURATION = _nyanPhi.base; currentCycleDuration = BASE_DURATION; }
         }
 
         console.log('🫁 φ-Breath System initialized');
