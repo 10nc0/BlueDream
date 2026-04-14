@@ -55,6 +55,7 @@ function detectIntent(query) {
 // ==================== Session lens: weight factor by word count ====================
 // Short queries rely more on session history; long specific queries stand alone.
 // sessionWeight = 1 / (1 + wordCount / 5)
+// Consumed by Task #100 (preflight-router) when blending session prior vs query evidence.
 function sessionLensWeight(wordCount) {
   return 1 / (1 + wordCount / 5);
 }

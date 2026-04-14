@@ -596,7 +596,9 @@ class PipelineOrchestrator {
           passCount: 1,
           fastPath: true,
           dataPackageId: state.dataPackage.id,
-          dataPackageSummary: state.dataPackage.toCompressedSummary()
+          dataPackageSummary: state.dataPackage.toCompressedSummary(),
+          digest: state.digest || null,
+          sessionLens: state.sessionLens || {}
         };
       }
       
