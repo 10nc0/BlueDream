@@ -50,7 +50,7 @@ const LANG_TO_GEO = {
  */
 function applyGeoInference(result) {
   if (result.context.geo !== null) return result;
-  const lang = result.context.language;
+  const lang = String(result.context.language || '').toLowerCase();
   const inferred = LANG_TO_GEO[lang];
   if (inferred) {
     result.context.geo = inferred;
