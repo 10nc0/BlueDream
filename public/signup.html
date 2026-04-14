@@ -2,100 +2,52 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, viewport-fit=cover">
-    <meta name="description" content="Every Record, Forever, Searchable - also (#Hash)Tag-enabled. Nyan~">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sign Up | Your Nyanbook~</title>
-    
-    <!-- PWA Configuration -->
-    <link rel="manifest" href="/manifest.json">
-    <meta name="theme-color" content="#8b5cf6">
-    <meta name="mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="Nyanbook">
-    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
-    <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png">
-    
     <link rel="stylesheet" href="/css/auth.css">
-    <link rel="stylesheet" href="/css/components/cat-animation.css?v=20260322-11">
 </head>
 <body>
-    <div class="signup-container">
-        <!-- UNIVERSE FRAME TRANSCENDENTAL CAT COMPONENT -->
-        <div id="catContainer" class="cat-animation-component">
-            <canvas id="hopCanvas" class="character-canvas" width="250" height="250"></canvas>
-            <div id="dateTimeDefault" class="cat-datetime-default">
-                <span id="currentTime">2025/11/01 - 8:00:00AM</span>
-            </div>
-        </div>
-        
-        <div class="logo">
-            <h1>Your Nyanbook~</h1>
-            <p>Every Record, Forever, Searchable <br> also (#Hash)Tag-enabled. Nyan~</p>
-        </div>
-
-        <div id="genesisNotice" class="genesis-notice hidden">
-            <div class="emoji">🌟</div>
-            <div class="title">Genesis Admin</div>
-            <div class="description">You'll be the first user with your own isolated database!</div>
-        </div>
-
-        <div id="errorMessage" class="error hidden"></div>
-        <div id="successMessage" class="success hidden"></div>
-
-        <div class="info-box">
-            <strong>🔐 Security Note:</strong> Your Nyanbook is private.<br>
-            Password recovery is available via WhatsApp if you create a book first.<br>
-            Write down your password. Never share.
-        </div>
-
-        <form id="signupForm">
-            <div class="form-group">
-                <label>Email Address</label>
-                <input 
-                    type="email" 
-                    id="email" 
-                    placeholder="you@example.com" 
-                    required
-                    autocomplete="email"
-                >
+    <div class="auth-page">
+        <div class="auth-container">
+            <div class="title-section">
+                <h1>Create Account</h1>
+                <div class="description">You'll be the first user with your own isolated database!</div>
             </div>
 
-            <div class="form-group">
-                <label>Password</label>
-                <input 
-                    type="password" 
-                    id="password" 
-                    placeholder="Min. 6 characters" 
-                    required
-                    minlength="6"
-                    autocomplete="new-password"
-                >
+            <div id="errorMessage" class="error hidden"></div>
+            <div id="successMessage" class="success hidden"></div>
+
+            <div class="info-box">
+                <strong>🔐 Security Note:</strong> Your Nyanbook is private.<br>
+                Save or note your password. Never share.
             </div>
 
-            <div class="form-group">
-                <label>Confirm Password</label>
-                <input 
-                    type="password" 
-                    id="confirmPassword" 
-                    placeholder="Confirm your password" 
-                    required
-                    minlength="6"
-                    autocomplete="new-password"
-                >
-                <small class="helper-text">⚠️ Use a unique password. We hash it, but don't reuse from Gmail/Twitter.</small>
-            </div>
-
-            <button type="submit">Create Account</button>
-        </form>
-
-        <div class="link">
-            Already have an account? <a href="/login.html">Log in</a>
+            <form id="signupForm">
+                <div class="form-group">
+                    <label>Email Address</label>
+                    <input type="email" id="email" placeholder="you@example.com" required autocomplete="email">
+                </div>
+                <div class="form-group">
+                    <label>Password</label>
+                    <input type="password" id="password" placeholder="Create a strong password" required autocomplete="new-password">
+                </div>
+                <div class="form-group">
+                    <label>Phone Number</label>
+                    <input type="tel" id="phone" placeholder="+1234567890" required autocomplete="tel">
+                </div>
+                <div class="form-group">
+                    <label>Country</label>
+                    <input type="text" id="country" placeholder="Indonesia" required>
+                </div>
+                <div class="form-group">
+                    <label>Timezone</label>
+                    <input type="text" id="timezone" placeholder="Asia/Jakarta" required>
+                </div>
+                <button type="submit">Create Account</button>
+            </form>
         </div>
     </div>
 
-    <script src="/js/ui/cat-animation.js?v=20260322"></script>
     <script src="/js/auth-signup.js"></script>
-    <script src="/js/sw-register.js"></script>
 </body>
 </html>
