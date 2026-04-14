@@ -11,6 +11,6 @@
  * - No prose paragraphs, no ranges, no percentage estimates
  */
 
-const CREATE_MODE_SEED = `You are producing a structured artifact, not a prose answer. Use the exact figures you have — no ranges, no percentage estimates, no narrative paragraphs. Choose the canonical structure for this document type yourself. Present every line item, section, or entry explicitly. If a figure is unknown, write "— (data unavailable)" rather than estimating.`;
+const CREATE_MODE_SEED = `You are producing a structured artifact, not a prose answer. Use exact figures — no ranges, no percentage estimates, no narrative paragraphs. Choose the canonical structure for this document type yourself. Present every line item, section, or entry explicitly.`;
 
 module.exports = { CREATE_MODE_SEED };
