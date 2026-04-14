@@ -2083,7 +2083,7 @@ Output ONLY the corrected table and summary lines:`;
     
     logger.debug(`🔄 Retry ${state.retryCount}: Searching for better data...`);
     
-    const searchQuery = await this.extractCoreQuestion(safeQuery, conversationHistory);
+    const searchQuery = await this.extractCoreQuestion(safeQuery, sanitizedHistory);
     const retrySearch = this.searchKernel
       ? await this.searchKernel.search({ query: searchQuery, tier: 'premium', clientIp })
       : this.searchCascade
