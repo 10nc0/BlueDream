@@ -205,7 +205,8 @@ async function digestQuery(rawQuery, sessionLens = {}, groqToken = null) {
 
   } catch (err) {
     logger.warn({ err: err.message }, '⚠️ S-1.5 digest model call failed — using safe default');
-    return applyGeoInference(safeDefault(rawQuery, sessionLens));
+    // `intent` was computed by rule-based detectIntent() before the try block — preserve it.
+    return applyGeoInference({ ...safeDefault(rawQuery, sessionLens), intent });
   }
 }
 
