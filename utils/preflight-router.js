@@ -16,6 +16,7 @@ const { detectStockTicker, detectPsiEMAKeys, smartDetectTicker, fetchStockPrices
 const { getPsiEMAContext, PsiEMADashboard, PSI_EMA_DOCUMENTATION } = require('./psi-EMA');
 const { getFinancialPhysicsSeed } = require('./financial-physics');
 const { getLegalAnalysisSeed, LEGAL_KEYWORDS_REGEX } = require('../prompts/legal-analysis');
+const { CREATE_MODE_SEED } = require('../prompts/create-mode');
 const { getChemistryAnalysisSeed, CHEMISTRY_KEYWORDS_REGEX, modelIdToLabel } = require('../prompts/pharma-analysis');
 const { getLLMBackend } = require('../config/constants');
 const { processChemistryContent } = require('./attachment-cascade');
@@ -1115,6 +1116,14 @@ function buildSystemContext(preflight, nyanProtocolPrompt, options = {}) {
       currentYear: preflight.currentYear
     }) });
     logger.debug(`🏠 Seed Metric proxy cascade injected (scavenger hunt map)`);
+  }
+
+  // Create mode: structured artifact constraint
+  // Injected when digest detected a synthesis/creation request (isCreateIntent)
+  // Constrains output format only — leaves structure/columns to LLM judgment
+  if (preflight.routingFlags.isCreateIntent) {
+    messages.push({ role: 'system', content: CREATE_MODE_SEED });
+    logger.debug('📄 Create mode seed injected (isCreateIntent=true)');
   }
 
   // Language hint: when digest detected a non-English query, mirror output language
