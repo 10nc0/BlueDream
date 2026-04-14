@@ -160,10 +160,7 @@ async function digestQuery(rawQuery, sessionLens = {}, groqToken = null) {
 
   } catch (err) {
     logger.warn({ err: err.message }, '⚠️ S-1.5 digest model call failed — using safe default');
-    return {
-      ...safeDefault(rawQuery, sessionLens),
-      intent
-    };
+    return safeDefault(rawQuery, sessionLens);
   }
 }
 

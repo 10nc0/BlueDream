@@ -522,7 +522,7 @@ class PipelineOrchestrator {
         state.transition(PIPELINE_STEPS.DIGEST);
         try {
           const groqToken = process.env.PLAYGROUND_GROQ_TOKEN || process.env.GROQ_API_KEY;
-          state.digest = await digestQuery(contextAwareQuery, state.sessionLens, groqToken);
+          state.digest = await digestQuery(normalizedInput.query, state.sessionLens, groqToken);
           // Persist updated session lens so multi-question loops compound within the turn
           if (state.digest.sessionLens) {
             state.sessionLens = state.digest.sessionLens;
