@@ -19,6 +19,47 @@ const { getFastLLMBackend } = require('../config/constants');
 
 const _fast = getFastLLMBackend();
 
+// ==================== Language → Geo inference table ====================
+// Only unambiguous languages (single-country mapping).
+// Ambiguous languages (zh, ar, fr, es, pt, en) are intentionally excluded.
+const LANG_TO_GEO = {
+  id: 'Indonesia',
+  th: 'Thailand',
+  ja: 'Japan',
+  ko: 'South Korea',
+  vi: 'Vietnam',
+  ms: 'Malaysia',
+  tr: 'Turkey',
+  uk: 'Ukraine',
+  nl: 'Netherlands',
+  pl: 'Poland',
+  sv: 'Sweden',
+  fi: 'Finland',
+  da: 'Denmark',
+  no: 'Norway',
+  cs: 'Czech Republic',
+  ro: 'Romania',
+  hu: 'Hungary',
+};
+
+/**
+ * applyGeoInference — post-processing fallback.
+ * If geo is null and the detected language maps unambiguously to a country,
+ * infer the geo from language. Mutates result in place and returns it.
+ * Only fires when geo === null — never overrides an explicit geo.
+ */
+function applyGeoInference(result) {
+  if (result.context.geo !== null) return result;
+  const lang = result.context.language;
+  const inferred = LANG_TO_GEO[lang];
+  if (inferred) {
+    result.context.geo = inferred;
+    result.geoInferred = true;
+    logger.debug(`🌐 Geo inferred from language: ${lang} → ${inferred}`);
+  }
+  return result;
+}
+
 // ==================== Create intent patterns (rule-based, zero latency) ====================
 // Patterns across English / Indonesian / Malay / Chinese
 // Priority: verb must appear at the START of the message or after common filler phrases.
@@ -144,11 +185,14 @@ async function digestQuery(rawQuery, sessionLens = {}, groqToken = null) {
       sessionLens: updatedSessionLens
     };
 
+    applyGeoInference(result);
+
     logger.debug({
       digest: {
         intent: result.intent,
         subject: result.subject,
         geo: result.context.geo,
+        geoInferred: result.geoInferred || false,
         language: result.context.language,
         time: result.context.time,
         lens: result.lens,
@@ -161,7 +205,7 @@ async function digestQuery(rawQuery, sessionLens = {}, groqToken = null) {
 
   } catch (err) {
     logger.warn({ err: err.message }, '⚠️ S-1.5 digest model call failed — using safe default');
-    return safeDefault(rawQuery, sessionLens);
+    return applyGeoInference(safeDefault(rawQuery, sessionLens));
   }
 }
 
