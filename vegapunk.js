@@ -714,7 +714,7 @@ app.listen(PORT, '0.0.0.0', async () => {
             phiBreathe.deregisterNode(name);
         });
         bot.client.on('error', () => {
-            phiBreathe.updateNodeStatus(name, false);
+            phiBreathe.deregisterNode(name);
         });
         bot.client.on('ready', () => {
             logger.info({ node: name }, '🔌 NyanMesh: bot reconnected — %s', name);
