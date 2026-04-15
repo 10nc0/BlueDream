@@ -699,6 +699,29 @@ app.listen(PORT, '0.0.0.0', async () => {
     phiBreathe.registerNode('idris',  { role: 'scribe',  symbol: 'ι', ready: idrisBot.isReady() });
     phiBreathe.registerNode('horus',  { role: 'watcher', symbol: 'Ω', ready: horusBot.isReady() });
 
+    // Wire bot lifecycle events → NyanMesh deregister/reregister
+    // Uses public .client property (plain JS object field, not encapsulated)
+    const botLifecycle = [
+        { name: 'hermes', bot: hermesBot },
+        { name: 'thoth',  bot: thothBot  },
+        { name: 'idris',  bot: idrisBot  },
+        { name: 'horus',  bot: horusBot  }
+    ];
+    for (const { name, bot } of botLifecycle) {
+        if (!bot.client) continue;
+        bot.client.on('shardDisconnect', () => {
+            logger.warn({ node: name }, '🔌 NyanMesh: bot disconnected — %s', name);
+            phiBreathe.deregisterNode(name);
+        });
+        bot.client.on('error', () => {
+            phiBreathe.updateNodeStatus(name, false);
+        });
+        bot.client.on('ready', () => {
+            logger.info({ node: name }, '🔌 NyanMesh: bot reconnected — %s', name);
+            phiBreathe.updateNodeStatus(name, true);
+        });
+    }
+
     // Server is now ready for requests
     logger.info('🌸 Multi-tenant NyanBook~ ready');
     
