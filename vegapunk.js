@@ -692,7 +692,13 @@ app.listen(PORT, '0.0.0.0', async () => {
     };
 
     await Promise.all([initBots(), initDb()]);
-    
+
+    // Register all bots in the NyanMesh node registry (in-memory, snapshotted to DB at 86-breath)
+    phiBreathe.registerNode('hermes', { role: 'creator', symbol: 'φ', ready: hermesBot.isReady() });
+    phiBreathe.registerNode('thoth',  { role: 'mirror',  symbol: '0', ready: thothBot.isReady() });
+    phiBreathe.registerNode('idris',  { role: 'scribe',  symbol: 'ι', ready: idrisBot.isReady() });
+    phiBreathe.registerNode('horus',  { role: 'watcher', symbol: 'Ω', ready: horusBot.isReady() });
+
     // Server is now ready for requests
     logger.info('🌸 Multi-tenant NyanBook~ ready');
     
@@ -919,7 +925,7 @@ app.listen(PORT, '0.0.0.0', async () => {
         logger.info('🔢 Genesis counter started (cat + φ breath tiers)');
 
         phiBreathe.setPool(pool);
-        phiBreathe.setBots({ idris: idrisBot });
+        phiBreathe.setBots({ hermes: hermesBot, thoth: thothBot, idris: idrisBot, horus: horusBot });
         phiBreathe.setCleanupFunctions({ cleanupOldSessions });
 
         phiBreathe.setHeartbeatCallback((breathCount) => {
