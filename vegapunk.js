@@ -693,11 +693,12 @@ app.listen(PORT, '0.0.0.0', async () => {
 
     await Promise.all([initBots(), initDb()]);
 
-    // Register all bots in the NyanMesh node registry (in-memory, snapshotted to DB at 86-breath)
-    phiBreathe.registerNode('hermes', { role: 'creator', symbol: 'φ', ready: hermesBot.isReady() });
-    phiBreathe.registerNode('thoth',  { role: 'mirror',  symbol: '0', ready: thothBot.isReady() });
-    phiBreathe.registerNode('idris',  { role: 'scribe',  symbol: 'ι', ready: idrisBot.isReady() });
-    phiBreathe.registerNode('horus',  { role: 'watcher', symbol: 'Ω', ready: horusBot.isReady() });
+    // Register all bots in the NyanMesh node registry (in-memory, snapshotted to DB at 86-breath).
+    // Initial status reflects actual bot readiness (may be 'offline' if token missing).
+    phiBreathe.registerNode('hermes', { role: 'creator', symbol: 'φ', status: hermesBot.isReady() ? 'online' : 'offline' });
+    phiBreathe.registerNode('thoth',  { role: 'mirror',  symbol: '0', status: thothBot.isReady()  ? 'online' : 'offline' });
+    phiBreathe.registerNode('idris',  { role: 'scribe',  symbol: 'ι', status: idrisBot.isReady()  ? 'online' : 'offline' });
+    phiBreathe.registerNode('horus',  { role: 'watcher', symbol: 'Ω', status: horusBot.isReady()  ? 'online' : 'offline' });
 
     // Wire bot lifecycle events → NyanMesh deregister/reregister
     // Uses public .client property (plain JS object field, not encapsulated)
