@@ -930,6 +930,11 @@ app.listen(PORT, '0.0.0.0', async () => {
 
         phiBreathe.setHeartbeatCallback((breathCount) => {
             console.log('\n' + formatPulseLog(registeredSatellites, 'online') + '\n');
+            // Refresh NyanMesh node statuses based on live isReady() state
+            phiBreathe.updateNodeStatus('hermes', hermesBot.isReady());
+            phiBreathe.updateNodeStatus('thoth',  thothBot.isReady());
+            phiBreathe.updateNodeStatus('idris',  idrisBot.isReady());
+            phiBreathe.updateNodeStatus('horus',  horusBot.isReady());
         });
 
         await phiBreathe.startPhiBreathe();
