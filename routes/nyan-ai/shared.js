@@ -34,7 +34,7 @@ const searchBrave      = (...args) => { const t = getTool('brave-search'); retur
 // Pronouns that indicate a follow-up referencing a prior conversation subject.
 const PRONOUN_RE = /\b(he|she|his|her|they|their|them|it|its|this|that)\b/i;
 
-async function extractCoreQuestion(message, conversationHistory = []) {
+async function extractCoreQuestion(message, conversationHistory = [], urlAnchors = []) {
     if (!message || typeof message !== 'string') return 'general query';
     const trimmed = message.trim();
     if (trimmed.length === 0) return 'general query';
@@ -59,9 +59,13 @@ async function extractCoreQuestion(message, conversationHistory = []) {
         const contextSnippet = lastAssistant
             ? `Recent context: ${lastAssistant.content.substring(0, 300)}\n\n`
             : '';
-        userContent = `${contextSnippet}User question: ${message.substring(0, 500)}`;
+        // URL anchors survive beyond the φ-8 window — inject them when resolving vague references.
+        const anchorHint = urlAnchors.length > 0
+            ? `Previously linked sources in this conversation: ${urlAnchors.map(a => a.url).join(', ')}. Prefer these if the user's question refers to them.\n\n`
+            : '';
+        userContent = `${anchorHint}${contextSnippet}User question: ${message.substring(0, 500)}`;
         systemPrompt = 'Given the recent conversation context and the user\'s follow-up question, extract a self-contained search query that resolves any pronouns or vague references. If not in English, translate to English. Return ONLY a short English search query (max 25 words). No explanation.';
-        logger.debug({ pronoun: true, historyLen: conversationHistory.length }, '🧠 Pronoun follow-up: injecting conversation context');
+        logger.debug({ pronoun: true, historyLen: conversationHistory.length, anchors: urlAnchors.length }, '🧠 Pronoun follow-up: injecting conversation context + anchors');
     } else {
         systemPrompt = isNyanProtocol
             ? 'Extract the core question about land price, housing affordability, or city cost. Include "50 years ago" or "historical" to get comparative data. Return ONLY a short English search query (max 30 words). No explanation.'

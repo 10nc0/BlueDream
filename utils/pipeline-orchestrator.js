@@ -48,6 +48,7 @@ const { getLLMBackend, getAuditBackend } = require('../config/constants');
 const { digestQuery } = require('./query-digest');
 const { CITY_EXPAND, COUNTRY_TO_CITY, CITY_TO_COUNTRY } = require('./geo-data');
 const { MAX_CONTENT_CHARS } = require('./config-constants');
+const { getAnchors: getUrlAnchors } = require('./url-anchor-store');
 
 const PIPELINE_STEPS = {
   CONTEXT_EXTRACT: 'S-1',
@@ -722,7 +723,7 @@ class PipelineOrchestrator {
     if (state.preflight.routingFlags?.needsRealtimeSearch && query) {
       logger.debug(`🌐 Real-time cascade: DDG → Brave for general query`);
       
-      let searchQuery = await this.extractCoreQuestion(query, input.conversationHistory || input.history || []);
+      let searchQuery = await this.extractCoreQuestion(query, input.conversationHistory || input.history || [], getUrlAnchors(tenantId));
       // Geo-localised search: append digest geo context so results reflect the user's location
       if (state.preflight.digestGeo && searchQuery && !searchQuery.toLowerCase().includes(state.preflight.digestGeo.toLowerCase())) {
         searchQuery = `${searchQuery} ${state.preflight.digestGeo}`;
@@ -2083,7 +2084,7 @@ Output ONLY the corrected table and summary lines:`;
     
     logger.debug(`🔄 Retry ${state.retryCount}: Searching for better data...`);
     
-    const searchQuery = await this.extractCoreQuestion(safeQuery, sanitizedHistory);
+    const searchQuery = await this.extractCoreQuestion(safeQuery, sanitizedHistory, getUrlAnchors(clientIp));
     const retrySearch = this.searchKernel
       ? await this.searchKernel.search({ query: searchQuery, tier: 'premium', clientIp })
       : this.searchCascade
