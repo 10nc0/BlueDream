@@ -398,3 +398,4 @@ nyan~
 
 *Alone is full. Together is the better half.*
 *Truth is what remains queryable after every false positive named*
+![Cross-hatch by Grok](Cross-hatch%20by%20Grok.jpg)

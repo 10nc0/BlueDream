@@ -646,14 +646,14 @@
     <!-- Load cat animation BEFORE inline scripts that use it -->
     <script src="/js/ui/cat-animation.js?v=20251101-2"></script>
 
+    <!-- Backend-sourced client constants — must load BEFORE phi-breath.js so constants are available at init() -->
+    <script src="/api/client-constants.js"></script>
+
     <!-- Load φ-breath system BEFORE dashboard.js -->
     <script src="/js/ui/phi-breath.js?v=20251101-2"></script>
     
     <!-- Layout Controller - unified state machine for mobile/desktop/expansion -->
     <script src="/js/layout-controller.js?v=20260324-2"></script>
-
-    <!-- Backend-sourced client constants (single source of truth for shared patterns) -->
-    <script src="/api/client-constants.js"></script>
 
     <!-- Modular architecture: State and Auth modules -->
     <script src="/js/modules/state.js?v=20260111-2"></script>

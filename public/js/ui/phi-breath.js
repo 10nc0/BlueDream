@@ -17,9 +17,10 @@
 const PHI_BREATH = (function() {
     'use strict';
     
-    // Golden Ratio Constants
-    const φ = 1.618033988749895;
-    const BASE_DURATION = 4000; // 4s base cycle
+    // Golden Ratio Constants — defaults; resolved from window.Nyan.PHI_BREATHE at init() time
+    // (client-constants.js must load before this script — see index.html load order)
+    let φ = 1.618033988749895;
+    let BASE_DURATION = 4000;
     
     // Breathing State
     let breathCount = 0;
@@ -45,8 +46,15 @@ const PHI_BREATH = (function() {
      * Initialize the breathing system
      */
     function init() {
+        // Resolve constants from backend at init time (client-constants.js should already be loaded)
+        const _nyanPhi = window.Nyan && window.Nyan.PHI_BREATHE;
+        if (_nyanPhi) {
+            if (typeof _nyanPhi.phi === 'number' && Number.isFinite(_nyanPhi.phi) && _nyanPhi.phi > 0) φ = _nyanPhi.phi;
+            if (typeof _nyanPhi.base === 'number' && Number.isFinite(_nyanPhi.base) && _nyanPhi.base > 0) { BASE_DURATION = _nyanPhi.base; currentCycleDuration = BASE_DURATION; }
+        }
+
         console.log('🫁 φ-Breath System initialized');
-        console.log(`   Base Duration: ${BASE_DURATION}ms`);
+        console.log(`   Base Duration: ${BASE_DURATION}ms${_nyanPhi ? ' (server)' : ' (fallback)'}`);
         console.log(`   φ^0 (Exhale): 1.0x = ${BASE_DURATION}ms`);
         console.log(`   φ^1 (Inhale): ${φ.toFixed(3)}x = ${Math.round(BASE_DURATION * φ)}ms`);
         
@@ -228,9 +236,9 @@ const PHI_BREATH = (function() {
         getBreathState,
         stop,
         
-        // Constants
-        φ,
-        BASE_DURATION,
+        // Constants — getters so they always reflect values resolved in init()
+        get φ() { return φ; },
+        get BASE_DURATION() { return BASE_DURATION; },
         
         // Calculated values
         get φ0() { return BASE_DURATION; },

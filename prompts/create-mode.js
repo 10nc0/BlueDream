@@ -1,0 +1,18 @@
+/**
+ * Create Mode Seed — S-1.5 isCreateIntent
+ *
+ * Injected when digest.intent === 'C' (user asked to produce a document/artifact).
+ * Constrains output FORMAT only — structure, columns, and sections are left entirely
+ * to the LLM's own judgment based on the domain and document type.
+ *
+ * Rules:
+ * - Under 60 words
+ * - No templates, column names, or rigid structure hints
+ * - No prose paragraphs, no ranges, no percentage estimates
+ * - No placeholder brackets or template fields (e.g. [fill this in])
+ * - If a figure is unavailable, write 'TBD' not a range
+ */
+
+const CREATE_MODE_SEED = `You are producing a structured artifact, not a prose answer. Use exact figures — no ranges, no percentage estimates, no narrative paragraphs, no placeholder brackets or template fields. Choose the canonical structure for this document type yourself. Present every line item, section, or entry explicitly. If a figure is unavailable, write 'TBD', not a range.`;
+
+module.exports = { CREATE_MODE_SEED };

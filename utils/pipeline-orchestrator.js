@@ -1,17 +1,18 @@
 /**
  * Pipeline Orchestrator - Unified AI Request Processing
  * 
- * 7-STAGE STATE MACHINE (S-1 to S6):
- * ┌─────────────────────────────────────────────────────────────────┐
- * │ S-1: Context Extraction  │ φ-8 message window, entity extraction │
- * │ S0:  Preflight           │ Mode detection, routing, data fetch   │
- * │ S1:  Context Build       │ Inject system prompts based on mode   │
- * │ S2:  Reasoning           │ LLM call (O(tokens), ~1500 tokens)    │
- * │ S3:  Audit               │ LLM call (O(tokens), ~800 tokens)     │
- * │ S4:  Retry               │ Search augmentation if audit rejected │
- * │ S5:  Personality         │ Regex cleanup (O(n), NOT an LLM call) │
- * │ S6:  Output              │ Finalize DataPackage, store in φ-8    │
- * └─────────────────────────────────────────────────────────────────┘
+ * 8-STAGE STATE MACHINE (S-1 to S6):
+ * ┌──────────────────────────────────────────────────────────────────────────┐
+ * │ S-1:  Context Extraction │ φ-8 message window, entity extraction        │
+ * │ S-1.5 Query Digest       │ intent C|R, subject, context, lens, sessions │
+ * │ S0:   Preflight          │ Mode detection, routing, data fetch           │
+ * │ S1:   Context Build      │ Inject system prompts based on mode           │
+ * │ S2:   Reasoning          │ LLM call (O(tokens), ~1500 tokens)            │
+ * │ S3:   Audit              │ LLM call (O(tokens), ~800 tokens)             │
+ * │ S4:   Retry              │ Search augmentation if audit rejected         │
+ * │ S5:   Personality        │ Regex cleanup (O(n), NOT an LLM call)        │
+ * │ S6:   Output             │ Finalize DataPackage, store in φ-8            │
+ * └──────────────────────────────────────────────────────────────────────────┘
  * 
  * COMPLEXITY ANALYSIS:
  * - Best case: 2 LLM calls (Reasoning + Audit)
@@ -44,11 +45,14 @@ const { detectPathogens, generateClinicalReport, generatePhysicalAuditDisclaimer
 const { DataPackage, globalPackageStore, STAGE_IDS } = require('./data-package');
 const { globalCheckpointStore, buildResumableSnapshot, applySnapshot } = require('./pipeline-checkpoint');
 const { getLLMBackend, getAuditBackend } = require('../config/constants');
+const { digestQuery } = require('./query-digest');
 const { CITY_EXPAND, COUNTRY_TO_CITY, CITY_TO_COUNTRY } = require('./geo-data');
 const { MAX_CONTENT_CHARS } = require('./config-constants');
+const { getAnchors: getUrlAnchors } = require('./url-anchor-store');
 
 const PIPELINE_STEPS = {
   CONTEXT_EXTRACT: 'S-1',
+  DIGEST: 'S-1.5',
   PREFLIGHT: 'S0',
   CONTEXT_BUILD: 'S1', 
   REASONING: 'S2',
@@ -138,6 +142,8 @@ class PipelineState {
     this.error = null;
     this.dataPackage = new DataPackage(tenantId);
     this.hasImageAttachment = false;  // Set in S-1 for retry logic
+    this.digest = null;               // S-1.5 DigestResult
+    this.sessionLens = {};            // Accumulated lens vector across queries in this session
     
     // UNIFIED TIMESTAMP: Single source of truth for the entire pipeline
     // Captured once at construction, shared by temporal awareness, audit, and signature
@@ -163,10 +169,12 @@ class PipelineOrchestrator {
     this.groqToken = config.groqToken;
     this.auditToken = config.auditToken || config.groqToken;
     this.groqVisionToken = config.groqVisionToken;
-    this.searchBrave = config.searchBrave;
-    this.searchDuckDuckGo = config.searchDuckDuckGo;
-    this.searchCascade = config.searchCascade;
-    this.searchCascadeMulti = config.searchCascadeMulti;
+    this.searchKernel = config.searchKernel;
+    // Deprecated: individual provider functions (kept for one-release backward compat)
+    this.searchBrave = config.searchBrave || null;
+    this.searchDuckDuckGo = config.searchDuckDuckGo || null;
+    this.searchCascade = config.searchCascade || null;
+    this.searchCascadeMulti = config.searchCascadeMulti || null;
     this.extractCoreQuestion = config.extractCoreQuestion;
     this.isIdentityQuery = config.isIdentityQuery;
     this.groqWithRetry = config.groqWithRetry;
@@ -185,6 +193,11 @@ class PipelineOrchestrator {
    * @returns {Promise<string[]>} Array of search results
    */
   async searchWithRateLimit(queries, clientIp, delayMs = 350) {
+    if (this.searchKernel) {
+      const { results } = await this.searchKernel.searchMulti({ queries, tier: 'premium', clientIp, delayMs });
+      return results;
+    }
+    // Legacy fallback (deprecated — remove after searchKernel is wired everywhere)
     if (this.searchCascadeMulti) {
       const { results } = await this.searchCascadeMulti({ queries, strategy: 'brave-first', clientIp, delayMs });
       return results;
@@ -192,16 +205,10 @@ class PipelineOrchestrator {
     const results = [];
     for (let i = 0; i < queries.length; i++) {
       const sq = queries[i];
-      let result = await this.searchBrave(sq, clientIp);
-      if (!result) {
-        result = await this.searchDuckDuckGo(sq);
-      }
-      if (result) {
-        results.push(`[${sq}]\n${result}`);
-      }
-      if (i < queries.length - 1) {
-        await new Promise(resolve => setTimeout(resolve, delayMs));
-      }
+      let result = this.searchBrave ? await this.searchBrave(sq, clientIp) : null;
+      if (!result && this.searchDuckDuckGo) result = await this.searchDuckDuckGo(sq);
+      if (result) results.push(`[${sq}]\n${result}`);
+      if (i < queries.length - 1) await new Promise(resolve => setTimeout(resolve, delayMs));
     }
     return results;
   }
@@ -214,6 +221,10 @@ class PipelineOrchestrator {
   async run(input) {
     const tenantId = input.clientIp || input.sessionId || 'anonymous';
     const state = new PipelineState(tenantId);
+    // Accept session lens from caller (e.g. executeCompoundQuery threading across sub-queries)
+    if (input.sessionLens && typeof input.sessionLens === 'object') {
+      state.sessionLens = { ...input.sessionLens };
+    }
     
     // Normalize input: streaming endpoint uses 'message', non-streaming uses 'query'
     // Also normalize 'history' to 'conversationHistory'
@@ -407,14 +418,11 @@ class PipelineOrchestrator {
               
               if (keyTerms) {
                 logger.debug(`🔎 S-1: Vision search enrichment [${trigger}] — querying "${keyTerms}" (scholastic: ${scholastic.domain})`);
-                const visionSearch = this.searchCascade
-                  ? await this.searchCascade({ query: keyTerms, strategy: 'brave-first', clientIp: normalizedInput.clientIp })
-                  : await (async () => {
-                    const braveR = await this.searchBrave(keyTerms, normalizedInput.clientIp);
-                    if (braveR) return { result: braveR, provider: 'brave' };
-                    const ddgR = await this.searchDuckDuckGo(keyTerms);
-                    return { result: ddgR || null, provider: ddgR ? 'ddg' : null };
-                  })();
+                const visionSearch = this.searchKernel
+                  ? await this.searchKernel.search({ query: keyTerms, tier: 'premium', clientIp: normalizedInput.clientIp })
+                  : this.searchCascade
+                    ? await this.searchCascade({ query: keyTerms, strategy: 'brave-first', clientIp: normalizedInput.clientIp })
+                    : { result: null, provider: null };
                 
                 if (visionSearch.result) {
                   normalizedInput.extractedContent.push(
@@ -504,7 +512,26 @@ class PipelineOrchestrator {
       
       // Merge context with current query for enhanced detection
       const contextAwareQuery = mergeContextForTickerDetection(normalizedInput.query, state.contextResult);
-      
+
+      // ========================================
+      // STAGE -1.5: Query Digest (intent, subject, context, lens, session lens)
+      // Runs after S-1 so it has the normalised query; before S0 so routing can use it
+      // ========================================
+      if (!resumeFromStage) {
+        state.transition(PIPELINE_STEPS.DIGEST);
+        try {
+          const groqToken = process.env.PLAYGROUND_AI_KEY || process.env.PLAYGROUND_GROQ_TOKEN || process.env.GROQ_API_KEY;
+          state.digest = await digestQuery(normalizedInput.query, state.sessionLens, groqToken);
+          // Persist updated session lens so multi-question loops compound within the turn
+          if (state.digest.sessionLens) {
+            state.sessionLens = state.digest.sessionLens;
+          }
+        } catch (digestErr) {
+          logger.warn({ err: digestErr.message }, '⚠️ S-1.5 digest failed — pipeline continues without digest');
+          state.digest = null;
+        }
+      }
+
       // ========================================
       // STAGE 0: Preflight (mode detection, external data)
       // ========================================
@@ -568,7 +595,9 @@ class PipelineOrchestrator {
           passCount: 1,
           fastPath: true,
           dataPackageId: state.dataPackage.id,
-          dataPackageSummary: state.dataPackage.toCompressedSummary()
+          dataPackageSummary: state.dataPackage.toCompressedSummary(),
+          digest: state.digest || null,
+          sessionLens: state.sessionLens || {}
         };
       }
       
@@ -639,7 +668,9 @@ class PipelineOrchestrator {
         passCount: state.retryCount + 1,
         sourceUrls: state.seedMetricSourceUrls || [],
         dataPackageId: state.dataPackage.id,
-        dataPackageSummary: state.dataPackage.toCompressedSummary()
+        dataPackageSummary: state.dataPackage.toCompressedSummary(),
+        digest: state.digest || null,
+        sessionLens: state.sessionLens || {}
       };
     } catch (err) {
       console.error(`❌ Pipeline error at ${state.step}: ${err.message}`);
@@ -668,7 +699,8 @@ class PipelineOrchestrator {
       query: query || '',
       attachments: attachments || [],
       docContext: safeDocContext,
-      contextResult: contextResult || null  // Stage -1 output for context-aware routing
+      contextResult: contextResult || null,  // Stage -1 output for context-aware routing
+      digest: state.digest || null           // S-1.5 DigestResult for additive flag enrichment
     });
     
     state.mode = state.preflight.mode;
@@ -691,19 +723,26 @@ class PipelineOrchestrator {
     if (state.preflight.routingFlags?.needsRealtimeSearch && query) {
       logger.debug(`🌐 Real-time cascade: DDG → Brave for general query`);
       
-      const searchQuery = await this.extractCoreQuestion(query);
-      const cascadeResult = this.searchCascade
-        ? await this.searchCascade({ query: searchQuery, strategy: 'ddg-first', clientIp })
-        : await (async () => {
-          const ddgResult = await this.searchDuckDuckGo(searchQuery);
-          if (ddgResult) return { result: ddgResult, provider: 'ddg' };
-          const braveResult = await this.searchBrave(searchQuery, clientIp);
-          return { result: braveResult || null, provider: braveResult ? 'brave' : null };
-        })();
+      let searchQuery = await this.extractCoreQuestion(query, input.conversationHistory || input.history || [], getUrlAnchors(tenantId));
+      // Geo-localised search: append digest geo context so results reflect the user's location
+      if (state.preflight.digestGeo && searchQuery && !searchQuery.toLowerCase().includes(state.preflight.digestGeo.toLowerCase())) {
+        searchQuery = `${searchQuery} ${state.preflight.digestGeo}`;
+        logger.debug(`🌍 Geo search: appended "${state.preflight.digestGeo}" to search query`);
+      }
+      const cascadeResult = this.searchKernel
+        ? await this.searchKernel.search({ query: searchQuery, tier: 'standard', clientIp })
+        : this.searchCascade
+          ? await this.searchCascade({ query: searchQuery, strategy: 'ddg-first', clientIp })
+          : { result: null, provider: null };
       
       if (cascadeResult.result) {
-        const _vol = classifyTemporalVolatility(input.query, state.preflight?.mode);
+        const _volRaw = classifyTemporalVolatility(input.query, state.preflight?.mode);
+        // forceHighVolatility from digest (context.time='current') overrides mode-based classification
+        const _vol = state.preflight?.routingFlags?.forceHighVolatility ? 'high' : _volRaw;
         state.searchVolatility = _vol; // reused by stepContextBuild — avoids double classification
+        if (state.preflight?.routingFlags?.forceHighVolatility) {
+          logger.debug(`⏱️ Volatility forced to HIGH (digest context.time=current, was: ${_volRaw})`);
+        }
         const _volInstruction = _vol === 'high'
           ? 'Search results are your PRIMARY source for this query — training data is likely stale (changes in minutes/hours). Report quantitative facts (scores, prices, exact measurements) exactly as found and cite each one inline as [domain.com](full-url). For qualitative claims, synthesise across sources in your own words — no inline citations for prose.'
           : _vol === 'medium'
@@ -1319,12 +1358,16 @@ Rules:
       const searchQuery = args.query || '';
       logger.debug(`🦁 brave_search #${i + 1}: "${searchQuery}"`);
 
-      let result = await this.searchBrave(searchQuery, clientIp, { format: 'json' });
+      let result = this.searchKernel
+        ? (await this.searchKernel.search({ query: searchQuery, tier: 'premium', clientIp, format: 'json' })).result
+        : this.searchBrave ? await this.searchBrave(searchQuery, clientIp, { format: 'json' }) : null;
 
       if (result === null) {
         logger.debug(`🦁 brave_search #${i + 1}: null result, retrying after 1500ms...`);
         await new Promise(r => setTimeout(r, 1500));
-        result = await this.searchBrave(searchQuery, clientIp, { format: 'json' });
+        result = this.searchKernel
+          ? (await this.searchKernel.search({ query: searchQuery, tier: 'premium', clientIp, format: 'json' })).result
+          : this.searchBrave ? await this.searchBrave(searchQuery, clientIp, { format: 'json' }) : null;
       }
 
       let braveText = '';
@@ -1460,7 +1503,10 @@ Rules:
         incomeFallbacks.push((async () => {
           try {
             await new Promise(r => setTimeout(r, 1100));
-            const braveResult = await this.searchBrave(fallbackQuery, input.clientIp || '127.0.0.1');
+            const _incomeSearch = this.searchKernel
+              ? await this.searchKernel.search({ query: fallbackQuery, tier: 'premium', clientIp: input.clientIp || '127.0.0.1' })
+              : { result: this.searchBrave ? await this.searchBrave(fallbackQuery, input.clientIp || '127.0.0.1') : null };
+            const braveResult = _incomeSearch.result;
             if (!braveResult?.trim()) return;
 
             const extractResponse = await this.groqWithRetry({
@@ -1615,9 +1661,13 @@ Rules:
       tfrCapsule[cityKey] = { current: null, historical: null };
 
       try {
+        const _tfrSearch = async (q) => this.searchKernel
+          ? (await this.searchKernel.search({ query: q, tier: 'premium', clientIp })).result
+          : (this.searchBrave ? await this.searchBrave(q, clientIp) : null);
+
         const currentQuery = `"${city}" total fertility rate ${currentYear}`;
         logger.debug(`🐣 TFR search: "${currentQuery}"`);
-        const currentResult = await this.searchBrave(currentQuery, clientIp);
+        const currentResult = await _tfrSearch(currentQuery);
         tfrCapsule[cityKey].current = parseTFR(currentResult, city, currentYear);
 
         if (!tfrCapsule[cityKey].current && cityToCountry[cityKey]) {
@@ -1625,7 +1675,7 @@ Rules:
           await new Promise(r => setTimeout(r, 1100));
           const countryQuery = `${country} total fertility rate ${currentYear}`;
           logger.debug(`🐣 TFR country fallback: "${countryQuery}"`);
-          const countryResult = await this.searchBrave(countryQuery, clientIp);
+          const countryResult = await _tfrSearch(countryQuery);
           tfrCapsule[cityKey].current = parseTFR(countryResult, country, currentYear);
           if (tfrCapsule[cityKey].current) {
             logger.debug(`🐣 TFR fallback hit: ${city} current = ${tfrCapsule[cityKey].current} (via ${country})`);
@@ -1636,7 +1686,7 @@ Rules:
 
         const histQuery = `"${city}" total fertility rate ${historicalDecade}`;
         logger.debug(`🐣 TFR search: "${histQuery}"`);
-        const histResult = await this.searchBrave(histQuery, clientIp);
+        const histResult = await _tfrSearch(histQuery);
         const histTargetYear = historicalDecade.replace(/s$/, '');
         tfrCapsule[cityKey].historical = parseTFR(histResult, city, histTargetYear);
 
@@ -1645,7 +1695,7 @@ Rules:
           await new Promise(r => setTimeout(r, 1100));
           const countryHistQuery = `${country} total fertility rate ${historicalDecade}`;
           logger.debug(`🐣 TFR country fallback: "${countryHistQuery}"`);
-          const countryHistResult = await this.searchBrave(countryHistQuery, clientIp);
+          const countryHistResult = await _tfrSearch(countryHistQuery);
           tfrCapsule[cityKey].historical = parseTFR(countryHistResult, country, histTargetYear);
           if (tfrCapsule[cityKey].historical) {
             logger.debug(`🐣 TFR fallback hit: ${city} historical = ${tfrCapsule[cityKey].historical} (via ${country})`);
@@ -2034,15 +2084,12 @@ Output ONLY the corrected table and summary lines:`;
     
     logger.debug(`🔄 Retry ${state.retryCount}: Searching for better data...`);
     
-    const searchQuery = await this.extractCoreQuestion(safeQuery);
-    const retrySearch = this.searchCascade
-      ? await this.searchCascade({ query: searchQuery, strategy: 'brave-first', clientIp })
-      : await (async () => {
-        const braveR = await this.searchBrave(searchQuery, clientIp);
-        if (braveR) return { result: braveR, provider: 'brave' };
-        const ddgR = await this.searchDuckDuckGo(searchQuery);
-        return { result: ddgR || null, provider: ddgR ? 'ddg' : null };
-      })();
+    const searchQuery = await this.extractCoreQuestion(safeQuery, sanitizedHistory, getUrlAnchors(clientIp));
+    const retrySearch = this.searchKernel
+      ? await this.searchKernel.search({ query: searchQuery, tier: 'premium', clientIp })
+      : this.searchCascade
+        ? await this.searchCascade({ query: searchQuery, strategy: 'brave-first', clientIp })
+        : { result: null, provider: null };
     
     if (retrySearch.result) {
       state.searchContext = retrySearch.result;
@@ -2050,6 +2097,8 @@ Output ONLY the corrected table and summary lines:`;
       state.didSearch = true;
       // Extract URLs from retry search results and enrich with Firecrawl if configured
       const retryUrls = [...retrySearch.result.matchAll(/^   Source:\s*(https?:\/\/\S+)/gm)].map(m => m[1]);
+      // Update source URLs from the retry search — the first-pass sources are stale (bad query)
+      if (retryUrls.length > 0) state.searchSourceUrls = retryUrls;
       if (retryUrls.length > 0 && process.env.FIRECRAWL_API_KEY) {
         const { enrichUrls, substituteEnrichedSnippets } = require('./firecrawl-enricher');
         const enriched = await enrichUrls(retryUrls, { timeoutMs: 6000 });

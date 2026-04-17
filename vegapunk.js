@@ -509,9 +509,14 @@ app.get('/', (req, res) => {
 
 app.get('/api/client-constants.js', (req, res) => {
     const { BOOK_ID_PATTERN } = require('./lib/validators');
+    const { PHI_BREATHE } = require('./config/constants');
     res.setHeader('Content-Type', 'application/javascript');
     res.setHeader('Cache-Control', 'public, max-age=3600');
-    res.send(`window.Nyan=window.Nyan||{};window.Nyan.BOOK_ID_PATTERN=${BOOK_ID_PATTERN};`);
+    res.send(
+        `window.Nyan=window.Nyan||{};` +
+        `window.Nyan.BOOK_ID_PATTERN=${BOOK_ID_PATTERN};` +
+        `window.Nyan.PHI_BREATHE={base:${PHI_BREATHE.BASE_INTERVAL_MS},phi:${PHI_BREATHE.PHI}};`
+    );
 });
 
 // Serve main dashboard - client-side JWT auth will handle access control
@@ -687,7 +692,37 @@ app.listen(PORT, '0.0.0.0', async () => {
     };
 
     await Promise.all([initBots(), initDb()]);
-    
+
+    // Register all bots in the NyanMesh node registry (in-memory, snapshotted to DB at 86-breath).
+    // Initial status reflects actual bot readiness (may be 'offline' if token missing).
+    phiBreathe.registerNode('hermes', { role: 'creator', symbol: 'φ', status: hermesBot.isReady() ? 'online' : 'offline' });
+    phiBreathe.registerNode('thoth',  { role: 'mirror',  symbol: '0', status: thothBot.isReady()  ? 'online' : 'offline' });
+    phiBreathe.registerNode('idris',  { role: 'scribe',  symbol: 'ι', status: idrisBot.isReady()  ? 'online' : 'offline' });
+    phiBreathe.registerNode('horus',  { role: 'watcher', symbol: 'Ω', status: horusBot.isReady()  ? 'online' : 'offline' });
+
+    // Wire bot lifecycle events → NyanMesh deregister/reregister
+    // Uses public .client property (plain JS object field, not encapsulated)
+    const botLifecycle = [
+        { name: 'hermes', bot: hermesBot },
+        { name: 'thoth',  bot: thothBot  },
+        { name: 'idris',  bot: idrisBot  },
+        { name: 'horus',  bot: horusBot  }
+    ];
+    for (const { name, bot } of botLifecycle) {
+        if (!bot.client) continue;
+        bot.client.on('shardDisconnect', () => {
+            logger.warn({ node: name }, '🔌 NyanMesh: bot disconnected — %s', name);
+            phiBreathe.deregisterNode(name);
+        });
+        bot.client.on('error', () => {
+            phiBreathe.deregisterNode(name);
+        });
+        bot.client.on('ready', () => {
+            logger.info({ node: name }, '🔌 NyanMesh: bot reconnected — %s', name);
+            phiBreathe.updateNodeStatus(name, true);
+        });
+    }
+
     // Server is now ready for requests
     logger.info('🌸 Multi-tenant NyanBook~ ready');
     
@@ -914,11 +949,17 @@ app.listen(PORT, '0.0.0.0', async () => {
         logger.info('🔢 Genesis counter started (cat + φ breath tiers)');
 
         phiBreathe.setPool(pool);
-        phiBreathe.setBots({ idris: idrisBot });
+        phiBreathe.setBots({ hermes: hermesBot, thoth: thothBot, idris: idrisBot, horus: horusBot });
         phiBreathe.setCleanupFunctions({ cleanupOldSessions });
 
         phiBreathe.setHeartbeatCallback((breathCount) => {
             console.log('\n' + formatPulseLog(registeredSatellites, 'online') + '\n');
+            // Refresh NyanMesh node statuses — use Discord.js client.isReady() (checks WS READY state)
+            // rather than wrapper isReady() which never resets ready flag on disconnect.
+            phiBreathe.updateNodeStatus('hermes', hermesBot.client?.isReady() ?? false);
+            phiBreathe.updateNodeStatus('thoth',  thothBot.client?.isReady()  ?? false);
+            phiBreathe.updateNodeStatus('idris',  idrisBot.client?.isReady()  ?? false);
+            phiBreathe.updateNodeStatus('horus',  horusBot.client?.isReady()  ?? false);
         });
 
         await phiBreathe.startPhiBreathe();

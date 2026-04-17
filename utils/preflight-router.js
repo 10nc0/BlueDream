@@ -16,6 +16,7 @@ const { detectStockTicker, detectPsiEMAKeys, smartDetectTicker, fetchStockPrices
 const { getPsiEMAContext, PsiEMADashboard, PSI_EMA_DOCUMENTATION } = require('./psi-EMA');
 const { getFinancialPhysicsSeed } = require('./financial-physics');
 const { getLegalAnalysisSeed, LEGAL_KEYWORDS_REGEX } = require('../prompts/legal-analysis');
+const { CREATE_MODE_SEED } = require('../prompts/create-mode');
 const { getChemistryAnalysisSeed, CHEMISTRY_KEYWORDS_REGEX, modelIdToLabel } = require('../prompts/pharma-analysis');
 const { getLLMBackend } = require('../config/constants');
 const { processChemistryContent } = require('./attachment-cascade');
@@ -235,7 +236,7 @@ function formatMarketCap(marketCap) {
  * @returns {Promise<PreflightResult>}
  */
 async function preflightRouter(options) {
-  const { query = '', attachments = [], docContext = {}, contextResult = null } = options;
+  const { query = '', attachments = [], docContext = {}, contextResult = null, digest = null } = options;
   
   // ========================================
   // BLOB DETECTION: Extract main query from large text
@@ -265,14 +266,53 @@ async function preflightRouter(options) {
       needsRealtimeSearch: false,
       hasAttachments: attachments.length > 0,
       hasDocContext: Object.keys(docContext).length > 0,
-      isBlob: blobResult.isBlob
+      isBlob: blobResult.isBlob,
+      // Digest-derived flags (set below, additive — do not override existing mode logic)
+      isCreateIntent: false,
+      forceHighVolatility: false
     },
     stockContext: null,
     forexData: null,
     forexContext: null,
     codeContext: null,
+    // Digest context carried forward for pipeline consumers (geo → search, language → buildSystemContext)
+    digestGeo: null,
+    digestLanguage: null,
     error: null
   };
+
+  // ========================================
+  // DIGEST FLAGS: Apply DigestResult to routing (additive — existing modes unchanged)
+  // ========================================
+  if (digest) {
+    if (digest.intent === 'C') {
+      result.routingFlags.isCreateIntent = true;
+      logger.debug('📝 Digest: Create intent detected → isCreateIntent=true');
+    }
+    if (digest.context?.time === 'current') {
+      result.routingFlags.forceHighVolatility = true;
+      logger.debug('⏱️ Digest: context.time=current → forceHighVolatility=true');
+    }
+    if (digest.context?.geo) {
+      // Normalize geo: plain ASCII words/spaces only, max 50 chars, no punctuation injection risk
+      const rawGeo = String(digest.context.geo).trim();
+      const safeGeo = rawGeo.replace(/[^a-zA-Z0-9\s\-,]/g, '').substring(0, 50).trim();
+      if (safeGeo) {
+        result.digestGeo = safeGeo;
+        logger.debug(`🌍 Digest: geo context = "${safeGeo}"`);
+      }
+    }
+    if (digest.context?.language && digest.context.language !== 'en') {
+      // Normalize language: ISO 639-1 two-letter code only (e.g. "id", "ms", "zh")
+      // Reject anything that doesn't match the pattern to prevent prompt injection
+      const rawLang = String(digest.context.language).trim().toLowerCase();
+      const safeLang = /^[a-z]{2}(-[a-z]{2})?$/.test(rawLang) ? rawLang : null;
+      if (safeLang) {
+        result.digestLanguage = safeLang;
+        logger.debug(`🗣️ Digest: language = "${safeLang}"`);
+      }
+    }
+  }
   
   try {
     // ========================================
@@ -1077,6 +1117,21 @@ function buildSystemContext(preflight, nyanProtocolPrompt, options = {}) {
     }) });
     logger.debug(`🏠 Seed Metric proxy cascade injected (scavenger hunt map)`);
   }
+
+  // Create mode: structured artifact constraint
+  // Injected when digest detected a synthesis/creation request (isCreateIntent)
+  // Constrains output format only — leaves structure/columns to LLM judgment
+  if (preflight.routingFlags.isCreateIntent) {
+    messages.push({ role: 'system', content: CREATE_MODE_SEED });
+    logger.debug('📄 Create mode seed injected (isCreateIntent=true)');
+  }
+
+  // Language hint: when digest detected a non-English query, mirror output language
+  // Injected last so it has high recency weight vs. other system messages
+  if (preflight.digestLanguage && preflight.digestLanguage !== 'en') {
+    messages.push({ role: 'system', content: `Respond in ${preflight.digestLanguage}.` });
+    logger.debug(`🗣️ Language hint injected: respond in ${preflight.digestLanguage}`);
+  }
   
   return messages;
 }
@@ -1101,56 +1156,7 @@ function detectCompoundQuery(query, hasPhotos = false, hasDocuments = false) {
     /[?!]\s+(?:and\s+)?(?=(?:what|how|can|could|do|does|is|are|tell|show|explain|describe)\s)/i,
   ];
 
-  let splitIndex = -1;
-  let splitLength = 0;
-
-  for (const pattern of SPLIT_PATTERNS) {
-    const match = trimmed.match(pattern);
-    if (match && match.index > 10 && match.index < trimmed.length - 10) {
-      splitIndex = match.index;
-      splitLength = match[0].length;
-      break;
-    }
-  }
-
-  if (splitIndex === -1) {
-    const hasTickerSignal = /\$[A-Z]{1,5}\b/.test(trimmed) || 
-      detectPsiEMAKeys(trimmed).shouldTrigger;
-    const hasImageSignal = hasPhotos && 
-      /\b(image|photo|picture|pic|screenshot|this|attached|uploaded)\b/i.test(trimmed);
-
-    if (hasTickerSignal && hasImageSignal) {
-      const imageRefPatterns = [
-        /[?.]?\s*(?:also\s+)?(?:and\s+)?(?:what|how|can|could|tell|show|explain|describe|analyze|look)\s.*\b(?:image|photo|picture|pic|screenshot|this|attached|uploaded)\b/i,
-        /\b(?:image|photo|picture|pic|screenshot|this|attached|uploaded)\b.*[?]/i,
-      ];
-
-      for (const pattern of imageRefPatterns) {
-        const match = trimmed.match(pattern);
-        if (match && match.index > 5) {
-          splitIndex = match.index;
-          splitLength = 0;
-          if (/^[?.\s]/.test(match[0])) {
-            splitIndex += 1;
-            splitLength = 0;
-          }
-          break;
-        }
-      }
-    }
-  }
-
-  if (splitIndex === -1) return null;
-
-  const part1Text = trimmed.slice(0, splitIndex).replace(/[?.!,\s]+$/, '').trim();
-  const part2Text = trimmed.slice(splitIndex + splitLength).trim();
-
-  if (part1Text.length < 5 || part2Text.length < 5) return null;
-
-  const part1HasTicker = /\$[A-Z]{1,5}\b/.test(part1Text) || detectPsiEMAKeys(part1Text).shouldTrigger;
-  const part2HasTicker = /\$[A-Z]{1,5}\b/.test(part2Text) || detectPsiEMAKeys(part2Text).shouldTrigger;
-  const part1HasImageRef = /\b(image|photo|picture|pic|screenshot|this|attached|uploaded)\b/i.test(part1Text);
-  const part2HasImageRef = /\b(image|photo|picture|pic|screenshot|this|attached|uploaded)\b/i.test(part2Text);
+  const MAX_PARTS = 5;
 
   function labelPart(text, hasTicker, hasImageRef) {
     if (hasTicker) return 'Price & Trend Analysis';
@@ -1163,27 +1169,82 @@ function detectCompoundQuery(query, hasPhotos = false, hasDocuments = false) {
     return 'General Query';
   }
 
-  const subQueries = [
-    {
-      query: part1Text,
-      label: labelPart(part1Text, part1HasTicker, part1HasImageRef),
-      includePhotos: part1HasImageRef && hasPhotos,
-      includeDocuments: /\b(document|pdf|file|excel|spreadsheet)\b/i.test(part1Text) && hasDocuments,
-    },
-    {
-      query: part2Text,
-      label: labelPart(part2Text, part2HasTicker, part2HasImageRef),
-      includePhotos: part2HasImageRef && hasPhotos,
-      includeDocuments: /\b(document|pdf|file|excel|spreadsheet)\b/i.test(part2Text) && hasDocuments,
-    },
-  ];
-
-  if (!subQueries[0].includePhotos && !subQueries[1].includePhotos && hasPhotos) {
-    subQueries[1].includePhotos = true;
-    if (subQueries[1].label === 'General Query') {
-      subQueries[1].label = 'Image Analysis';
-    }
+  function makePart(text) {
+    const hasTicker = /\$[A-Z]{1,5}\b/.test(text) || detectPsiEMAKeys(text).shouldTrigger;
+    const hasImageRef = /\b(image|photo|picture|pic|screenshot|this|attached|uploaded)\b/i.test(text);
+    return {
+      query: text,
+      label: labelPart(text, hasTicker, hasImageRef),
+      includePhotos: hasImageRef && hasPhotos,
+      includeDocuments: /\b(document|pdf|file|excel|spreadsheet)\b/i.test(text) && hasDocuments,
+      _hasTicker: hasTicker,
+      _hasImageRef: hasImageRef
+    };
   }
+
+  function findSplit(text) {
+    for (const pattern of SPLIT_PATTERNS) {
+      const match = text.match(pattern);
+      if (match && match.index > 10 && match.index < text.length - 10) {
+        return { index: match.index, length: match[0].length };
+      }
+    }
+    return null;
+  }
+
+  function findTickerImageSplit(text) {
+    const hasTickerSignal = /\$[A-Z]{1,5}\b/.test(text) || detectPsiEMAKeys(text).shouldTrigger;
+    const hasImageSignal = hasPhotos && /\b(image|photo|picture|pic|screenshot|this|attached|uploaded)\b/i.test(text);
+    if (!hasTickerSignal || !hasImageSignal) return null;
+
+    const imageRefPatterns = [
+      /[?.]?\s*(?:also\s+)?(?:and\s+)?(?:what|how|can|could|tell|show|explain|describe|analyze|look)\s.*\b(?:image|photo|picture|pic|screenshot|this|attached|uploaded)\b/i,
+      /\b(?:image|photo|picture|pic|screenshot|this|attached|uploaded)\b.*[?]/i,
+    ];
+    for (const pattern of imageRefPatterns) {
+      const match = text.match(pattern);
+      if (match && match.index > 5) {
+        const idx = /^[?.\s]/.test(match[0]) ? match.index + 1 : match.index;
+        return { index: idx, length: 0 };
+      }
+    }
+    return null;
+  }
+
+  // Iteratively split remainder until no more breaks found or MAX_PARTS reached
+  const parts = [];
+  let remainder = trimmed;
+
+  while (parts.length < MAX_PARTS - 1 && remainder.length >= 15) {
+    const split = findSplit(remainder) || (parts.length === 0 ? findTickerImageSplit(remainder) : null);
+    if (!split) break;
+
+    const head = remainder.slice(0, split.index).replace(/[?.!,\s]+$/, '').trim();
+    const tail = remainder.slice(split.index + split.length).trim();
+
+    if (head.length < 5 || tail.length < 5) break;
+
+    parts.push(makePart(head));
+    remainder = tail;
+  }
+
+  if (parts.length === 0) return null;
+
+  // Last piece is the final remainder
+  parts.push(makePart(remainder));
+
+  // Fallback: if no part got photos assigned but query has photos, give them to last part
+  const anyPhotos = parts.some(p => p.includePhotos);
+  if (!anyPhotos && hasPhotos) {
+    const last = parts[parts.length - 1];
+    last.includePhotos = true;
+    if (last.label === 'General Query') last.label = 'Image Analysis';
+  }
+
+  // Strip internal helper fields before returning
+  const subQueries = parts.map(({ query, label, includePhotos, includeDocuments }) =>
+    ({ query, label, includePhotos, includeDocuments })
+  );
 
   logger.debug(`🔀 COMPOUND QUERY DETECTED: Split into ${subQueries.length} sub-queries`);
   subQueries.forEach((sq, i) => {

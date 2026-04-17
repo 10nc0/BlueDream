@@ -6,7 +6,8 @@ const { processAndCacheDocList } = require('../../utils/doc-cache');
 const { AttachmentIngestion } = require('../../utils/attachment-ingestion');
 const { recordInMemory } = require('../../utils/context-extractor');
 const { detectCompoundQuery } = require('../../utils/preflight-router');
-const { fetchUrl } = require('../../lib/url-fetcher');
+const { fetchUrl, extractUrls } = require('../../lib/url-fetcher');
+const { addAnchor, tickAnchors, clearAnchors } = require('../../utils/url-anchor-store');
 const capacityManager = require('../../utils/playground-capacity');
 const usageTracker = require('../../utils/playground-usage');
 
@@ -70,8 +71,9 @@ function registerPlaygroundRoutes(app, deps) {
 
             const pkgResult = globalPackageStore.nukeTenant(clientIp);
             clearMemory(clientIp);
+            clearAnchors(clientIp);
 
-            logger.info({ ip: clientIp }, 'NUKE: DataPackage + Memory cleared');
+            logger.info({ ip: clientIp }, 'NUKE: DataPackage + Memory + Anchors cleared');
             res.json({
                 success: true,
                 ...pkgResult,
@@ -111,6 +113,7 @@ function registerPlaygroundRoutes(app, deps) {
             }
 
             await fetchUrlsFromMessage(message, extractedContent);
+            for (const u of extractUrls(message || '').slice(0, 3)) addAnchor(clientIp, u);
 
             const photoList = normalizePhotoList(photos, photo);
 
@@ -141,6 +144,7 @@ function registerPlaygroundRoutes(app, deps) {
             if (pipelineResult.success && pipelineResult.answer) {
                 recordInMemory(clientIp, message || '', pipelineResult.answer, buildDocAttachmentMeta(docList, extractedContent));
             }
+            tickAnchors(clientIp);
 
             res.json({
                 success: pipelineResult.success,
@@ -199,6 +203,7 @@ function registerPlaygroundRoutes(app, deps) {
             }
 
             await fetchUrlsFromMessage(message, extractedContent, { sseStage, isClientDisconnected });
+            for (const u of extractUrls(message || '').slice(0, 3)) addAnchor(clientIp, u);
 
             if (isClientDisconnected()) return;
 
@@ -247,6 +252,7 @@ function registerPlaygroundRoutes(app, deps) {
 
                 await fastStreamPersonality(res, compound.mergedAnswer, mergedAudit);
                 recordInMemory(clientIp, message || '', compound.mergedAnswer || '', buildDocAttachmentMeta(docList, extractedContent));
+                tickAnchors(clientIp);
 
                 logger.info({ ip: clientIp, badge: compound.worstBadge, sections: compound.sections.length }, '🌊 Compound streaming complete');
             } else {
@@ -311,6 +317,7 @@ function registerPlaygroundRoutes(app, deps) {
                 if (pipelineResult.success) {
                     recordInMemory(clientIp, message || '', verifiedAnswer || '', buildDocAttachmentMeta(docList, extractedContent));
                 }
+                tickAnchors(clientIp);
 
                 logger.info({ ip: clientIp, badge, searchRetry: didSearchRetry }, '🌊 Streaming complete');
             }

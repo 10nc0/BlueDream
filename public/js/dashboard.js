@@ -405,7 +405,7 @@
                 const singularityBtn = document.querySelector('.singularity-btn');
                 if (singularityBtn) {
                     // Match breathe timing to rotation timing
-                    const breathDuration = newSpeed === 'FAST' ? 2000 : 4000;
+                    const breathDuration = newSpeed === 'FAST' ? Math.round(PHI_BREATH.BASE_DURATION / 2) : PHI_BREATH.BASE_DURATION;
                     singularityBtn.style.setProperty('--breath-duration', `${breathDuration}ms`);
                 }
                 
