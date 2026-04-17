@@ -398,4 +398,5 @@ nyan~
 
 *Alone is full. Together is the better half.*
 *Truth is what remains queryable after every false positive named*
-![Cross-hatch by Grok](cross-hatch-grok.png)
+
+<img src="cross-hatch-grok.png" width="280" alt="Cross-hatch by Grok — the void is always already here">
