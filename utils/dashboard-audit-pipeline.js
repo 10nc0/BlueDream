@@ -12,7 +12,7 @@
  * └────────────────────────────────────────────────────────────────────┘
  */
 
-const { AUDIT } = require('../config/constants');
+const { AUDIT, AI_MODELS } = require('../config/constants');
 const { createCapsule, destroyCapsule } = require('./audit-capsule');
 
 // ==================== Entity Extractors ====================
@@ -193,7 +193,7 @@ Please provide a corrected response with accurate counts that match the instance
   try {
     const retryOptions = {
       ...options,
-      temperature: 0.1,
+      temperature: AI_MODELS.TEMPERATURE_PRECISE,
       isRetry: true
     };
     

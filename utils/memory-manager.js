@@ -16,7 +16,7 @@ const axios = require('axios');
 const crypto = require('crypto');
 
 const { MAX_CONTENT_CHARS, MAX_MESSAGE_SIZE } = require('./config-constants');
-const { GROQ_API_URL } = require('../config/constants');
+const { GROQ_API_URL, AI_MODELS } = require('../config/constants');
 
 /**
  * Hash session ID for privacy
@@ -188,7 +188,7 @@ Write the summary as natural prose, not a list. Focus on what a helpful assistan
           model: SUMMARY_MODEL,
           messages: [{ role: 'user', content: prompt }],
           max_tokens: 300,
-          temperature: 0.3
+          temperature: AI_MODELS.TEMPERATURE_SUMMARIZATION
         },
         {
           headers: {

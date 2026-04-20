@@ -6,7 +6,7 @@
 
 const logger = require('../lib/logger');
 const axios = require('axios');
-const { GROQ_API_URL } = require('../config/constants');
+const { GROQ_API_URL, AI_MODELS } = require('../config/constants');
 const YahooFinance = require('yahoo-finance2').default;
 const yahooFinance = new YahooFinance({ suppressNotices: ['ripHistorical', 'yahooSurvey'] });
 
@@ -591,7 +591,7 @@ EXAMPLES:
           },
           { role: 'user', content: query }
         ],
-        temperature: 0,
+        temperature: AI_MODELS.TEMPERATURE_DETERMINISTIC,
         max_tokens: 100
       },
       {

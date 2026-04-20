@@ -15,7 +15,7 @@
 
 const axios = require('axios');
 const logger = require('../lib/logger');
-const { getFastLLMBackend } = require('../config/constants');
+const { getFastLLMBackend, AI_MODELS } = require('../config/constants');
 
 const _fast = getFastLLMBackend();
 
@@ -131,7 +131,7 @@ Respond ONLY with a JSON object, no explanation:
         { role: 'system', content: systemPrompt },
         { role: 'user', content: rawQuery.substring(0, 800) }
       ],
-      temperature: 0.05,
+      temperature: AI_MODELS.TEMPERATURE_STRICT,
       max_tokens: 80
     },
     {

@@ -82,7 +82,7 @@ async function extractCoreQuestion(message, conversationHistory = [], urlAnchors
                     { role: 'system', content: systemPrompt },
                     { role: 'user', content: userContent }
                 ],
-                temperature: 0.1,
+                temperature: AI_MODELS.TEMPERATURE_PRECISE,
                 max_tokens: 40
             },
             {

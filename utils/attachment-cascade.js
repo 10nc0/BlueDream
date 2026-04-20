@@ -1674,7 +1674,7 @@ Be specific and technical. This is for scientific document analysis.`
                         }
                     ],
                     max_tokens: 1024,
-                    temperature: 0.15
+                    temperature: AI_MODELS.TEMPERATURE_REASONING
                 },
                 {
                     headers: {
@@ -1939,7 +1939,7 @@ Respond with a clear description of what you observe.`;
                             ]
                         }
                     ],
-                    temperature: 0.1,
+                    temperature: AI_MODELS.TEMPERATURE_PRECISE,
                     max_completion_tokens: 1024
                 },
                 {

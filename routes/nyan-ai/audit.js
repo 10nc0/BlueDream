@@ -112,7 +112,7 @@ Analyze the data and answer the user's question. Count carefully when asked abou
                         { role: 'system', content: buildExecutiveAuditPrompt(language, bookContext?.langComposition) },
                         { role: 'user', content: contextPrompt }
                     ],
-                    temperature: 0.2,
+                    temperature: AI_MODELS.TEMPERATURE_AUDIT,
                     max_tokens: 4096
                 },
                 config: {
@@ -141,7 +141,7 @@ Analyze the data and answer the user's question. Count carefully when asked abou
                                 { role: 'system', content: buildRetryPrompt() },
                                 { role: 'user', content: retryPrompt }
                             ],
-                            temperature: options.temperature || 0.1,
+                            temperature: options.temperature || AI_MODELS.TEMPERATURE_PRECISE,
                             max_tokens: 4096
                         },
                         config: {

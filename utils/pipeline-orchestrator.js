@@ -44,7 +44,7 @@ const { isFalseDichotomy } = require('../prompts/audit-protocol');
 const { detectPathogens, generateClinicalReport, generatePhysicalAuditDisclaimer } = require('./psi-EMA');
 const { DataPackage, globalPackageStore, STAGE_IDS } = require('./data-package');
 const { globalCheckpointStore, buildResumableSnapshot, applySnapshot } = require('./pipeline-checkpoint');
-const { getLLMBackend, getAuditBackend } = require('../config/constants');
+const { getLLMBackend, getAuditBackend, AI_MODELS } = require('../config/constants');
 const { digestQuery } = require('./query-digest');
 const { CITY_EXPAND, COUNTRY_TO_CITY, CITY_TO_COUNTRY } = require('./geo-data');
 const { MAX_CONTENT_CHARS } = require('./config-constants');
@@ -1163,7 +1163,7 @@ User query: ${query}`;
         data: {
           model: this.llmModel,
           messages,
-          temperature: temperature || 0.15,
+          temperature: temperature || AI_MODELS.TEMPERATURE_REASONING,
           max_tokens: maxTokens || 1500,
           top_p: 0.95
         },
@@ -1268,7 +1268,7 @@ Rules:
           // 'required' forces the LLM to call at least one brave_search tool.
           // 'auto' lets it answer from training data — that's dogma, not live epistemics.
           tool_choice: 'required',
-          temperature: 0.1,
+          temperature: AI_MODELS.TEMPERATURE_PRECISE,
           max_tokens: 800
         },
         config: {
@@ -1426,7 +1426,7 @@ Rules:
                   { role: 'system', content: microExtractPrompt },
                   { role: 'user', content: `Search query: "${searchQuery}"\n\nSearch results:\n${braveText.slice(0, 3000)}` }
                 ],
-                temperature: 0,
+                temperature: AI_MODELS.TEMPERATURE_DETERMINISTIC,
                 max_tokens: 100
               },
               config: {
@@ -1517,7 +1517,7 @@ Rules:
                   { role: 'system', content: microExtractPrompt },
                   { role: 'user', content: `Search query: "${fallbackQuery}"\n\nSearch results:\n${braveResult.slice(0, 3000)}` }
                 ],
-                temperature: 0,
+                temperature: AI_MODELS.TEMPERATURE_DETERMINISTIC,
                 max_tokens: 100
               },
               config: {
@@ -1630,7 +1630,7 @@ Rules:
             { role: 'system', content: codaSystemPrompt },
             { role: 'user', content: fullOutput }
           ],
-          temperature: 0.7,
+          temperature: AI_MODELS.TEMPERATURE_CREATIVE,
           max_tokens: 300
         },
         config: {
@@ -1862,7 +1862,7 @@ Output ONLY the corrected table and summary lines:`;
               data: {
                 model: this.llmModel,
                 messages: [{ role: 'user', content: fixPrompt }],
-                temperature: 0.1,
+                temperature: AI_MODELS.TEMPERATURE_PRECISE,
                 max_tokens: 800
               },
               config: {

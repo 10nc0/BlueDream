@@ -180,9 +180,15 @@ const AI_MODELS = {
   VISION: 'meta-llama/llama-4-scout-17b-16e-instruct',       // Alias for backward compatibility
   AUDIO_MODEL: 'whisper-large-v3-turbo',                     // Groq Whisper model
   
-  // Temperature settings (H₀ protocol: 0.15 for reasoning, avoids hallucination)
-  TEMPERATURE_REASONING: 0.15,     // For deterministic, fact-based responses
-  TEMPERATURE_CREATIVE: 0.7,       // For creative responses (if used)
+  // Temperature routing (H₀ protocol — centralized, never hardcode at call sites)
+  TEMPERATURE_DETERMINISTIC: 0,    // Tool calls, stock data, structured extraction — zero hallucination
+  TEMPERATURE_STRICT: 0.05,        // Query classification, near-deterministic routing
+  TEMPERATURE_PRECISE: 0.1,        // Audit paths, pipeline steps, pronoun resolution
+  TEMPERATURE_REASONING: 0.15,     // Reasoning chains, search-augmented responses
+  TEMPERATURE_AUDIT: 0.2,          // Audit main path (slightly more expressive than precise)
+  TEMPERATURE_SUMMARIZATION: 0.3,  // Memory compression, summarization tasks
+  TEMPERATURE_CREATIVE: 0.7,       // Creative / generative responses
+  TEMPERATURE_DEEPSEEK: 1,         // DeepSeek reasoning model requirement (chain-of-thought)
   
   // @source: Groq API token limits per model
   // @ref: https://console.groq.com/docs/models (context window varies by model)

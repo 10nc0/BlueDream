@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { MAX_CONTENT_CHARS } = require('./config-constants');
-const { TIMEOUTS, GROQ_RETRY, GROQ_API_URL } = require('../config/constants');
+const { TIMEOUTS, GROQ_RETRY, GROQ_API_URL, AI_MODELS } = require('../config/constants');
 
 async function groqWithRetry(axiosCall, maxRetries = GROQ_RETRY.TEXT_MAX_RETRIES) {
     const axios = require('axios');
@@ -309,7 +309,7 @@ VERIFICATION: After counting, verify by recount. If complex tricyclic, explain r
                         ]
                     }
                 ],
-                temperature: 0.15,
+                temperature: AI_MODELS.TEMPERATURE_REASONING,
                 max_tokens: 1000
             },
             {

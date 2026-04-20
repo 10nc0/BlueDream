@@ -19,9 +19,8 @@
 const logger = require('../lib/logger');
 const axios = require('axios');
 const { buildAuditPrompt, buildCorrectivePrompt } = require('../prompts/audit-protocol');
-const { getAuditBackend } = require('../config/constants');
+const { getAuditBackend, AI_MODELS } = require('../config/constants');
 
-const AUDIT_TEMPERATURE = 0.1;
 
 async function runAuditPass(groqToken, draftAnswer, originalQuery, userContext, extensions, timeout) {
   // Accept unified timestamp from pipeline's queryTimestamp or fall back to current time
@@ -81,8 +80,8 @@ Perform the dialectical audit and output JSON only.`;
       messages: auditMessages,
       max_tokens: 800,
       ...(isReasoner
-        ? { temperature: 1 }
-        : { temperature: AUDIT_TEMPERATURE, response_format: { type: 'json_object' } }
+        ? { temperature: AI_MODELS.TEMPERATURE_DEEPSEEK }
+        : { temperature: AI_MODELS.TEMPERATURE_PRECISE, response_format: { type: 'json_object' } }
       )
     };
 
@@ -186,7 +185,7 @@ async function runCorrectivePass(groqToken, draftAnswer, originalQuery, issues, 
         { role: 'system', content: 'You are correcting an AI answer based on audit feedback. Output the corrected answer only.' },
         { role: 'user', content: correctivePrompt }
       ],
-      temperature: isCorrectiveReasoner ? 1 : 0.15,
+      temperature: isCorrectiveReasoner ? AI_MODELS.TEMPERATURE_DEEPSEEK : AI_MODELS.TEMPERATURE_REASONING,
       max_tokens: maxTokens
     },
     {
