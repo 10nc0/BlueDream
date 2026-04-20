@@ -207,10 +207,13 @@ function buildSeedMetricTable(parsedData, historicalDecade = String(new Date().g
     const currIncome = data.current?.income?.value;
     const currCurrency = data.current?.pricePerSqm?.currency || data.current?.income?.currency || 'USD';
 
-    const histPriceSqm = data.historical?.pricePerSqm?.value;
+    const rawHistPriceSqm = data.historical?.pricePerSqm?.value;
     const histCurrency = data.historical?.pricePerSqm?.currency || data.historical?.income?.currency || 'USD';
-    // Temporal contamination guard: if historical income == current income exactly,
-    // Brave returned a current-era figure for the historical query — treat as null.
+    // Temporal contamination guard — price: if historical price == current price exactly,
+    // the same Brave page fed both period extractions. No real market has had zero
+    // nominal price change over a 25-year span — treat historical as null.
+    const histPriceSqm = (rawHistPriceSqm != null && rawHistPriceSqm === currPriceSqm) ? null : rawHistPriceSqm;
+    // Temporal contamination guard — income: same logic.
     // No real city has had zero nominal income change over a 25-year span.
     const rawHistIncome = data.historical?.income?.value;
     const histIncome = (rawHistIncome != null && rawHistIncome === currIncome) ? null : rawHistIncome;

@@ -1330,6 +1330,8 @@ Rules:
 - Monthly rent is NOT purchase price — ignore it.
 - Household/dual income is NOT single-earner — ignore it.
 - GDP per capita is NOT income — ignore it.
+- Property price, home value, median sale price is NOT income — ignore it.
+- INCOME PLAUSIBILITY: If the extracted income value exceeds 300,000 USD-equivalent for an "average" or "median" earner query, you have almost certainly grabbed a property price or executive compensation figure by mistake — output {"value": null} instead.
 - If no usable number found: output {"value": null}
 - null is always better than a guess. Every number must come from the search text.
 - CRITICAL — always output the fully-expanded raw integer, never an abbreviated form.
