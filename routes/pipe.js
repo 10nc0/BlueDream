@@ -347,11 +347,12 @@ function registerPipeRoutes(app, deps) {
         }
     });
 
+    const HTTPS_ONLY = (val) => val == null || /^https?:\/\//i.test(val);
     const webhookPayloadSchema = z.object({
         text: z.string().max(10000, 'Message too long').optional().default(''),
         username: z.string().max(100, 'Username too long').optional().default('External'),
-        avatar_url: z.string().url('Invalid avatar URL').optional().nullable(),
-        media_url: z.string().url('Invalid media URL').optional().nullable(),
+        avatar_url: z.string().url('Invalid avatar URL').refine(HTTPS_ONLY, 'Only HTTP/HTTPS URLs allowed').optional().nullable(),
+        media_url: z.string().url('Invalid media URL').refine(HTTPS_ONLY, 'Only HTTP/HTTPS URLs allowed').optional().nullable(),
         phone: z.string().regex(/^\+?[1-9]\d{1,14}$/, 'Invalid phone format').optional().nullable(),
         email: z.string().email('Invalid email format').optional().nullable()
     });
@@ -412,7 +413,7 @@ function registerPipeRoutes(app, deps) {
                 },
                 rawPayload: payloadResult.data,
                 channel: 'webhook',
-                messageSid: `wh_${Date.now()}_${fractalIdParam.slice(-8)}`,
+                messageSid: `wh_${Date.now()}_${require('crypto').randomBytes(4).toString('hex')}`,
                 queuedAt: Date.now()
             });
 

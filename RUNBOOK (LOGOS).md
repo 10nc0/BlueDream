@@ -444,3 +444,31 @@ If a new CVE appears, triage it here and either upgrade the pinned lower-bound o
 4. Run `npm run security` to confirm zero findings.
 5. Document the CVE in the table above.
 6. Commit both `package.json` and `package-lock.json`.
+
+---
+
+## Security Known Knowns
+
+### Channel Trust Gradient
+
+Each inpipe channel provides different identity guarantees. This is intentional design — not a gap to fill.
+
+| channel | `msg.phone` field | `msg.email` field | verification level |
+|---------|-------------------|-------------------|--------------------|
+| twilio | E.164 phone, carrier-verified | n/a | Twilio signature + carrier + Meta (WhatsApp) |
+| line | LINE user ID (reused in phone field) | n/a | LINE HMAC signature |
+| telegram | Telegram user ID (reused in phone field) | n/a | Telegram secret token |
+| email | n/a | self-claimed (sender header) | SPF/DKIM not validated in this system |
+| webhook | caller-supplied (display only) | caller-supplied (display only) | agent-token (authenticates authorship, not identity) |
+
+**Key invariant**: `msg.phone` means "carrier-verified E.164" only when `PHONE_CHANNELS.has(msg.channel)` is true (currently: `twilio`). For all other channels, the field is a platform-scoped identifier reused for routing convenience — it is never stored into `book_engaged_phones` or used for phone-identity decisions. The gate at `processQueuedMessage` (line 276) short-circuits all webhook messages before any phone-identity logic runs.
+
+**Why webhook auth is authorship-not-identity by design**: the fractal ID in the URL is the write key. This authenticates *which book* the agent is writing to, not *who* the agent is. That is the correct model for a ledger — the book owner configures which agents may write to it by controlling the fractal ID. OTP or identity verification on the inpipe would invert the trust model and is an explicit anti-pattern for this system.
+
+### Queue-Full TOCTOU (check-then-enqueue)
+
+`routes/pipe.js` checks `totalQueueDepth() >= MAX_QUEUE_SIZE` and then calls `enqueueItem()` as a separate step. This is a check-then-act pattern — another enqueue could slip in between the check and the insert, briefly exceeding `MAX_QUEUE_SIZE`.
+
+**This is intentional.** The queue depth check is a health signal, not a hard physical limit. Controlled overfill under burst (a few extra items) is an acceptable and expected failure mode — it does not cause data loss or correctness violations. The queue is drained by the worker loop and the depth self-corrects.
+
+**Atomic enforcement would require**: changing `enqueueItem` to a single `INSERT ... WHERE (SELECT COUNT(*) FROM core.queue_items WHERE status = 'pending') < $MAX` SQL statement. This would make the limit exact but adds a subquery to every enqueue. Not warranted unless the queue ever becomes a hard physical constraint (e.g., storage-limited environment). Document the tradeoff here if that decision is ever revisited.
