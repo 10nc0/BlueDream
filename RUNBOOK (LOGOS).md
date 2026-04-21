@@ -466,7 +466,7 @@ Each inpipe channel provides different identity guarantees. This is intentional 
 1. **Routing gate** (`processQueuedMessage`): webhook messages are short-circuited before `routeMessage` or any async handler runs.
 2. **Write gates** (`handlePendingBookAsync`, `handleActiveBookAsync`): all `book_engaged_phones` inserts are wrapped in `if (PHONE_CHANNELS.has(msg.channel))` — non-phone channels never write to the phone engagement index.
 
-A non-phone channel that somehow reaches the `routeMessage` else-branch (phone lookup) would find nothing (phone = null → empty result) and route to limbo — the safe failure mode.
+LINE messages carry a platform user ID in `msg.phone` (not E.164) and have no dedicated routing branch — they reach the `routeMessage` else-branch, find nothing in `book_engaged_phones` (no E.164 match), and route to limbo. This is the safe failure mode for any non-phone channel that lacks a join code.
 
 **Why webhook auth is authorship-not-identity by design**: the fractal ID in the URL is the write key. This authenticates *which book* the agent is writing to, not *who* the agent is. That is the correct model for a ledger — the book owner configures which agents may write to it by controlling the fractal ID. OTP or identity verification on the inpipe would invert the trust model and is an explicit anti-pattern for this system.
 
