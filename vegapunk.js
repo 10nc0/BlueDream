@@ -426,7 +426,7 @@ app.use(session({
     cookie: {
         maxAge: 7 * 24 * 60 * 60 * 1000, // 1 week
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production', // true in production, false in dev
+        secure: isProd, // true in production (REPLIT_DEPLOYMENT=1 or NODE_ENV=production)
         sameSite: 'none', // Required for cross-site iframe embedding
         partitioned: true // Required for Safari to accept cookies in iframes (CHIPS)
     },

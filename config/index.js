@@ -106,6 +106,7 @@ function buildConnectionString() {
 
 module.exports = {
   config,
+  isProd,
   getDbHost,
   buildConnectionString
 };
