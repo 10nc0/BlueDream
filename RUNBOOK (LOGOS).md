@@ -461,7 +461,12 @@ Each inpipe channel provides different identity guarantees. This is intentional 
 | email | n/a | self-claimed (sender header) | SPF/DKIM not validated in this system |
 | webhook | caller-supplied (display only) | caller-supplied (display only) | agent-token (authenticates authorship, not identity) |
 
-**Key invariant**: `msg.phone` means "carrier-verified E.164" only when `PHONE_CHANNELS.has(msg.channel)` is true (currently: `twilio`). For all other channels, the field is a platform-scoped identifier reused for routing convenience — it is never stored into `book_engaged_phones` or used for phone-identity decisions. The gate at `processQueuedMessage` (line 276) short-circuits all webhook messages before any phone-identity logic runs.
+**Key invariant**: `msg.phone` means "carrier-verified E.164" only when `PHONE_CHANNELS.has(msg.channel)` is true (currently: `twilio`). For all other channels, the field is a platform-scoped identifier reused for routing convenience. This is enforced at two levels:
+
+1. **Routing gate** (`processQueuedMessage`): webhook messages are short-circuited before `routeMessage` or any async handler runs.
+2. **Write gates** (`handlePendingBookAsync`, `handleActiveBookAsync`): all `book_engaged_phones` inserts are wrapped in `if (PHONE_CHANNELS.has(msg.channel))` — non-phone channels never write to the phone engagement index.
+
+A non-phone channel that somehow reaches the `routeMessage` else-branch (phone lookup) would find nothing (phone = null → empty result) and route to limbo — the safe failure mode.
 
 **Why webhook auth is authorship-not-identity by design**: the fractal ID in the URL is the write key. This authenticates *which book* the agent is writing to, not *who* the agent is. That is the correct model for a ledger — the book owner configures which agents may write to it by controlling the fractal ID. OTP or identity verification on the inpipe would invert the trust model and is an explicit anti-pattern for this system.
 
