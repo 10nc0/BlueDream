@@ -24,7 +24,9 @@ const playgroundLimiter = rateLimit({
 });
 
 function registerPlaygroundRoutes(app, deps) {
-    app.get('/api/playground/usage', (req, res) => {
+    const requireAuth = deps?.middleware?.requireAuth;
+
+    app.get('/api/playground/usage', requireAuth, (req, res) => {
         try {
             const stats = usageTracker.getAllUsageStats();
             res.json(stats);
