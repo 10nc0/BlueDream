@@ -16,7 +16,7 @@ const TESTS = [
   { name: 'Auth check-genesis',    method: 'GET',  path: '/api/auth/check-genesis',    expect: 200 },
   { name: 'Books (no JWT)',         method: 'GET',  path: '/api/books',                 expect: 401 },
   { name: 'Books top (no JWT)',     method: 'GET',  path: '/api/books/top',             expect: 401 },
-  { name: 'Playground usage',      method: 'GET',  path: '/api/playground/usage',      expect: 200 },
+  { name: 'Playground usage (no JWT)', method: 'GET', path: '/api/playground/usage', expect: 401 },
   { name: 'Drops (no JWT)',         method: 'GET',  path: '/api/drops/search/test',     expect: 401 },
   { name: 'Nyan-AI audit (no JWT)', method: 'POST', path: '/api/nyan-ai/audit',         expect: 401, body: '{}' },
   { name: 'Twilio webhook (empty)', method: 'POST', path: '/api/twilio/webhook',        expect: [200, 400, 401, 403], body: '' },

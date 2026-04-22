@@ -5,7 +5,8 @@
   "scripts": {
     "test": "node tests/test-search-retry.js",
     "test:audit": "node tests/test-search-retry.js",
-    "test:unit": "node tests/test-preflight-router.js && node tests/test-capsule.js",
+    "test:unit": "node tests/test-preflight-router.js && node tests/test-capsule.js && node tests/test-ssrf.js",
+    "test:ssrf": "node tests/test-ssrf.js",
     "test:smoke": "node tests/smoke.js",
     "test:core": "node tests/test-core.js",
     "security": "bash scripts/security-check.sh"
