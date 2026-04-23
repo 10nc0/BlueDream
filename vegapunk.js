@@ -894,6 +894,9 @@ app.listen(PORT, '0.0.0.0', async () => {
             [['FRACTAL_SALT'],
              '🔐', 'Fractal ID salt',
              'Using weak dev default — set FRACTAL_SALT to a 64-char random hex in production'],
+            [['BACKUP_DISCORD_CHANNEL_ID'],
+             '💾', 'Automated weekly database backup (Discord)',
+             'Automated backups disabled — set BACKUP_DISCORD_CHANNEL_ID to a Discord channel ID to enable weekly pg_dump snapshots'],
         ];
 
         const missing = checks.filter(([keys]) => keys.some(k => !process.env[k]));
@@ -969,6 +972,19 @@ app.listen(PORT, '0.0.0.0', async () => {
         await phiBreathe.orchestrateStartup();
 
         usageTracker.registerWithHeartbeat(phiBreathe);
+
+        const { runBackup } = require('./lib/backup');
+        const BACKUP_CHECK_INTERVAL_MS = 60 * 60 * 1000;
+        let _lastBackupRunHour = null;
+        phiBreathe.subscribe('db-backup', BACKUP_CHECK_INTERVAL_MS, async () => {
+            const now = new Date();
+            if (now.getUTCDay() !== 0) return;
+            if (now.getUTCHours() !== 4) return;
+            const hourKey = `${now.getUTCFullYear()}-${now.getUTCMonth()}-${now.getUTCDate()}`;
+            if (_lastBackupRunHour === hourKey) return;
+            _lastBackupRunHour = hourKey;
+            await runBackup(pool);
+        });
     })();
 });
 

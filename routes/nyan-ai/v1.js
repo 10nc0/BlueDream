@@ -9,6 +9,7 @@ const { PsiEMADashboard } = require('../../utils/psi-EMA');
 const { fetchStockPrices, calculateDataAge, sanitizeTicker } = require('../../utils/stock-fetcher');
 const { detectCompoundQuery } = require('../../utils/preflight-router');
 const { globalCheckpointStore } = require('../../utils/pipeline-checkpoint');
+const { getLastBackupStatus } = require('../../lib/backup');
 const { config } = require('../../config');
 const capacityManager = require('../../utils/playground-capacity');
 
@@ -397,7 +398,8 @@ function registerV1Routes(app, deps) {
                     maxSlots: capacityManager.maxSlots ?? null
                 } : null
             },
-            pipelineCheckpoint: globalCheckpointStore.getStats()
+            pipelineCheckpoint: globalCheckpointStore.getStats(),
+            backup: getLastBackupStatus()
         };
 
         try {

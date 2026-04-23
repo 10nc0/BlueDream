@@ -10,7 +10,7 @@ function registerNyanAIRoutes(app, deps) {
     registerPlaygroundRoutes(app, deps);
     registerV1Routes(app, deps);
 
-    return { endpoints: 15 };
+    return { endpoints: 16 };
 }
 
 module.exports = { registerNyanAIRoutes, capacityManager, usageTracker };

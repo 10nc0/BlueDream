@@ -352,6 +352,7 @@ No Grafana/Prometheus. The observability stack:
 - **Discord threads** — every inbound message is a timestamped audit trail. Gaps are visible.
 - **Server logs** — pino JSON. Background tasks, heal events, bot lifecycle all logged with context.
 - **`core.book_registry`** — `heal_status`, `heal_attempts`, `heal_error`, `next_heal_at` are queryable.
+- **Automated backups** — when `BACKUP_DISCORD_CHANNEL_ID` is set, a weekly `pg_dump` snapshot is posted to that Discord channel every Sunday at 04:00 UTC. Each message includes tenant count, ledger row count, dump size, and UTC timestamp. Last-backup metadata is also visible at `GET /api/admin/backup/status` (requires login).
 
 **Diagnostic queries:**
 ```sql
@@ -386,6 +387,38 @@ psql "$DATABASE_URL" < nyanbook_backup_20260101.sql
 ```
 
 On Supabase free tier: Dashboard → Database → Backups for point-in-time recovery (daily backups included).
+
+### Automated Backup
+
+When `BACKUP_DISCORD_CHANNEL_ID` is set, the system automatically runs `pg_dump` every **Sunday at 04:00 UTC** and posts the compressed result (gzip) as a file attachment to that Discord channel. The Hermes bot token (`HERMES_TOKEN`) is used to post the file.
+
+Each backup message includes:
+
+| Field | Description |
+|-------|-------------|
+| Timestamp (UTC) | When the backup was taken |
+| Tenants | Number of tenant schemas in the database |
+| Ledger rows | Total row count in `core.message_ledger` |
+| Dump size | Compressed file size in MB |
+| Filename | `nyanbook_backup_<ISO-timestamp>.sql.gz` |
+
+**Checking backup status:**
+```
+GET /api/admin/backup/status
+```
+Returns `lastSuccess`, `lastSize`, `lastStatus`, `tenantCount`, `ledgerRowCount`, and `messageId` (Discord message ID of the last posted backup). Requires a valid login session.
+
+**Restoring from a Discord backup:**
+1. Download the `.sql.gz` attachment from the backup channel.
+2. Decompress and restore:
+   ```bash
+   gunzip nyanbook_backup_<timestamp>.sql.gz
+   psql "$DATABASE_URL" < nyanbook_backup_<timestamp>.sql
+   ```
+
+**To trigger a manual backup** (e.g. before a major migration), call `runBackup(pool, hermesToken)` from `lib/backup.js` directly in a one-off script, or temporarily set `BACKUP_DISCORD_CHANNEL_ID` and restart the server on a Sunday at 04:00 UTC.
+
+If `BACKUP_DISCORD_CHANNEL_ID` is not set, the backup is silently skipped and a `WARN` is logged — the feature is strictly opt-in.
 
 ---
 

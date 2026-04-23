@@ -541,6 +541,11 @@ Analyze the data and answer the user's question. Count carefully when asked abou
             res.status(500).json({ error: 'Failed to remove audit mirror config' });
         }
     });
+    const { getLastBackupStatus } = require('../../lib/backup');
+
+    app.get('/api/admin/backup/status', requireAuth, (req, res) => {
+        res.json(getLastBackupStatus());
+    });
 }
 
 module.exports = { registerAuditRoutes };
