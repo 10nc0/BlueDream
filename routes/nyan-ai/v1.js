@@ -380,7 +380,7 @@ function registerV1Routes(app, deps) {
                 fallback: {
                     openrouter: !!process.env.OPENROUTER_API_KEY,
                     ollama: !!process.env.OLLAMA_BASE_URL,
-                    ollamaBase: process.env.OLLAMA_BASE_URL || null,
+                    // ollamaBase is intentionally omitted — exposes internal host/IP
                     ollamaModel: process.env.OLLAMA_MODEL || null,
                 }
             },
@@ -414,8 +414,13 @@ function registerV1Routes(app, deps) {
             diagnostics.database.error = dbErr.message;
         }
 
-        // Ollama counts as a configured AI provider — system is not unhealthy in offline mode
-        diagnostics.groq.configured = !!(config.ai.dashboardAiKey || config.ai.groqToken || process.env.OLLAMA_BASE_URL);
+        // Any configured AI provider (Groq, OpenRouter, or Ollama) marks the system as healthy
+        diagnostics.groq.configured = !!(
+            config.ai.dashboardAiKey ||
+            config.ai.groqToken ||
+            process.env.OPENROUTER_API_KEY ||
+            process.env.OLLAMA_BASE_URL
+        );
 
         if (hermesBot) {
             diagnostics.discord.hermes.healthy = hermesBot.isReady?.() || false;
