@@ -36,6 +36,7 @@ Run after every fresh deployment or major environment change.
 | Semantic search (cascade tier 3) | `EXA_API_KEY` — [exa.ai](https://exa.ai) | Free (1k/mo) |
 | Firecrawl source enrichment | `FIRECRAWL_API_KEY` — [firecrawl.dev](https://firecrawl.dev) | Free (500/mo) |
 | LLM failover (Groq → OpenRouter) | `OPENROUTER_API_KEY` — [openrouter.ai](https://openrouter.ai) | Free account |
+| Ollama offline LLM (sovereign tier) | `OLLAMA_BASE_URL` — [ollama.ai](https://ollama.ai) | Self-hosted |
 | Per-book webhooks | Dashboard → Edit Book → Outpipes | — |
 | HTTP Token | Dashboard → Edit Book → HTTP Token | — |
 
@@ -51,6 +52,69 @@ A Nyanbook node is stateless by design — the durable record lives in IPFS and 
 The old node becomes a read-only archive. Provenance is unbroken — IPFS CIDs and Discord threads are permanent and independent of any node lifecycle. The only continuity gap is cross-boundary AI audit queries, which would need to query both nodes separately. That is an acceptable trade-off given the cost savings (per month subscription paid for just storage).
 
 _The fractal self-references. The ledger outlives the node._
+
+### Ollama Offline Mode
+
+Ollama is the third tier in the LLM fallback chain: **Groq → OpenRouter → Ollama**. Each tier is only attempted when the previous fails with a retriable error (server error, rate-limit exhaustion, or network failure). 4xx client errors are not forwarded — they indicate a request problem that will fail on every provider.
+
+**Setup:**
+
+```bash
+# 1. Install Ollama on any machine reachable from this node
+#    https://ollama.ai/download
+
+# 2. Pull a model (llama3.2 is the default)
+ollama pull llama3.2
+
+# 3. Set env vars on this node
+OLLAMA_BASE_URL=http://192.168.1.10:11434   # or http://localhost:11434 for local
+OLLAMA_MODEL=llama3.2                        # optional — defaults to llama3.2
+
+# 4. Restart the node
+```
+
+**Fully offline / sovereign mode** — if no Groq or OpenRouter keys are set, Ollama becomes the sole provider automatically. No code changes needed:
+
+```bash
+# Unset cloud providers (or simply never set them)
+# PLAYGROUND_AI_KEY=       (not set)
+# OPENROUTER_API_KEY=      (not set)
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_MODEL=llama3.2
+```
+
+**Supported env vars:**
+
+| Var | Required | Default | Description |
+|-----|----------|---------|-------------|
+| `OLLAMA_BASE_URL` | Yes (to enable) | — | Base URL of your Ollama instance |
+| `OLLAMA_MODEL` | No | `llama3.2` | Model tag to use (any model you've `ollama pull`'d) |
+| `OLLAMA_API_KEY` | No | — | Bearer token for Ollama instances behind authentication middleware |
+
+**Model mapping** — when Groq selects a specific model, Ollama approximates it:
+
+| Groq model | Ollama equivalent |
+|------------|------------------|
+| `llama-3.3-70b-versatile` | `llama3.3` |
+| `llama-3.1-70b-versatile` | `llama3.1` |
+| `llama3-70b-8192` | `llama3` |
+| `llama3-8b-8192` | `llama3:8b` |
+| `mixtral-8x7b-32768` | `mixtral` |
+| `gemma2-9b-it` | `gemma2:9b` |
+
+Any model not in this table falls back to `OLLAMA_MODEL` (or `llama3.2`). You can override everything with `OLLAMA_MODEL`.
+
+**Sovereignty guarantee:** Ollama runs entirely on infrastructure you control. No data leaves your network. The API shape is OpenAI-compatible — the same request format Groq and OpenRouter use. If Ollama is your only provider, the node is fully air-gapped from cloud AI dependencies.
+
+**Vision and audio:** Ollama does not participate in the vision pipeline (Groq Vision path) or audio transcription (Whisper). Those paths are Groq-only and degrade gracefully when Groq is unavailable.
+
+**Log signals:**
+- `⚡ LLM: no cloud keys → Ollama (offline mode)` → operating in sovereign mode; no Groq/OpenRouter keys configured
+- `🦙 LLM fallback: Ollama (sovereign tier)` → cloud providers failed; Ollama taking over
+- `✅ Ollama fallback succeeded` → Ollama responded successfully
+- `❌ Ollama fallback failed` → Ollama also failed; check `OLLAMA_BASE_URL` reachability and model availability
+
+---
 
 ### HTTP Token — Anatta Node Mesh
 
@@ -363,7 +427,7 @@ utils/
 ├── psi-EMA.js                    — φ-derived time series analysis
 ├── fetch-stock-prices.py         — Psi-EMA data fetcher (yfinance/pandas)
 ├── pipeline-orchestrator.js      — 7-stage AI pipeline (S-1 → S6)
-├── groq-client.js                — Groq LLM client with OpenRouter fallback (5xx/429/network)
+├── groq-client.js                — LLM client: Groq → OpenRouter → Ollama three-tier cascade
 ├── firecrawl-enricher.js         — enrichUrls() + substituteEnrichedSnippets() for post-cascade context
 ├── two-pass-verification.js      — 2-pass hallucination correction
 ├── dashboard-audit-pipeline.js   — 4-stage hallucination correction
