@@ -47,11 +47,18 @@ const NYAN_IDENTITY_PATTERNS = [
 ];
 
 const PSI_EMA_IDENTITY_PATTERNS = [
+  // Tight anchored forms (exact questions)
   /^what\s+is\s+(?:the\s+)?(?:psi|ψ)[\s\-]?ema\??$/i,
   /^(?:explain|describe)\s+(?:the\s+)?(?:psi|ψ)[\s\-]?ema\??$/i,
   /^tell\s+me\s+about\s+(?:the\s+)?(?:psi|ψ)[\s\-]?ema\??$/i,
   /^how\s+does\s+(?:the\s+)?(?:psi|ψ)[\s\-]?ema\s+work\??$/i,
   /^what\s+(?:are|is)\s+(?:the\s+)?(?:theta|θ|z|r)\s+(?:in|for)\s+(?:psi|ψ)[\s\-]?ema\??$/i,
+  // Broader non-anchored forms — longer educational / contextual questions about Ψ-EMA.
+  // These require explicit "psi ema" or "ψ ema" in the text; no housing query uses those
+  // terms, so there is zero risk of contaminating the seed-metric routing path.
+  /\b(?:explain|describe|what\s+is|what\s+does|how\s+does|tell\s+me)\b.{0,40}\b(?:psi|ψ)[\s\-]?ema\b/i,
+  /\b(?:psi|ψ)[\s\-]?ema\b.{0,60}\b(?:explain|mean|means|work|works|compass|coordinate|theta|θ|z[\s\-]score|r[\s\-]score|fatalism|optimism|extraction|regime)\b/i,
+  /\b(?:theta|θ|z[\s\-]score|r[\s\-]score|phase\s+angle)\b.{0,40}\b(?:psi|ψ)[\s\-]?ema\b/i,
 ];
 
 /**

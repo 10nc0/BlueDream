@@ -5,7 +5,8 @@
   "scripts": {
     "test": "node tests/test-search-retry.js",
     "test:audit": "node tests/test-search-retry.js",
-    "test:unit": "node tests/test-preflight-router.js && node tests/test-capsule.js && node tests/test-ssrf.js",
+    "test:unit": "node tests/test-preflight-router.js && node tests/test-capsule.js && node tests/test-ssrf.js && node tests/test-seed-metric.js && node tests/test-source-ascriber.js && node tests/test-preflight-cities.js && node tests/test-fred-series.js && node tests/test-intl-historical-price.js",
+    "test:seed": "node tests/test-seed-metric.js",
     "test:ssrf": "node tests/test-url-fetcher-ssrf.js",
     "test:smoke": "node tests/smoke.js",
     "test:core": "node tests/test-core.js",

@@ -14,7 +14,7 @@
  * - Regime: <10yr 🟢 Optimism | 10-25yr 🟡 Extraction | >25yr 🔴 Fatalism
  */
 
-const { CURRENCY_REGISTRY } = require('./geo-data');
+const { CURRENCY_REGISTRY, CITY_EXPAND } = require('./geo-data');
 const { EMPTY_TABLE_ROW_REGEX } = require('./parse-helpers');
 
 // ─── TFR (Total Fertility Rate) parser ──────────────────────────────────────────
@@ -126,11 +126,13 @@ function injectTFRColumn(tableText, tfrCapsule) {
  * @returns {object} { price700sqm, years, regime, emoji, isProxy }
  */
 function calculateSeedMetric(pricePerSqm, income) {
-  if (!pricePerSqm || !income || income === 0) {
+  if (!pricePerSqm || !isFinite(pricePerSqm)) {
     return { price700sqm: null, years: null, regime: 'N/A', emoji: '⚪', isProxy: false };
   }
-  
   const price700sqm = pricePerSqm * 700;
+  if (!income || income === 0 || !isFinite(income)) {
+    return { price700sqm, years: null, regime: 'N/A', emoji: '⚪', isProxy: false };
+  }
   const years = price700sqm / income;
   
   let regime, emoji;
@@ -201,14 +203,27 @@ function buildSeedMetricTable(parsedData, historicalDecade = String(new Date().g
     : '|------|--------|---------|-------------------|--------------|-------|--------|');
   
   for (const [city, data] of Object.entries(parsedData.cities || {})) {
-    const cityTitle = city.charAt(0).toUpperCase() + city.slice(1);
+    // Derive a proper display name: expand abbreviations via CITY_EXPAND ('la'→'los angeles'),
+    // then title-case every word. Long-form keys like 'singapore' title-case directly.
+    const cityTitle = (CITY_EXPAND[city] || city)
+      .replace(/\b\w/g, c => c.toUpperCase())  // title-case every word
+      .replace(/\bDc\b/g, 'DC');               // 'dc' key expands to '…washington dc' → fix to 'DC'
     
     const currPriceSqm = data.current?.pricePerSqm?.value;
     const currIncome = data.current?.income?.value;
-    const currCurrency = data.current?.pricePerSqm?.currency || data.current?.income?.currency || 'USD';
+    // Price and income currencies are tracked independently.
+    // For US cities both are 'USD'. For non-US cities price is LCU (JPY/SGD/GBP/…)
+    // and income is also LCU (from World Bank NY.GNP.PCAP.CN). When they match,
+    // years is meaningful; when they differ (e.g. Numbeo returned a USD price but
+    // income is in JPY) we refuse to divide and show N/A — no forex guessing.
+    const currPriceCurrency = data.current?.pricePerSqm?.currency || 'USD';
+    const currIncomeCurrency = data.current?.income?.currency || 'USD';
+    const currCurrency = currPriceCurrency; // used for price/land columns only
 
     const rawHistPriceSqm = data.historical?.pricePerSqm?.value;
-    const histCurrency = data.historical?.pricePerSqm?.currency || data.historical?.income?.currency || 'USD';
+    const histPriceCurrency = data.historical?.pricePerSqm?.currency || 'USD';
+    const histIncomeCurrency = data.historical?.income?.currency || 'USD';
+    const histCurrency = histPriceCurrency; // used for price/land columns only
     // Temporal contamination guard — price: if historical price == current price exactly,
     // the same Brave page fed both period extractions. No real market has had zero
     // nominal price change over a 25-year span — treat historical as null.
@@ -217,8 +232,13 @@ function buildSeedMetricTable(parsedData, historicalDecade = String(new Date().g
     // No real city has had zero nominal income change over a 25-year span.
     const rawHistIncome = data.historical?.income?.value;
     const histIncome = (rawHistIncome != null && rawHistIncome === currIncome) ? null : rawHistIncome;
-    const histMetric = calculateSeedMetric(histPriceSqm, histIncome);
-    const currMetric = calculateSeedMetric(currPriceSqm, currIncome);
+    // Only compute years when price and income are in the same currency.
+    // Pass null income when they mismatch so calculateSeedMetric returns N/A years
+    // but still computes price700sqm correctly.
+    const currIncomeForCalc = (currPriceCurrency === currIncomeCurrency) ? currIncome : null;
+    const histIncomeForCalc = (histPriceCurrency === histIncomeCurrency) ? histIncome : null;
+    const histMetric = calculateSeedMetric(histPriceSqm, histIncomeForCalc);
+    const currMetric = calculateSeedMetric(currPriceSqm, currIncomeForCalc);
     
     const histRegimeLabel = histMetric.regime !== 'N/A' ? `${histMetric.emoji} ${histMetric.regime}` : 'N/A';
     const currRegimeLabel = currMetric.regime !== 'N/A' ? `${currMetric.emoji} ${currMetric.regime}` : 'N/A';
@@ -239,12 +259,12 @@ function buildSeedMetricTable(parsedData, historicalDecade = String(new Date().g
     }
 
     const histSqmDisplay = histPriceSqm ? formatCurrency(histPriceSqm, histCurrency) : 'N/A';
-    const histRowBase = `| ${cityTitle} | ${historicalDecade} | ${histSqmDisplay} | ${formatCurrency(histMetric.price700sqm, histCurrency)} | ${formatCurrency(histIncome, histCurrency)} | ${histYearsDisplay} | ${histRegimeLabel} |`;
+    const histRowBase = `| ${cityTitle} | ${historicalDecade} | ${histSqmDisplay} | ${formatCurrency(histMetric.price700sqm, histCurrency)} | ${formatCurrency(histIncome, histIncomeCurrency)} | ${histYearsDisplay} | ${histRegimeLabel} |`;
     rows.push(hasTFR ? `${histRowBase} ${histTFR} |` : histRowBase);
     
     const currSqmDisplay = currPriceSqm ? formatCurrency(currPriceSqm, currCurrency) : 'N/A';
     const currentPeriodLabel = String(new Date().getFullYear() - 1);
-    const currRowBase = `| ${cityTitle} | ${currentPeriodLabel} | ${currSqmDisplay} | ${formatCurrency(currMetric.price700sqm, currCurrency)} | ${formatCurrency(currIncome, currCurrency)} | ${currYearsDisplay} | ${currRegimeLabel} |`;
+    const currRowBase = `| ${cityTitle} | ${currentPeriodLabel} | ${currSqmDisplay} | ${formatCurrency(currMetric.price700sqm, currCurrency)} | ${formatCurrency(currIncome, currIncomeCurrency)} | ${currYearsDisplay} | ${currRegimeLabel} |`;
     rows.push(hasTFR ? `${currRowBase} ${currTFR} |` : currRowBase);
     
     const histSummary = histMetric.years ? `${histMetric.years.toFixed(0)}yr` : 'N/A';
@@ -448,6 +468,207 @@ function rescueDroppedSuffix(value, text) {
   return rescued;
 }
 
+/**
+ * L3 rescue: detect and neutralise contaminated pricePerSqm extractions.
+ *
+ * Principle: null > hallucination. Only two exact transformations are allowed:
+ *  1. Text explicitly labels the value as per-sqm/m² → trust it, return as-is.
+ *  2. Text labels it as per-sqft (no sqm label)       → ×10.764 is exact math, apply it.
+ *  3. Text has total-property-price language           → null. We do NOT divide by an assumed
+ *                                                         floor area — that would be a guess.
+ *                                                         Let the upstream search cascade find
+ *                                                         a real per-sqm source instead.
+ *  4. No signal either way                             → return value unchanged.
+ *
+ * @param {number}  value    - Extracted value (post suffix-rescue)
+ * @param {string}  text     - Raw Brave result text used for extraction
+ * @returns {number|null}    - Trusted per-sqm value, or null if contaminated
+ */
+/**
+ * L3 rescue for income extractions: detect and neutralise contaminated income values.
+ *
+ * First-principled, anti-fragile guard. Mirrors `rescueTotalPrice` in spirit but
+ * adapted for income's failure modes:
+ *
+ *  1. Text labels the value as a property/sale/asking price → null.
+ *     (LLM may have grabbed a home value as "income" when the page mixed both.)
+ *  2. Text labels the value as GDP / household / dual / combined / family income → null.
+ *     (Single-earner annual wage is the only valid income type for the years calc.)
+ *  3. Value exceeds the structural ceiling for its currency (Monaco/Switzerland/
+ *     Luxembourg-anchored, median × 1.5) → null. Implausibly high incomes are
+ *     almost always property prices in disguise.
+ *  4. Value is suspiciously low (< 1000 in any currency) → null.
+ *     (Even high-denomination LCU like ¥/₩/Rp wages exceed 1000 annually.)
+ *  5. No red flags → return value unchanged.
+ *
+ * Synchronous by design — caller pre-fetches the ceiling map once via
+ * `lib/tools/income-ceiling.js::buildCeilingMap([...currencies])` and passes
+ * the whole map. Internal lookup `ceilingMap[currency]` ensures the value and
+ * ceiling are always in the same units (no accidental USD-vs-LCU mismatch).
+ * If a currency is missing from the map, the structural guard is skipped
+ * (the text-pattern + min-sanity guards still apply).
+ *
+ * @param {number}      value         - Extracted income value (post suffix-rescue)
+ * @param {string}      text          - Raw Brave result text used for extraction
+ * @param {string}      currency      - ISO-4217 code (e.g. 'USD', 'JPY')
+ * @param {object}      [ceilingMap]  - { [currencyCode]: lcuCeilingValue } from buildCeilingMap()
+ * @returns {number|null}             - Trusted income value, or null if contaminated
+ */
+function rescueIncome(value, text, currency, ceilingMap = {}) {
+  if (value == null || !isFinite(value) || value <= 0) return null;
+
+  // Min sanity: even the lowest LCU wage (e.g. ₫50M VND ≈ $2K) exceeds 1000
+  if (value < 1000) return null;
+
+  if (text && text.length > 0) {
+    // 1. Property / sale price language → null
+    const propertyPriceRx = new RegExp([
+      '(?:median|average|mean|typical)\\s+(?:home|house|apartment|condo|property|sale|listing|asking|sold|resale)s?\\s*(?:price|value|cost)',
+      '(?:home|house|property|apartment|condo)\\s*(?:price|value)',
+      '(?:asking|sold)\\s+for\\s+\\$?[\\d,.]+',
+    ].join('|'), 'i');
+    if (propertyPriceRx.test(text)) return null;
+
+    // 2. Wrong income type (GDP / household / dual / combined / family) → null
+    const wrongTypeRx = /\b(?:GDP\s+per\s+capita|household\s+income|dual\s+income|combined\s+income|family\s+income|two[-\s]+income)\b/i;
+    if (wrongTypeRx.test(text)) return null;
+  }
+
+  // 3. Structural ceiling guard — currency-matched lookup prevents FX mismatch.
+  //    Map keys are uppercased ISO-4217 codes; missing keys gracefully skip
+  //    the ceiling check rather than reject (defensive: don't null on misuse).
+  const code = currency ? String(currency).toUpperCase() : null;
+  const ceiling = code && ceilingMap ? ceilingMap[code] : null;
+  if (ceiling != null && isFinite(ceiling) && ceiling > 0 && value > ceiling) {
+    return null;
+  }
+
+  return value;
+}
+
+/**
+ * Validate cross-period & cross-field invariants for seed metric data.
+ * Runs after Phase 0, dog-walking, and post-dog-walk BIS fill — last guard
+ * before `buildSeedMetricTable`. Mutates `parsedData` in-place, nulling out
+ * fields that violate any invariant. Returns a violations log for telemetry.
+ *
+ * Invariants:
+ *   I1. Within-period currency consistency: pricePerSqm.currency === income.currency
+ *       Otherwise the years calc (price/sqm × 700 ÷ income) is meaningless.
+ *       Action: keep both, but flag in violations log; rendering layer shows N/A.
+ *   I2. Temporal income direction: in same currency, historical income ≤ current income
+ *       Nominal wages basically never decrease over 25 years.
+ *       Action: null historical income (defer to N/A rather than show wrong number).
+ *   I3. TFR cross-period plausibility: |currentTFR - historicalTFR| ≤ 5
+ *       Even Korea's collapse from 4.5 (1970) → 0.7 (2024) is a 3.8 swing over 54 years.
+ *       Over 25 years a swing > 5 is almost certainly a Brave extraction error.
+ *       Action: null both TFR values for the city.
+ *
+ * (Price temporal direction is enforced earlier by the post-dog-walk BIS fill,
+ *  which actively backcasts a corrected historical instead of just nulling.)
+ *
+ * @param {object} parsedData  - { cities: { [cityKey]: { current, historical } } }
+ * @param {object|null} tfrCapsule - { [CityTitle]: { current, historical } } or null
+ * @returns {string[]} - human-readable violation log entries
+ */
+function validateSeedMetricInvariants(parsedData, tfrCapsule = null) {
+  const violations = [];
+  if (!parsedData || !parsedData.cities) return violations;
+
+  for (const [cityKey, data] of Object.entries(parsedData.cities)) {
+    if (!data) continue;
+
+    // I1: Within-period currency consistency. Normalize to uppercase ISO-4217
+    // before comparing so 'usd' vs 'USD' (or any case-skew between Phase 0 silos
+    // and dog-walk extraction) doesn't trigger a false mismatch.
+    for (const period of ['current', 'historical']) {
+      const psm = data[period]?.pricePerSqm;
+      const inc = data[period]?.income;
+      if (psm?.value && inc?.value && psm.currency && inc.currency) {
+        const psmCur = String(psm.currency).toUpperCase();
+        const incCur = String(inc.currency).toUpperCase();
+        if (psmCur !== incCur) {
+          violations.push(`I1 ${cityKey}/${period}: currency mismatch price=${psmCur} vs income=${incCur}`);
+        }
+      }
+    }
+
+    // I2: Temporal income direction (same currency, normalized to uppercase).
+    const currInc = data.current?.income;
+    const histInc = data.historical?.income;
+    if (currInc?.value && histInc?.value && currInc.currency && histInc.currency) {
+      const currCur = String(currInc.currency).toUpperCase();
+      const histCur = String(histInc.currency).toUpperCase();
+      if (currCur === histCur && histInc.value > currInc.value) {
+        violations.push(`I2 ${cityKey}: historical income (${histInc.value} ${histCur}) > current (${currInc.value} ${currCur}) — nulling historical`);
+        data.historical.income = null;
+      }
+    }
+
+    // I3: TFR cross-period plausibility
+    if (tfrCapsule) {
+      const cityTitle = cityKey.charAt(0).toUpperCase() + cityKey.slice(1);
+      const tfrEntry = tfrCapsule[cityTitle] || tfrCapsule[cityKey];
+      if (tfrEntry && tfrEntry.current != null && tfrEntry.historical != null) {
+        const swing = Math.abs(tfrEntry.current - tfrEntry.historical);
+        if (swing > 5) {
+          violations.push(`I3 ${cityKey}: TFR swing ${swing.toFixed(2)} (curr=${tfrEntry.current}, hist=${tfrEntry.historical}) exceeds 5.0 — nulling both`);
+          tfrEntry.current = null;
+          tfrEntry.historical = null;
+        }
+      }
+    }
+  }
+
+  return violations;
+}
+
+function rescueTotalPrice(value, text) {
+  if (!value || !text || value <= 0) return value;
+
+  // 1. Explicit per-sqm label → trust the LLM value
+  const perSqmRx = /per\s*(?:sqm|sq\.?\s*m(?:eter|re)?|m²)|\/\s*(?:sqm|m²)|per\s+square\s+met(?:er|re)|\bpsm\b/i;
+  if (perSqmRx.test(text)) return value;
+
+  // 2. Explicit per-sqft label (no sqm label) → ×10.764 is an exact unit conversion, not a guess
+  const perSqftRx = /per\s*(?:sq\.?\s*f(?:oo|ee)?t|sqft)|\/\s*(?:sqft|sq\.?\s*ft)\b/i;
+  if (perSqftRx.test(text)) return Math.round(value * 10.764);
+
+  // 3. Total-property-price language → null. No assumed floor area.
+  const totalPriceRx = new RegExp([
+    // "median/average/mean/typical home/house/property price/value"
+    '(?:median|average|mean|typical)\\s+(?:home|house|apartment|condo|property|sale|list(?:ing)?|asking|sold|resale)s?\\s*(?:price|value|cost)',
+    // "home(s)/house/property price(s)/value(s) in/was/is/were/at/of"
+    '(?:homes?|houses?|property)\\s*(?:prices?|values?)\\s*(?:in\\b|was\\b|is\\b|were\\b|of\\b|at\\b)',
+    // "prices for homes/houses/properties in/of the [area]"
+    'prices?\\s+(?:for\\s+)?(?:homes?|houses?|propert(?:y|ies))?\\s*(?:in|for|of)\\s+(?:the\\s+)?(?:city|metro|area|county|region|market)',
+    // "homes/houses averaged/reached $..."
+    '(?:homes?|houses?)\\s+(?:averaged?|reached|hit|climbed|fell|dropped|sold\\s+for)',
+  ].join('|'), 'i');
+  if (totalPriceRx.test(text)) return null;
+
+  return value;
+}
+
+/**
+ * emptyCityRecord — the canonical empty city record skeleton used throughout
+ * seed-metric flow when initializing parsedData.cities[city]. Pass `histDecade`
+ * (string like "1995-2005") to stamp the historical bucket with its decade
+ * label; omit when the call site doesn't yet know which decade applies (e.g.
+ * silo pre-fills before stepSeedMetricToolCall has resolved histDecade).
+ *
+ * Single source of truth: any future schema change (new field, new bucket)
+ * is one edit here, not seven scattered through pipeline-orchestrator.
+ */
+function emptyCityRecord(histDecade) {
+  const historical = { pricePerSqm: null, income: null };
+  if (histDecade) historical.decade = histDecade;
+  return {
+    current: { pricePerSqm: null, income: null },
+    historical,
+  };
+}
+
 module.exports = {
   calculateSeedMetric,
   formatCurrency,
@@ -457,4 +678,8 @@ module.exports = {
   injectTFRColumn,
   applyMultiplier,
   rescueDroppedSuffix,
+  rescueTotalPrice,
+  rescueIncome,
+  validateSeedMetricInvariants,
+  emptyCityRecord,
 };

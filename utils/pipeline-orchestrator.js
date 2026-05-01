@@ -46,7 +46,9 @@ const { DataPackage, globalPackageStore, STAGE_IDS } = require('./data-package')
 const { globalCheckpointStore, buildResumableSnapshot, applySnapshot } = require('./pipeline-checkpoint');
 const { getLLMBackend, getAuditBackend, AI_MODELS } = require('../config/constants');
 const { digestQuery } = require('./query-digest');
-const { CITY_EXPAND, COUNTRY_TO_CITY, CITY_TO_COUNTRY } = require('./geo-data');
+const { CITY_EXPAND, COUNTRY_TO_CITY, CITY_TO_COUNTRY, FRED_MSA_CODES, COUNTRY_ISO2, KNOWN_CITIES_REGEX, ISO2_TO_CURRENCY } = require('./geo-data');
+const { fetchFredPerSqm, fetchFredPerSqmForYear } = require('../lib/tools/fred-series');
+const { fetchWorldBankGni, fetchWorldBankGniLcu } = require('../lib/tools/world-bank');
 const { MAX_CONTENT_CHARS } = require('./config-constants');
 const { getAnchors: getUrlAnchors } = require('./url-anchor-store');
 
@@ -65,7 +67,9 @@ const PIPELINE_STEPS = {
 const { AttachmentIngestion } = require('./attachment-ingestion');
 const { analyzeImageWithGroqVision, processChemistryContent, classifyScholasticDomain } = require('./attachment-cascade');
 const { createQueryTimestamp, buildTemporalContent } = require('./time-format');
-const { buildSeedMetricTable, validateSeedMetricOutput, parseTFR, injectTFRColumn, rescueDroppedSuffix } = require('./seed-metric-calculator');
+const { buildSeedMetricTable, validateSeedMetricOutput, parseTFR, injectTFRColumn, rescueDroppedSuffix, rescueTotalPrice, rescueIncome, validateSeedMetricInvariants, emptyCityRecord } = require('./seed-metric-calculator');
+const { cityToExpectedCurrency, CURRENCY_REGISTRY } = require('./geo-data');
+const { buildCeilingMap } = require('../lib/tools/income-ceiling');
 const { cleanMarkdownJson, EMPTY_TABLE_ROW_REGEX } = require('./parse-helpers');
 const { buildGatherPromptBlock } = require('../prompts/seed-metric');
 
@@ -553,7 +557,30 @@ class PipelineOrchestrator {
       } else {
         await this.stepPreflight(state, { ...input, query: contextAwareQuery, contextResult: state.contextResult });
       }
-      
+
+      // ── Hoisted reference: income ceiling map (seed-metric mode only) ───────
+      // Same architectural pattern as `state.queryTimestamp` (the "look at the
+      // watch once at construction" reference). For any seed-metric run, the
+      // structural income ceiling is a deterministic constant — fetch it ONCE
+      // here at the top of the pipeline, immediately after preflight resolves
+      // mode, regardless of which path got us here (fresh stepPreflight,
+      // pre-computed preflight, or checkpoint resume). Stored as a Promise on
+      // state so it overlaps with everything downstream (Phase 0 silos,
+      // dog-walk extractions, fallback income); consumers `await
+      // state.ceilingMapP` wherever they need it. 24h cache keeps the network
+      // cost to once per worker per day.
+      if (state.mode === 'seed-metric' && !state.ceilingMapP) {
+        const allCurrencies = new Set(['USD', ...Object.keys(CURRENCY_REGISTRY || {})]);
+        state.ceilingMapP = buildCeilingMap([...allCurrencies]).catch(err => {
+          // Non-fatal: rescueIncome gracefully skips the structural guard when
+          // its currency is missing from the map. Text-pattern + min-sanity
+          // guards still apply. Log loudly so degraded mode is visible.
+          logger.warn({ err: err.message, currencies: [...allCurrencies] }, '🛡️ buildCeilingMap failed — income ceiling guard running in degraded mode');
+          return {};
+        });
+        logger.debug(`🛡️ Income ceiling map fetch kicked off at top of pipeline (${allCurrencies.size} currencies)`);
+      }
+
       if (state.mode === 'psi-ema' && !state.preflight.ticker) {
         logger.debug(`⚡ Fast-path: Ψ-EMA mode but no ticker - returning no-data message`);
         state.finalAnswer = `📊 **No Stock Data Available**\n\nI detected a financial analysis request, but couldn't identify a valid public stock ticker.\n\n**Tips:**\n• Use explicit ticker format: "$AAPL", "$NVDA", "$META"\n• Note: Some companies are private (e.g., Bloomberg LP) and have no public stock data\n• Commodities (gold, oil) and crypto require different analysis tools\n\n🔥 ~nyan`;
@@ -693,6 +720,7 @@ class PipelineOrchestrator {
     state.transition(PIPELINE_STEPS.PREFLIGHT);
     
     const { query, attachments, clientIp, contextResult } = input;
+    const tenantId = input.clientIp || input.sessionId || 'anonymous';
     const safeDocContext = input.docContext || {};
     
     state.preflight = await preflightRouter({
@@ -713,7 +741,6 @@ class PipelineOrchestrator {
       stockContext: state.preflight.stockContext || null,
       hasPsiEma: !!state.preflight.psiEmaAnalysis
     });
-    
     // Seed-metric: searches now done in stepSeedMetricToolCall (walk the dog)
     
     // ========================================
@@ -1187,6 +1214,210 @@ User query: ${query}`;
     }
   }
   
+  // ── Phase 0: deterministic pre-fetch from structured APIs ─────────────────
+  // Fills current price (FRED for US, Numbeo for others) and income (World Bank)
+  // before the LLM tool-call loop runs. Falls through silently on any error.
+  async stepSeedMetricDirectFetch(cities, parsedData, histYear, sourceUrls, clientIp) {
+    const urlFetcherTool = require('../lib/tools/url-fetcher');
+
+    function toNumbeoSlug(city) {
+      return city.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join('-');
+    }
+
+    function dedupPushUrl(arr, entry) {
+      const entryUrl = typeof entry === 'string' ? entry : entry.url;
+      if (!arr.some(u => (typeof u === 'string' ? u : u.url) === entryUrl)) {
+        arr.push(entry);
+      }
+    }
+
+    const pricePromises = cities.map(async city => {
+      // Normalize city key: expand aliases so 'sf' → 'san francisco' for FRED lookup
+      const cityKey = (CITY_EXPAND[city.trim().toLowerCase()] || city.trim()).toLowerCase();
+      const msaCode = FRED_MSA_CODES[cityKey] || FRED_MSA_CODES[city.trim().toLowerCase()];
+
+      if (msaCode) {
+        try {
+          const [fredCurrent, fredHistorical] = await Promise.all([
+            fetchFredPerSqm(msaCode),
+            fetchFredPerSqmForYear(msaCode, histYear)
+          ]);
+
+          if (!parsedData.cities[city]) {
+            parsedData.cities[city] = emptyCityRecord();
+          }
+
+          if (fredCurrent && fredCurrent.value > 0 && !parsedData.cities[city].current.pricePerSqm) {
+            const afterL3 = rescueTotalPrice(fredCurrent.value, '');
+            if (afterL3 !== null) {
+              parsedData.cities[city].current.pricePerSqm = { value: afterL3, currency: 'USD' };
+              const fredUrl = `https://fred.stlouisfed.org/series/MEDLISPRIPERSQUFEE${msaCode}`;
+              dedupPushUrl(sourceUrls, { title: `FRED MEDLISPRIPERSQUFEE${msaCode} — ${city} current price/sqft`, url: fredUrl });
+              logger.debug(`📡 FRED: ${city} current $/sqm = ${afterL3}`);
+            }
+          }
+
+          if (fredHistorical && fredHistorical.value > 0 && !parsedData.cities[city].historical.pricePerSqm) {
+            const afterL3 = rescueTotalPrice(fredHistorical.value, '');
+            if (afterL3 !== null) {
+              parsedData.cities[city].historical.pricePerSqm = { value: afterL3, currency: 'USD' };
+              // Store the actual FRED observation date so downstream code can surface the proxy-year
+              // (e.g. targetYear=2000, FRED starts 2016 → observationDate='2016-01-01')
+              parsedData.cities[city].historical.pricePerSqmObservationDate = fredHistorical.date || null;
+              const fredUrl = `https://fred.stlouisfed.org/series/MEDLISPRIPERSQUFEE${msaCode}`;
+              dedupPushUrl(sourceUrls, { title: `FRED MEDLISPRIPERSQUFEE${msaCode} — ${city} historical price/sqft`, url: fredUrl });
+              const obsYear = fredHistorical.date ? fredHistorical.date.slice(0, 4) : histYear;
+              logger.debug(`📡 FRED: ${city} historical (target:${histYear} obs:${obsYear}) $/sqm = ${afterL3}`);
+            }
+          }
+        } catch (err) {
+          logger.warn({ city, err: err.message }, '📡 FRED fetch failed, falling through');
+        }
+      } else {
+        // Hoist so the BIS fallback below can use the LCU anchor detected during Numbeo fetch.
+        let numbeoLcuValue = null;
+
+        try {
+          const numbeoSlug = toNumbeoSlug(cityKey);
+          const numbeoUrl = `https://www.numbeo.com/property-investment/in/${numbeoSlug}`;
+          const pageResult = await urlFetcherTool.execute(numbeoUrl);
+          const pageText = typeof pageResult === 'string' ? pageResult : (pageResult && pageResult.text ? pageResult.text : null);
+          if (pageText) {
+            // Normalise HTML-encoded currency symbols to their Unicode equivalents.
+            // Numbeo serves &#165; for ¥, &#163; for £, &#8364; for €, &#8361; for ₩, &#8377; for ₹, &#36; for $.
+            const HTML_ENTITY_CURRENCY = { '&#165;': '¥', '&#163;': '£', '&#8364;': '€', '&#8361;': '₩', '&#8377;': '₹', '&#36;': '$' };
+            const normText = pageText.replace(/&#\d+;/g, e => HTML_ENTITY_CURRENCY[e] || e);
+
+            // Numbeo shows "Price per Square Feet" OR "Price per Square Met(er|re)" depending on locale.
+            // Both patterns are accepted; sqft values are converted to sqm (× 10.7639).
+            const SQM_PER_SQFT = 10.7639;
+            const BUY_REGEX = /Price\s+per\s+Square\s+(Fe(?:et|et)|Met(?:er|re)).*?(?:to\s+Buy\s+)?.*?City\s+Cent(?:re|er)\s+(\$|[¥€£₩₹])\s*([\d,]+(?:\.\d+)?)/i;
+            const matchBuy = normText.match(BUY_REGEX);
+            if (matchBuy) {
+              const isSqft = /fe/i.test(matchBuy[1]);
+              let raw = parseFloat(matchBuy[3].replace(/,/g, ''));
+              if (isSqft) raw = Math.round(raw * SQM_PER_SQFT);
+              const sym = matchBuy[2];
+              if (raw > 0 && isFinite(raw)) {
+                if (!parsedData.cities[city]) {
+                  parsedData.cities[city] = emptyCityRecord();
+                }
+                if (sym === '$') {
+                  if (!parsedData.cities[city].current.pricePerSqm) {
+                    const afterL3 = rescueTotalPrice(raw, normText.slice(0, 500));
+                    if (afterL3 !== null) {
+                      parsedData.cities[city].current.pricePerSqm = { value: afterL3, currency: 'USD' };
+                      dedupPushUrl(sourceUrls, { title: `Numbeo Property Investment — ${city}`, url: numbeoUrl });
+                      logger.debug(`📡 Numbeo: ${city} current $/sqm = ${afterL3}${isSqft ? ' (converted from sqft)' : ''}`);
+                    }
+                  }
+                } else {
+                  // Non-USD — store as LCU anchor for BIS index backcasting.
+                  // Glyph-based map handles unambiguous symbols. ¥ is ambiguous
+                  // (CNY in Beijing/Shanghai, JPY in Tokyo/Osaka) so we resolve
+                  // it via the city's expected currency from the registry —
+                  // anti-fragile vs hardcoded glyph→ISO assumptions.
+                  const UNAMBIGUOUS = { '€': 'EUR', '£': 'GBP', '₩': 'KRW', '₹': 'INR', '₣': 'CHF', '₪': 'ILS', '฿': 'THB', '₫': 'VND', '₱': 'PHP', '₦': 'NGN', '₺': 'TRY', '₴': 'UAH' };
+                  let detectedCurrency = UNAMBIGUOUS[sym] || null;
+                  if (sym === '¥') {
+                    const expected = cityToExpectedCurrency(city);
+                    detectedCurrency = (expected === 'CNY' || expected === 'JPY') ? expected : 'JPY';
+                  }
+                  if (detectedCurrency) {
+                    numbeoLcuValue = { value: raw, currency: detectedCurrency, isSqft };
+                    logger.debug(`📡 Numbeo: ${city} LCU price/sqm = ${sym}${raw} (${detectedCurrency}${isSqft ? ', converted from sqft — Phase 0 BIS anchor skipped' : ', BIS anchor'})`);
+                  }
+                }
+              }
+            }
+          }
+        } catch (err) {
+          logger.warn({ city, err: err.message }, '📡 Numbeo fetch failed, falling through');
+        }
+
+        // Non-US historical price via authoritative structured source
+        // (Singapore HDB, Japan BIS WS_SPP via bis-spp, UK Land Registry — returns null on failure)
+        try {
+          if (!parsedData.cities[city]) {
+            parsedData.cities[city] = emptyCityRecord();
+          }
+          if (!parsedData.cities[city].historical.pricePerSqm) {
+            const { fetchIntlHistoricalPrice } = require('../lib/tools/intl-historical-price');
+            // Phase 0 BIS anchor: Numbeo USD path only. Numbeo LCU values (¥/€/£ from
+            // English-locale pages) are always sqft-converted City Centre premiums — using
+            // them as BIS anchors would create inconsistency with the broader residential
+            // current price that dog-walking finds. Post-dog-walk BIS fill (below) uses
+            // the dog-walked current LCU for a consistent historical computation instead.
+            const currentPsmUsd = parsedData.cities[city]?.current?.pricePerSqm?.value ?? null;
+            const phase0LcuAnchor = (numbeoLcuValue && !numbeoLcuValue.isSqft) ? numbeoLcuValue : null;
+            const intlHist = await fetchIntlHistoricalPrice(
+              cityKey, histYear, currentPsmUsd,
+              phase0LcuAnchor ? phase0LcuAnchor.value : null,
+              phase0LcuAnchor ? phase0LcuAnchor.currency : null
+            );
+            if (intlHist) {
+              parsedData.cities[city].historical.pricePerSqm = { value: intlHist.value, currency: intlHist.currency };
+              if (intlHist.sourceUrl) {
+                dedupPushUrl(sourceUrls, {
+                  title: `${city} historical price/sqm ${intlHist.date ? '(' + intlHist.date + ')' : ''}`,
+                  url: intlHist.sourceUrl
+                });
+              }
+              logger.debug({ city, year: histYear, value: intlHist.value, currency: intlHist.currency }, '📡 IntlHist: price/sqm');
+            }
+          }
+        } catch (err) {
+          logger.warn({ city, err: err.message }, '📡 IntlHistoricalPrice fetch failed, falling through');
+        }
+      }
+    });
+
+    const incomePromises = cities.map(async city => {
+      // Normalize for country lookup: expand city alias if needed
+      const cityNorm = (CITY_EXPAND[city.trim().toLowerCase()] || city.trim()).toLowerCase();
+      const rawCountry = CITY_TO_COUNTRY[cityNorm] || CITY_TO_COUNTRY[city];
+      if (!rawCountry) return;
+      const iso2 = COUNTRY_ISO2[rawCountry.toLowerCase()];
+      if (!iso2) return;
+
+      // For non-US countries: fetch GNI in local currency units (NY.GNP.PCAP.CN)
+      // so that income currency matches property price currency — no forex needed.
+      // For the US: property prices are always in USD, so USD income (NY.GNP.PCAP.CD) is correct.
+      const isUS = iso2 === 'US';
+      const lcu = ISO2_TO_CURRENCY[iso2] || 'USD';
+      const fetchFn = isUS
+          ? (y) => fetchWorldBankGni(iso2, y)
+          : (y) => fetchWorldBankGniLcu(iso2, y, lcu);
+      const indicator = isUS ? 'NY.GNP.PCAP.CD' : 'NY.GNP.PCAP.CN';
+
+      try {
+        const [currentIncome, historicalIncome] = await Promise.all([
+          fetchFn(undefined),
+          fetchFn(histYear)
+        ]);
+
+        if (!parsedData.cities[city]) {
+          parsedData.cities[city] = emptyCityRecord();
+        }
+
+        if (currentIncome && !parsedData.cities[city].current.income) {
+          parsedData.cities[city].current.income = { value: currentIncome.value, currency: currentIncome.currency, type: 'single' };
+        }
+        if (historicalIncome && !parsedData.cities[city].historical.income) {
+          parsedData.cities[city].historical.income = { value: historicalIncome.value, currency: historicalIncome.currency, type: 'single' };
+        }
+
+        const wbUrl = `https://data.worldbank.org/indicator/${indicator}?locations=${iso2}`;
+        dedupPushUrl(sourceUrls, { title: `World Bank GNI per capita — ${rawCountry} (${indicator})`, url: wbUrl });
+        logger.debug(`📡 WorldBank: ${rawCountry} [${lcu}] income current=${currentIncome?.value ?? 'N/A'} hist=${historicalIncome?.value ?? 'N/A'}`);
+      } catch (err) {
+        logger.warn({ city, err: err.message }, '📡 WorldBank fetch failed, falling through');
+      }
+    });
+
+    await Promise.all([...pricePromises, ...incomePromises]);
+  }
+
   // ── Walk the dog: LLM-driven seed metric via Groq tool calling ────────────
   // LLM decides what to search (city-aware, language-aware), executes Brave
   // searches itself, reads raw results, triangulates price/sqm from totals,
@@ -1208,11 +1439,143 @@ User query: ${query}`;
    * Rate-limit: 1100ms between Brave calls (just under 1 req/s hard limit).
    *             Retry once on 429 after 1500ms backoff.
    */
+
+  /**
+   * _microExtractField — single-shot LLM number extraction over Brave search
+   * text, with L2 (suffix-rescue) baked in. The L3 contamination guards
+   * (rescueTotalPrice, rescueIncome) and the bucket-write logic stay at the
+   * call site because they vary per location: the primary dog-walk handles
+   * BOTH price and income paths; the income fallback handles only income.
+   *
+   * Returns:
+   *   null — if the LLM returned no usable number (null/non-finite/<=0)
+   *   { value, currency, type, rawValue, suffixRescued } otherwise, where
+   *   `value` is post-suffix-rescue and `rawValue` is pre-rescue (for log).
+   *
+   * `text` is sliced to 3000 chars before being sent to the LLM (matches the
+   * historical behavior of both call sites). Throws on JSON.parse failure or
+   * groq HTTP failure — caller wraps in try/catch.
+   */
+  async _microExtractField({ text, query, prompt }) {
+    // Defensive coercion: future callers may pass non-string `text` (e.g. a
+    // search result wrapper). Guarantee `.slice` won't throw and the LLM
+    // gets an empty string rather than "undefined" / "[object Object]".
+    const body = typeof text === 'string' ? text : (text == null ? '' : String(text));
+    const extractResponse = await this.groqWithRetry({
+      url: this.llmUrl,
+      data: {
+        model: this.llmModel,
+        messages: [
+          { role: 'system', content: prompt },
+          { role: 'user', content: `Search query: "${query}"\n\nSearch results:\n${body.slice(0, 3000)}` }
+        ],
+        temperature: AI_MODELS.TEMPERATURE_DETERMINISTIC,
+        max_tokens: 100
+      },
+      config: {
+        headers: {
+          'Authorization': `Bearer ${this.groqToken}`,
+          'Content-Type': 'application/json'
+        },
+        timeout: 10000
+      }
+    }, 1, 'text');
+
+    let rawJson = extractResponse.data.choices[0]?.message?.content?.trim() || '';
+    rawJson = cleanMarkdownJson(rawJson);
+    const extracted = JSON.parse(rawJson);
+
+    if (extracted.value == null || !isFinite(extracted.value) || extracted.value <= 0) {
+      return null;
+    }
+    const currency = extracted.currency || 'USD';
+    const rawValue = extracted.value;
+    const value = rescueDroppedSuffix(rawValue, body);
+    return {
+      value,
+      currency,
+      type: extracted.type || null,
+      rawValue,
+      suffixRescued: value !== rawValue,
+    };
+  }
+
   async stepSeedMetricToolCall(state, input) {
     const { query, clientIp } = input;
     const currentYear = new Date().getFullYear();
     const histDecade = state.preflight?.historicalDecade || (String(currentYear - 25).slice(0, 3) + '0s');
     const histYear = state.preflight?.historicalYear || String(currentYear - 25);
+
+    // ── Phase 0: extract cities and init parsedData before first LLM call ──
+    // Reverse of CITY_EXPAND: long form → abbreviation ('new york'→'ny', 'san francisco'→'sf').
+    // Used both here (preflight) and in the Round-1 belt-and-suspenders expansion below to ensure
+    // all city keys are always in their canonical (abbreviated) form, preventing 'ny' + 'new york'
+    // fragmentation when the preflight generates long-form queries and Round 1 uses abbreviations.
+    const _cityContract = Object.fromEntries(Object.entries(CITY_EXPAND).map(([abbr, full]) => [full, abbr]));
+
+    const cities = state.preflight?.seedMetricSearchQueries
+      ? [...new Set(state.preflight.seedMetricSearchQueries.map(q => {
+          const match = q.match(/^([a-z\s]+)\s+(?:residential|average|median|housing|apartment)/i);
+          if (!match) return null;
+          const raw = match[1].trim().toLowerCase();
+          // Canonicalize: 'new york' → 'ny', 'san francisco' → 'sf'; unknown cities unchanged.
+          return _cityContract[raw] || raw;
+        }).filter(Boolean))]
+      : [];
+    const histDecadeNum = parseInt(histDecade) || (currentYear - 25);
+    const sourceUrls = [];
+
+    const parsedData = { cities: {}, parseLog: [] };
+    for (const city of cities) {
+      parsedData.cities[city] = emptyCityRecord(histDecade);
+    }
+
+    // Run Phase 0 (deterministic pre-fetch from FRED/Numbeo/World Bank) AND
+    // resolve the hoisted ceiling map in parallel. The ceiling map Promise was
+    // kicked off at the top of the pipeline (see `state.ceilingMapP` in run()),
+    // so by the time we await it here it's almost always already resolved —
+    // we just join the result. Lazy fallback covers any direct call path that
+    // bypasses the run() hoist (e.g. unit tests calling stepSeedMetricToolCall
+    // directly). 24h cache means lazy build is also free in steady state.
+    if (!state.ceilingMapP) {
+      const allCurrencies = new Set(['USD', ...Object.keys(CURRENCY_REGISTRY || {})]);
+      state.ceilingMapP = buildCeilingMap([...allCurrencies]).catch(err => {
+        logger.warn({ err: err.message }, '🛡️ buildCeilingMap (lazy) failed — degraded mode');
+        return {};
+      });
+      logger.debug('🛡️ Income ceiling map fetch lazy-initialized inside stepSeedMetricToolCall (run() hoist was skipped)');
+    }
+    const [, ceilingMap] = await Promise.all([
+      this.stepSeedMetricDirectFetch(cities, parsedData, histYear, sourceUrls, clientIp),
+      state.ceilingMapP,
+    ]);
+    logger.debug({ currencies: Object.keys(ceilingMap).sort(), count: Object.keys(ceilingMap).length, usdSample: ceilingMap.USD }, '🛡️ Income ceiling map resolved');
+
+    // Build a precise skip-hint per city so the LLM avoids redundant searches for already-filled
+    // fields while still issuing Brave searches for any field that the pre-fetch missed.
+    const alreadyFilled = [];
+    const stillNeeded = [];
+    for (const city of cities) {
+      const d = parsedData.cities[city];
+      if (d?.current?.pricePerSqm) alreadyFilled.push(`${city} current price/sqm`);
+      else stillNeeded.push(`${city} current price/sqm`);
+      if (d?.current?.income) alreadyFilled.push(`${city} current income`);
+      else stillNeeded.push(`${city} current income`);
+      if (d?.historical?.income) alreadyFilled.push(`${city} historical income`);
+      else stillNeeded.push(`${city} historical income`);
+      if (d?.historical?.pricePerSqm) {
+        // FRED pre-filled the historical price; surface the actual observation date
+        // so the LLM knows it is a proxy year when the series doesn't reach histYear.
+        const obsDate = d.historical.pricePerSqmObservationDate
+          ? d.historical.pricePerSqmObservationDate.slice(0, 4) : histYear;
+        alreadyFilled.push(`${city} historical price/sqm (FRED obs year: ${obsDate})`);
+      } else {
+        stillNeeded.push(`${city} historical price/sqm (~${histYear})`);
+      }
+    }
+    const skipHint = alreadyFilled.length > 0
+      ? `\nAlready filled from structured APIs (skip these, do NOT re-search): ${alreadyFilled.join(', ')}.\nStill needed — search for these: ${stillNeeded.join(', ')}.`
+      : '';
 
     // ── Groq tool definition for Brave Search ─────────────────────────────
     // The LLM calls this tool instead of us pre-fetching; it picks queries itself.
@@ -1241,7 +1604,7 @@ User query: ${query}`;
 
 --- SEED METRIC: GATHER RAW INGREDIENTS ---
 You have brave_search. Use it. Do NOT compute or output anything yet — just fetch numbers.
-${buildGatherPromptBlock({ currentYear: String(currentYear), histYear, histDecade })}
+${buildGatherPromptBlock({ currentYear: String(currentYear), histYear, histDecade })}${skipHint}
 
 Rules:
   • Search for ALL cities mentioned — skipping any city is not acceptable.
@@ -1303,35 +1666,54 @@ Rules:
     // Each LLM call sees exactly ONE Brave result for ONE city/metric — zero cross-city contamination.
     // Speed: Groq Llama ~200-400ms per micro-extraction, fires during Brave rate-limit wait.
     const callsToRun = toolCalls.slice(0, 12);
-    const sourceUrls = [];
 
-    const cities = state.preflight?.seedMetricSearchQueries
-      ? [...new Set(state.preflight.seedMetricSearchQueries.map(q => {
-          const match = q.match(/^([a-z\s]+)\s+(?:residential|average|median|housing|apartment)/i);
-          return match ? match[1].trim().toLowerCase() : null;
-        }).filter(Boolean))]
-      : [];
-    const histDecadeNum = parseInt(histDecade) || (currentYear - 25);
-
-    const parsedData = { cities: {}, parseLog: [] };
-    for (const city of cities) {
-      parsedData.cities[city] = {
-        current: { pricePerSqm: null, income: null },
-        historical: { pricePerSqm: null, income: null, decade: histDecade }
-      };
+    // ── Belt-and-suspenders: expand cities from Round 1 actual queries ────────
+    // The LLM may search for cities the preflight missed (e.g. 'NY' before the regex fix).
+    // Scan every tool-call query, canonicalize what we find, and register any new cities.
+    //
+    // Canonical form = the CITY_EXPAND abbreviation key (e.g. 'ny', 'sf') when one exists,
+    // otherwise the raw match string. This prevents alias fragmentation: preflight adds 'ny'
+    // but the LLM searches for 'new york' — both must resolve to the same parsedData key.
+    for (const tc of callsToRun) {
+      let tcArgs;
+      try { tcArgs = JSON.parse(tc.function.arguments); } catch { tcArgs = {}; }
+      const tcQuery = (tcArgs.query || '').toLowerCase();
+      const foundInQuery = (tcQuery.match(new RegExp(KNOWN_CITIES_REGEX.source, 'gi')) || []).map(c => c.toLowerCase());
+      for (const found of foundInQuery) {
+        // Abbreviation → keep as-is ('ny' stays 'ny')
+        // Long form    → map back to abbreviation if one exists ('new york' → 'ny')
+        // Unknown long → use as-is ('chicago' stays 'chicago')
+        const canonical = CITY_EXPAND[found] ? found : (_cityContract[found] || found);
+        if (!cities.includes(canonical)) {
+          cities.push(canonical);
+          parsedData.cities[canonical] = emptyCityRecord(histDecade);
+          logger.debug(`🏙️ Round-1 city expansion: '${canonical}' added from query "${tcQuery.slice(0, 60)}"`);
+        }
+      }
     }
+
+    // cities, parsedData, sourceUrls already initialized above (Phase 0)
 
     const microExtractPrompt = `You are a number extraction engine. You will receive ONE search result about a specific city.
 Extract EXACTLY ONE number from it. Output ONLY valid JSON — no markdown, no backticks, no explanation.
 
 Rules:
-- If you find a residential property PURCHASE price per sqm (or can derive it from total price ÷ area, or from price/sqft × 10.764): output {"value": <number>, "type": "pricePerSqm", "currency": "<ISO code>"}
+- If you find a residential property PURCHASE price per sqm or per m²: output {"value": <number>, "type": "pricePerSqm", "currency": "<ISO code>"}
+- If you find a price per sqft (square foot): convert to per-sqm by multiplying by 10.764, then output {"value": <converted>, "type": "pricePerSqm", "currency": "<ISO code>"}
+- If you can derive per-sqm from a total price AND the text also gives the floor area (e.g. "800sqm plot, $400K" → 400000÷800=500/sqm): output the derived value.
 - If you find average/median individual annual income (or monthly × 12): output {"value": <number>, "type": "income", "currency": "<ISO code>"}
 - Monthly rent is NOT purchase price — ignore it.
 - Household/dual income is NOT single-earner — ignore it.
 - GDP per capita is NOT income — ignore it.
 - Property price, home value, median sale price is NOT income — ignore it.
+- PRICE PLAUSIBILITY — null over hallucination:
+  If the text only has a TOTAL property price (median home price, median sale price, average home value, asking price for a house) with NO explicit per-sqm, per-m², or per-sqft figure AND no floor area is stated in the text, you CANNOT derive per-sqm — output {"value": null}.
+  Do NOT divide by an assumed floor area. If the area is not in the text, the division would be a guess.
+  Valid: "Homes sell for $6,000/m²" → 6000. Valid: "$550/sqft" → 550×10.764=5920.
+  Invalid: "Median home price $585,000" (no sqm or sqft rate, no area given) → null.
 - INCOME PLAUSIBILITY: If the extracted income value exceeds 300,000 USD-equivalent for an "average" or "median" earner query, you have almost certainly grabbed a property price or executive compensation figure by mistake — output {"value": null} instead.
+  Apply this limit using your knowledge of approximate exchange rates for the reported currency.
+  High-denomination currencies (JPY, KRW, IDR, VND) have much higher raw number limits — do NOT reject ¥5M, ₩40M, or Rp500M just because the number looks large; those are typical wages in those currencies.
 - If no usable number found: output {"value": null}
 - null is always better than a guess. Every number must come from the search text.
 - CRITICAL — always output the fully-expanded raw integer, never an abbreviated form.
@@ -1394,7 +1776,7 @@ Rules:
         const escapedExpanded = expanded.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         const cityWordBoundary = new RegExp(`(?:^|\\s|[^a-z])${escapedCity}(?:$|\\s|[^a-z])`, 'i');
         const expandedWordBoundary = new RegExp(`(?:^|\\s|[^a-z])${escapedExpanded}(?:$|\\s|[^a-z])`, 'i');
-        if (expandedWordBoundary.test(queryLower) || (city.length > 2 && cityWordBoundary.test(queryLower))) {
+        if (expandedWordBoundary.test(queryLower) || cityWordBoundary.test(queryLower)) {
           matchedCity = city;
           break;
         }
@@ -1420,59 +1802,57 @@ Rules:
       if (matchedCity && braveText.trim()) {
         const extractionPromise = (async () => {
           try {
-            const extractResponse = await this.groqWithRetry({
-              url: this.llmUrl,
-              data: {
-                model: this.llmModel,
-                messages: [
-                  { role: 'system', content: microExtractPrompt },
-                  { role: 'user', content: `Search query: "${searchQuery}"\n\nSearch results:\n${braveText.slice(0, 3000)}` }
-                ],
-                temperature: AI_MODELS.TEMPERATURE_DETERMINISTIC,
-                max_tokens: 100
-              },
-              config: {
-                headers: {
-                  'Authorization': `Bearer ${this.groqToken}`,
-                  'Content-Type': 'application/json'
-                },
-                timeout: 10000
-              }
-            }, 1, 'text');
+            const extracted = await this._microExtractField({
+              text: braveText,
+              query: searchQuery,
+              prompt: microExtractPrompt,
+            });
 
-            let rawJson = extractResponse.data.choices[0]?.message?.content?.trim() || '';
-            rawJson = cleanMarkdownJson(rawJson);
-            const extracted = JSON.parse(rawJson);
-
-            if (extracted.value != null && isFinite(extracted.value) && extracted.value > 0) {
-              const currency = extracted.currency || 'USD';
-              const rawValue = extracted.value;
-              // L2: Regex rescue — re-scan Brave text for K/M/B suffix LLM may have dropped
-              extracted.value = rescueDroppedSuffix(extracted.value, braveText);
-              if (extracted.value !== rawValue) {
-                logger.debug(`🔧 Suffix rescue: ${rawValue} → ${extracted.value} ${currency} (${metricType})`);
-              }
-              const resolvedType = (extracted.type === 'pricePerSqm' || extracted.type === 'income')
-                ? extracted.type : metricType;
-              if (!parsedData.cities[matchedCity]) {
-                parsedData.cities[matchedCity] = {
-                  current: { pricePerSqm: null, income: null },
-                  historical: { pricePerSqm: null, income: null, decade: histDecade }
-                };
-              }
-              const bucket = parsedData.cities[matchedCity][period];
-              if (!bucket[resolvedType]) {
-                if (resolvedType === 'income') {
-                  bucket[resolvedType] = { value: extracted.value, currency, type: 'single' };
-                } else {
-                  bucket[resolvedType] = { value: extracted.value, currency };
-                }
-                logger.debug(`👁️ Extract #${i + 1}: ${matchedCity}/${period}/${resolvedType} = ${extracted.value} ${currency}`);
-              } else {
-                logger.debug(`👁️ Extract #${i + 1}: ${matchedCity}/${period}/${resolvedType} already filled, skipping`);
-              }
-            } else {
+            if (!extracted) {
               logger.debug(`👁️ Extract #${i + 1}: ${matchedCity}/${period}/${metricType} = null`);
+              return;
+            }
+
+            const { currency, rawValue, suffixRescued } = extracted;
+            let value = extracted.value;
+            // L2: Regex rescue — re-scan Brave text for K/M/B suffix LLM may have dropped
+            if (suffixRescued) {
+              logger.debug(`🔧 Suffix rescue: ${rawValue} → ${value} ${currency} (${metricType})`);
+            }
+            const resolvedType = (extracted.type === 'pricePerSqm' || extracted.type === 'income')
+              ? extracted.type : metricType;
+            // L3: Total-price contamination guard — null over hallucination
+            if (resolvedType === 'pricePerSqm') {
+              const afterL3 = rescueTotalPrice(value, braveText);
+              if (afterL3 !== value) {
+                logger.debug(`🔧 L3 price guard: ${value} → ${afterL3 ?? 'null'} ${currency} (${matchedCity}/${period})`);
+              }
+              value = afterL3;
+            } else if (resolvedType === 'income') {
+              // L3: Income contamination guard — text-pattern + min-sanity +
+              // structural ceiling (Monaco/Switz/Lux median × 1.5). Currency-
+              // matched lookup via ceilingMap[currency] prevents FX mismatch.
+              const afterL3 = rescueIncome(value, braveText, currency, ceilingMap);
+              if (afterL3 !== value) {
+                logger.debug(`🔧 L3 income guard: ${value} → ${afterL3 ?? 'null'} ${currency} (${matchedCity}/${period})`);
+              }
+              value = afterL3;
+            }
+            if (value == null) {
+              logger.debug(`👁️ Extract #${i + 1}: ${matchedCity}/${period}/${resolvedType} nulled by L3 guard`);
+              return;
+            }
+            if (!parsedData.cities[matchedCity]) {
+              parsedData.cities[matchedCity] = emptyCityRecord(histDecade);
+            }
+            const bucket = parsedData.cities[matchedCity][period];
+            if (!bucket[resolvedType]) {
+              bucket[resolvedType] = resolvedType === 'income'
+                ? { value, currency, type: 'single' }
+                : { value, currency };
+              logger.debug(`👁️ Extract #${i + 1}: ${matchedCity}/${period}/${resolvedType} = ${value} ${currency}`);
+            } else {
+              logger.debug(`👁️ Extract #${i + 1}: ${matchedCity}/${period}/${resolvedType} already filled, skipping`);
             }
           } catch (err) {
             console.warn(`⚠️ Extract #${i + 1} failed: ${err.message}`);
@@ -1511,44 +1891,34 @@ Rules:
             const braveResult = _incomeSearch.result;
             if (!braveResult?.trim()) return;
 
-            const extractResponse = await this.groqWithRetry({
-              url: this.llmUrl,
-              data: {
-                model: this.llmModel,
-                messages: [
-                  { role: 'system', content: microExtractPrompt },
-                  { role: 'user', content: `Search query: "${fallbackQuery}"\n\nSearch results:\n${braveResult.slice(0, 3000)}` }
-                ],
-                temperature: AI_MODELS.TEMPERATURE_DETERMINISTIC,
-                max_tokens: 100
-              },
-              config: {
-                headers: {
-                  'Authorization': `Bearer ${this.groqToken}`,
-                  'Content-Type': 'application/json'
-                },
-                timeout: 10000
-              }
-            }, 1, 'text');
+            const extracted = await this._microExtractField({
+              text: braveResult,
+              query: fallbackQuery,
+              prompt: microExtractPrompt,
+            });
 
-            let rawJson = extractResponse.data.choices[0]?.message?.content?.trim() || '';
-            rawJson = cleanMarkdownJson(rawJson);
-            const extracted = JSON.parse(rawJson);
-
-            if (extracted.value != null && isFinite(extracted.value) && extracted.value > 0) {
-              const currency = extracted.currency || 'USD';
-              const rawValue = extracted.value;
-              // L2: Regex rescue — re-scan Brave text for K/M/B suffix LLM may have dropped
-              extracted.value = rescueDroppedSuffix(extracted.value, braveResult);
-              if (extracted.value !== rawValue) {
-                logger.debug(`🔧 Suffix rescue (fallback): ${rawValue} → ${extracted.value} ${currency} (income)`);
-              }
-              if (!data[period].income) {
-                data[period].income = { value: extracted.value, currency, type: 'single' };
-                logger.debug(`🔄 Fallback hit: ${city}/${period}/income = ${extracted.value} ${currency} (via ${country})`);
-              }
-            } else {
+            if (!extracted) {
               logger.debug(`🔄 Fallback miss: ${city}/${period}/income still null (${country})`);
+              return;
+            }
+
+            const { currency, rawValue, suffixRescued } = extracted;
+            let value = extracted.value;
+            // L2: Regex rescue — re-scan Brave text for K/M/B suffix LLM may have dropped
+            if (suffixRescued) {
+              logger.debug(`🔧 Suffix rescue (fallback): ${rawValue} → ${value} ${currency} (income)`);
+            }
+            // L3: Income contamination guard (same as primary dog-walk site).
+            const afterL3 = rescueIncome(value, braveResult, currency, ceilingMap);
+            if (afterL3 !== value) {
+              logger.debug(`🔧 L3 income guard (fallback): ${value} → ${afterL3 ?? 'null'} ${currency} (${city}/${period})`);
+            }
+            value = afterL3;
+            if (value != null && !data[period].income) {
+              data[period].income = { value, currency, type: 'single' };
+              logger.debug(`🔄 Fallback hit: ${city}/${period}/income = ${value} ${currency} (via ${country})`);
+            } else if (value == null) {
+              logger.debug(`🔄 Fallback nulled by L3 guard: ${city}/${period}/income (via ${country})`);
             }
           } catch (err) {
             console.warn(`⚠️ Income fallback failed for ${city}/${period}: ${err.message}`);
@@ -1585,6 +1955,74 @@ Rules:
       } catch (err) {
         console.warn(`⚠️ TFR fetch failed: ${err.message}`);
       }
+    }
+
+    // ── Post-dog-walk BIS fill: for non-USD cities that still have no historical ──
+    // Dog-walking may have set a current LCU price (e.g. ¥500K for Tokyo from Brave).
+    // Use that as the BIS index anchor to backcast a consistent historical price.
+    // Runs in two cases:
+    //   (a) historical is empty (Brave failed to extract anything), or
+    //   (b) historical was Brave-extracted but fails a sanity check — specifically
+    //       historical/current > 1.0 in same currency (housing price per sqm rarely
+    //       falls over 25 years; ratio >1.0 strongly indicates a Brave extraction
+    //       error, e.g. a city-centre listing mis-tagged as "2000s historical").
+    //   Phase 0 silo data (HDB, FRED, UK LR, IntlHist BIS) is left untouched —
+    //   only same-currency dog-walked values are sanity-checked.
+    for (const cityKey of cities) {
+      const data = parsedData.cities[cityKey];
+      if (!data) continue;
+      const currentPsm = data.current?.pricePerSqm;
+      if (!currentPsm || !currentPsm.value) continue;
+      if (currentPsm.currency === 'USD') continue;
+
+      const histPsm = data.historical?.pricePerSqm;
+      if (histPsm?.value) {
+        const sameCurrency = histPsm.currency === currentPsm.currency;
+        const implausible  = sameCurrency && histPsm.value > currentPsm.value;
+        if (!implausible) continue;
+        logger.debug(`📡 BIS fill: ${cityKey} historical (${histPsm.value} ${histPsm.currency}) > current (${currentPsm.value} ${currentPsm.currency}) — discarding Brave value, attempting BIS backcast`);
+        data.historical.pricePerSqm = null;
+      }
+      try {
+        const { fetchBisPricePerSqm } = require('../lib/tools/bis-spp');
+        const country = CITY_TO_COUNTRY[cityKey];
+        const iso2 = country ? COUNTRY_ISO2[country.toLowerCase()] : null;
+        if (!iso2) continue;
+        const bisResult = await fetchBisPricePerSqm(iso2, cityKey, parseInt(histYear), null, {
+          currentPsmLcu: currentPsm.value,
+          lcuCurrency: currentPsm.currency,
+        });
+        if (bisResult) {
+          data.historical.pricePerSqm = { value: bisResult.value, currency: bisResult.currency };
+          if (bisResult.sourceUrl) {
+            dedupPushUrl(sourceUrls, {
+              title: `BIS ${country} residential property index — ${cityKey} historical`,
+              url: bisResult.sourceUrl
+            });
+          }
+          logger.debug(`📡 BIS fill (post-dogwalk): ${cityKey} historical = ${bisResult.value} ${bisResult.currency} (anchor: ${currentPsm.value} ${currentPsm.currency})`);
+        }
+      } catch (err) {
+        logger.warn({ cityKey, err: err.message }, '📡 BIS fill (post-dogwalk) failed');
+      }
+    }
+
+    // ── Cross-period invariant validation (final guard before table build) ───
+    // Runs AFTER all data sources (Phase 0 silos, dog-walk Brave, fallback,
+    // post-dog-walk BIS backcast). Mutates parsedData / tfrCapsule in place,
+    // nulling fields that violate invariants (currency mismatch, temporal
+    // income direction, TFR cross-period plausibility). Failing loudly via
+    // log lines so anomalies are visible in production traces.
+    try {
+      const violations = validateSeedMetricInvariants(parsedData, tfrCapsule);
+      if (violations.length > 0) {
+        logger.warn({ violations }, `🛡️ Seed-metric invariant violations: ${violations.length}`);
+        for (const v of violations) parsedData.parseLog.push(`INVARIANT: ${v}`);
+      } else {
+        logger.debug('🛡️ Seed-metric invariants: all clean');
+      }
+    } catch (err) {
+      logger.warn({ err: err.message }, '🛡️ validateSeedMetricInvariants threw — skipping');
     }
 
     // ── Server-side math: buildSeedMetricTable (deterministic) ───────────────
@@ -1657,52 +2095,86 @@ Rules:
   async _fetchTFRData(cities, historicalDecade, clientIp, cityToCountry = {}) {
     const tfrCapsule = {};
     const currentYear = String(new Date().getFullYear() - 1);
+    const { fetchWbTFR } = require('../lib/tools/wb-tfr');
+
+    const _tfrSearch = async (q) => this.searchKernel
+      ? (await this.searchKernel.search({ query: q, tier: 'premium', clientIp })).result
+      : (this.searchBrave ? await this.searchBrave(q, clientIp) : null);
+
+    // Helper: try World Bank first, then Brave city search, then Brave country search.
+    // World Bank is fast (~100 ms, cached per-country) and structured — no text parsing needed.
+    // Brave searches add 1–2 s each and require regex extraction; they run only when WB misses.
+    //
+    // Precedence policy (deliberate):
+    //   WB SP.DYN.TFRT.IN is prioritised because it is structured, reliable, and covers
+    //   ~200 countries from 1960. Its ~2-year publication lag is acceptable — the seed-metric
+    //   table is a decadal/generational comparison, not a real-time indicator. Brave searches
+    //   act as a recency supplement for cities or years WB cannot resolve (MAX_LAG=4).
+    const _fetchTFR = async (city, country, targetYear, label) => {
+      const iso2 = country ? COUNTRY_ISO2[country.toLowerCase()] : null;
+
+      // 1. World Bank structured API (primary)
+      if (iso2) {
+        try {
+          const wbResult = await fetchWbTFR(iso2, targetYear);
+          if (wbResult) {
+            logger.debug(`🐣 TFR World Bank (primary): ${city} ${label} = ${wbResult.value} (${wbResult.year}, iso2=${iso2})`);
+            return wbResult.value;
+          }
+        } catch (wbErr) {
+          logger.warn({ city, err: wbErr.message }, '🐣 TFR World Bank primary failed');
+        }
+      }
+
+      // 2. Brave city-specific search (first Brave fallback)
+      const cityQuery = `"${city}" total fertility rate ${targetYear}`;
+      logger.debug(`🐣 TFR Brave city search: "${cityQuery}"`);
+      const cityResult = await _tfrSearch(cityQuery);
+      const cityVal = parseTFR(cityResult, city, targetYear);
+      if (cityVal) {
+        logger.debug(`🐣 TFR Brave city hit: ${city} ${label} = ${cityVal}`);
+        return cityVal;
+      }
+
+      // 3. Brave country-level search (second Brave fallback)
+      if (country) {
+        await new Promise(r => setTimeout(r, 1100));
+        const countryQuery = `${country} total fertility rate ${targetYear}`;
+        logger.debug(`🐣 TFR Brave country fallback: "${countryQuery}"`);
+        const countryResult = await _tfrSearch(countryQuery);
+        const countryVal = parseTFR(countryResult, country, targetYear);
+        if (countryVal) {
+          logger.debug(`🐣 TFR Brave country hit: ${city} ${label} = ${countryVal} (via ${country})`);
+          return countryVal;
+        }
+      }
+
+      // 4. Year-agnostic Brave search (catches preliminary / unlabelled data — e.g. SG 2025).
+      // Only fires when all year-specific paths have already missed.
+      await new Promise(r => setTimeout(r, 1100));
+      const agnosticTarget = country || city;
+      const agnosticQuery = `${agnosticTarget} total fertility rate`;
+      logger.debug(`🐣 TFR year-agnostic fallback: "${agnosticQuery}"`);
+      const agnosticResult = await _tfrSearch(agnosticQuery);
+      const agnosticVal = parseTFR(agnosticResult, agnosticTarget, '');
+      if (agnosticVal) {
+        logger.debug(`🐣 TFR year-agnostic hit: ${city} ${label} = ${agnosticVal}`);
+        return agnosticVal;
+      }
+
+      return null;
+    };
+
     for (let i = 0; i < cities.length; i++) {
       const city = cities[i];
       const cityKey = city.toLowerCase();
+      const country = cityToCountry[cityKey] || null;
       tfrCapsule[cityKey] = { current: null, historical: null };
 
       try {
-        const _tfrSearch = async (q) => this.searchKernel
-          ? (await this.searchKernel.search({ query: q, tier: 'premium', clientIp })).result
-          : (this.searchBrave ? await this.searchBrave(q, clientIp) : null);
-
-        const currentQuery = `"${city}" total fertility rate ${currentYear}`;
-        logger.debug(`🐣 TFR search: "${currentQuery}"`);
-        const currentResult = await _tfrSearch(currentQuery);
-        tfrCapsule[cityKey].current = parseTFR(currentResult, city, currentYear);
-
-        if (!tfrCapsule[cityKey].current && cityToCountry[cityKey]) {
-          const country = cityToCountry[cityKey];
-          await new Promise(r => setTimeout(r, 1100));
-          const countryQuery = `${country} total fertility rate ${currentYear}`;
-          logger.debug(`🐣 TFR country fallback: "${countryQuery}"`);
-          const countryResult = await _tfrSearch(countryQuery);
-          tfrCapsule[cityKey].current = parseTFR(countryResult, country, currentYear);
-          if (tfrCapsule[cityKey].current) {
-            logger.debug(`🐣 TFR fallback hit: ${city} current = ${tfrCapsule[cityKey].current} (via ${country})`);
-          }
-        }
-
-        await new Promise(r => setTimeout(r, 1100));
-
-        const histQuery = `"${city}" total fertility rate ${historicalDecade}`;
-        logger.debug(`🐣 TFR search: "${histQuery}"`);
-        const histResult = await _tfrSearch(histQuery);
         const histTargetYear = historicalDecade.replace(/s$/, '');
-        tfrCapsule[cityKey].historical = parseTFR(histResult, city, histTargetYear);
-
-        if (!tfrCapsule[cityKey].historical && cityToCountry[cityKey]) {
-          const country = cityToCountry[cityKey];
-          await new Promise(r => setTimeout(r, 1100));
-          const countryHistQuery = `${country} total fertility rate ${historicalDecade}`;
-          logger.debug(`🐣 TFR country fallback: "${countryHistQuery}"`);
-          const countryHistResult = await _tfrSearch(countryHistQuery);
-          tfrCapsule[cityKey].historical = parseTFR(countryHistResult, country, histTargetYear);
-          if (tfrCapsule[cityKey].historical) {
-            logger.debug(`🐣 TFR fallback hit: ${city} historical = ${tfrCapsule[cityKey].historical} (via ${country})`);
-          }
-        }
+        tfrCapsule[cityKey].current    = await _fetchTFR(city, country, currentYear, 'current');
+        tfrCapsule[cityKey].historical = await _fetchTFR(city, country, histTargetYear, 'historical');
 
         if (i < cities.length - 1) await new Promise(r => setTimeout(r, 1100));
       } catch (err) {
@@ -2138,7 +2610,8 @@ Output ONLY the corrected table and summary lines:`;
         mode:    state.mode,
         didSearch: state.didSearch,
         searchProvider: state.searchProvider || null,
-        searchSourceUrls: state.searchSourceUrls || []
+        searchSourceUrls: state.searchSourceUrls || [],
+        seedMetricSourceUrls: state.seedMetricSourceUrls || []
       });
     }
     

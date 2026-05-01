@@ -40,6 +40,10 @@ const SEED_METRIC_TRIGGER_PATTERNS = [
   // Longevity > profit: SF = San Francisco, not Stifel; LA = Los Angeles, not a ticker
   /\b(sf|la|ny|dc|hk|kl)\b.*\b(price|prices|housing|property|rent|land|cost|income|salary|afford)/i,
   /\b(price|prices|housing|property|rent|land|cost|income|salary|afford).*\b(sf|la|ny|dc|hk|kl)\b/i,
+  // Native codebase vocabulary — these terms only appear in seed-metric context
+  /\blcu[\s\/]sqm\b/i,                                           // "LCU/sqm" column header
+  /\b(?:fatalism|optimism|extraction)\s+regime\b/i,              // "fatalism regime"
+  /\b(?:fatalism|optimism|extraction)\s+(?:reading|score)\b/i,  // "fatalism reading"
 ];
 
 const SEED_METRIC_TOPIC_KEYWORDS = [
@@ -174,8 +178,10 @@ function buildSearchQueries({ city, currencyName, currentYear, histYear, histDec
   const currSuffix = currencyName ? ` ${currencyName}` : '';
   return {
     currentPrice:     `${city} residential property price per square meter${currSuffix} ${currentYear}`,
+    currentPriceSqft: `${city} residential price per square foot${currSuffix} ${currentYear}`,
     currentIncome:    `${city} average income ${currentYear}`,
-    historicalPrice:  `${city} housing price ${histDecade} historical per sqm`,
+    historicalPrice:  `${city} housing price per square meter ${histDecade} historical`,
+    historicalPriceSqft: `${city} housing price per square foot ${histDecade} historical`,
     historicalIncome: `${city} average income ${histDecade}`,
   };
 }
@@ -197,11 +203,13 @@ Distribute your search budget evenly across all cities — do not exhaust search
 
   Current (${currentYear}):
     • Price: "${ex.currentPrice}"
-      (prefer apartment/flat/residential; land or plot price is acceptable fallback if no built price found)
+      For US, Canada, UK, Australia — also try: "${ex.currentPriceSqft}" (local convention is $/sqft; server converts ×10.764 to get $/sqm).
+      Prefer results that explicitly say "per sqm", "per m²", or "per sqft". Ignore results that only report a total home price with no unit rate.
     • Income: "${ex.currentIncome}"
 
   Historical (${histDecade}):
     • Price: "${ex.historicalPrice}"
+      For US, Canada, UK, Australia — also try: "${ex.historicalPriceSqft}"
     • Income: "${ex.historicalIncome}"
 
   Replace {local currency name} with the actual currency word — e.g. "rupees" for India, "kronor" for Sweden,

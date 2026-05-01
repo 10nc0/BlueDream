@@ -636,12 +636,28 @@ function createAuditBadge(auditData) {
  * body always includes the signature (tail after sources block).
  */
 function extractSources(content) {
-    // Format 1: 📚 **Sources:** — capture only the single line (stop at \n)
-    const m1 = content.match(/\n(?:📚\s*)?\*\*Sources:\*\*[ \t]*([^\n]*)/);
-    if (m1) {
+    // Format 1a: canonical orchestrator line — MUST try emoji-prefixed form first.
+    // The bare **Sources:** header of an LLM bullet block (Format 2) appears earlier in
+    // the text; matching it here would capture empty content and leave the bullet lines
+    // as raw markdown in the body.  Prefer the explicit 📚 prefix to avoid that.
+    // NOTE: 📚 is U+1F4DA (supplementary plane) — without the `u` flag JS splits it into
+    // two UTF-16 surrogates, so we match it as a literal character sequence here rather
+    // than relying on `?` quantifier behaviour.
+    const m1emoji = content.match(/\n📚\s*\*\*Sources:\*\*[ \t]*([^\n]*)/);
+    if (m1emoji) {
         return {
-            body:    content.slice(0, m1.index) + content.slice(m1.index + m1[0].length),
-            sources: m1[1].trim(),
+            body:    content.slice(0, m1emoji.index) + content.slice(m1emoji.index + m1emoji[0].length),
+            sources: m1emoji[1].trim(),
+            format:  'inline'
+        };
+    }
+
+    // Format 1b: bare **Sources:** single-line (fallback — only if no 📚 form found)
+    const m1bare = content.match(/\n\*\*Sources:\*\*[ \t]*([^\n]*[^\s][^\n]*)/);
+    if (m1bare) {
+        return {
+            body:    content.slice(0, m1bare.index) + content.slice(m1bare.index + m1bare[0].length),
+            sources: m1bare[1].trim(),
             format:  'inline'
         };
     }
