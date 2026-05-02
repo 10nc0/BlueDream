@@ -2150,16 +2150,29 @@ Rules:
       }
 
       // 4. Year-agnostic Brave search (catches preliminary / unlabelled data — e.g. SG 2025).
-      // Only fires when all year-specific paths have already missed.
-      await new Promise(r => setTimeout(r, 1100));
-      const agnosticTarget = country || city;
-      const agnosticQuery = `${agnosticTarget} total fertility rate`;
-      logger.debug(`🐣 TFR year-agnostic fallback: "${agnosticQuery}"`);
-      const agnosticResult = await _tfrSearch(agnosticQuery);
-      const agnosticVal = parseTFR(agnosticResult, agnosticTarget, '');
-      if (agnosticVal) {
-        logger.debug(`🐣 TFR year-agnostic hit: ${city} ${label} = ${agnosticVal}`);
-        return agnosticVal;
+      // CURRENT-ONLY by design: the query string carries no year, so running it for both
+      // periods would return the same first-match value for both — producing identical
+      // TFR in the historical and current rows (the "TFR leak between years" bug).
+      // For historical periods we MUST have a year-anchored hit; better to return null
+      // and surface N/A than to import the latest figure as if it were 25 years old.
+      //
+      // KNOWN RESIDUAL: if a historical query returns a snippet anchored to a year inside
+      // the decade window (e.g. "London TFR in 2008 was 1.6") AND the current year-agnostic
+      // fallback retrieves the same snippet, both rows can show 1.6. To fully close this,
+      // parseTFR would need to return matched-year metadata so this orchestrator could
+      // dedup by source-year across periods. Out-of-scope for this fix; tracked as
+      // follow-up "TFR cross-period dedup via matched-year metadata".
+      if (label === 'current') {
+        await new Promise(r => setTimeout(r, 1100));
+        const agnosticTarget = country || city;
+        const agnosticQuery = `${agnosticTarget} total fertility rate`;
+        logger.debug(`🐣 TFR year-agnostic fallback: "${agnosticQuery}"`);
+        const agnosticResult = await _tfrSearch(agnosticQuery);
+        const agnosticVal = parseTFR(agnosticResult, agnosticTarget, '');
+        if (agnosticVal) {
+          logger.debug(`🐣 TFR year-agnostic hit: ${city} ${label} = ${agnosticVal}`);
+          return agnosticVal;
+        }
       }
 
       return null;

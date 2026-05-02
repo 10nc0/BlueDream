@@ -1,5 +1,21 @@
 const { assertValidSchemaName } = require('../../lib/validators');
 const { normalizeForSearch } = require('../../utils/language-detector');
+const { resolveContributors } = require('../../lib/line-profile');
+
+// Resolve LINE userIds in sender_contact → display names. Phone numbers, emails,
+// and other strings pass through unchanged. Failures fall back to the raw ID so
+// the dashboard always renders something. Mutates messages in place.
+async function resolveSenderContacts(messages) {
+    if (!Array.isArray(messages) || messages.length === 0) return messages;
+    const contacts = messages.map(m => m.sender_contact || '');
+    const resolved = await resolveContributors(contacts);
+    for (let i = 0; i < messages.length; i++) {
+        if (resolved[i] && resolved[i] !== contacts[i]) {
+            messages[i].sender_contact = resolved[i];
+        }
+    }
+    return messages;
+}
 
 function register(app, deps) {
     const { pool, bots, middleware, tenantMiddleware, logger, constants } = deps;
@@ -151,6 +167,8 @@ function register(app, deps) {
                             }))
                         };
                     });
+
+                await resolveSenderContacts(messages);
 
                 res.json({
                     messages,
@@ -320,6 +338,8 @@ function register(app, deps) {
                             }))
                         };
                     });
+
+                await resolveSenderContacts(messages);
 
                 res.json({
                     messages,

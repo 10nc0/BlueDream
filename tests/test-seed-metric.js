@@ -12,6 +12,7 @@ const {
   rescueIncome,
   validateSeedMetricInvariants,
   emptyCityRecord,
+  parseTFR,
 } = require('../utils/seed-metric-calculator');
 const { CITY_TO_COUNTRY, ISO2_TO_CURRENCY } = require('../utils/geo-data');
 
@@ -568,6 +569,106 @@ assert(
     null
   );
 }
+
+// ─── parseTFR: year-leak guards ──────────────────────────────────────────────
+
+console.log('\n── parseTFR: strict-year guard (no cross-period leak) ──');
+
+// Snippet talks ONLY about 2024 — query for 2000 must NOT silently grab the 2024 number.
+const snippetCurrentOnly = 'United States total fertility rate in 2024 was 1.6 births per woman.';
+assert(
+  'parseTFR: targetYear=2000 with only-2024 snippet → null (no leak)',
+  parseTFR(snippetCurrentOnly, 'United States', '2000'),
+  null
+);
+assert(
+  'parseTFR: targetYear=2024 with only-2024 snippet → 1.6 (year-anchored hit)',
+  parseTFR(snippetCurrentOnly, 'United States', '2024'),
+  1.6
+);
+
+// Snippet has both years far enough apart that each query lands in its own window.
+// (parseTFR uses a ±200-char window for year-proximity, so realistic snippets
+// where the two years sit in separate paragraphs / list items disambiguate cleanly.)
+const PADDING = ' '.repeat(250);
+const snippetBoth =
+  'United States: in 2000 the total fertility rate was 2.06 births per woman.' +
+  PADDING +
+  'By 2024 the United States rate had fallen to 1.62 births per woman.';
+assert(
+  'parseTFR: targetYear=2000 with separated mixed snippet → 2.06 (period-correct)',
+  parseTFR(snippetBoth, 'United States', '2000'),
+  2.06
+);
+assert(
+  'parseTFR: targetYear=2024 with separated mixed snippet → 1.62 (period-correct)',
+  parseTFR(snippetBoth, 'United States', '2024'),
+  1.62
+);
+
+// Year-agnostic mode (empty targetYear) keeps old permissive behaviour — first match wins.
+assert(
+  'parseTFR: empty targetYear (agnostic) → first valid match (current-only fallback path)',
+  parseTFR(snippetCurrentOnly, 'United States', ''),
+  1.6
+);
+
+// Regression: the original leak — 2000 query against a 2025-only page returned the 2025 value.
+const snippetOnly2025 = 'Los Angeles fertility rate 2025: 3.8 (preliminary).';
+assert(
+  'parseTFR: regression — 2000 query against 2025-only snippet → null (was leaking 3.8)',
+  parseTFR(snippetOnly2025, 'Los Angeles', '2000'),
+  null
+);
+
+// Adversarial dense snippet: both years and both values within the same 200-char
+// window — using real-world phrasing each value can match. Earlier tie-on-proximity
+// logic returned pool[0] for both targets, collapsing the two periods to the same
+// value. Nearest-year-token scoring must disambiguate by char-distance.
+const denseSnippet =
+  'United States fertility rate was 2.06 births per woman in 2000 and ' +
+  'fell to 1.62 births per woman by 2024.';
+assert(
+  'parseTFR: dense snippet, target=2000 → 2.06 (nearest-token disambig)',
+  parseTFR(denseSnippet, 'United States', '2000'),
+  2.06
+);
+assert(
+  'parseTFR: dense snippet, target=2024 → 1.62 (nearest-token disambig, no collapse)',
+  parseTFR(denseSnippet, 'United States', '2024'),
+  1.62
+);
+
+// Decadal-target adversarial: "2000s" decade label vs. explicit "2024" year.
+const denseDecadeSnippet =
+  'United States fertility rate averaged 2.05 children per woman across the 2000s ' +
+  'but fell to 1.62 children per woman in 2024.';
+assert(
+  'parseTFR: dense snippet, target=2000 (decadal context) → 2.05',
+  parseTFR(denseDecadeSnippet, 'United States', '2000'),
+  2.05
+);
+assert(
+  'parseTFR: dense snippet, target=2024 (decadal context) → 1.62',
+  parseTFR(denseDecadeSnippet, 'United States', '2024'),
+  1.62
+);
+
+// List-style snippet with year prefix on the LEFT of each value
+// ("YEAR: VALUE births per woman"). Must work as well as right-side patterns.
+const listLeftSnippet =
+  'United States fertility rate by year: 2000: 2.06 births per woman; ' +
+  '2024: 1.62 births per woman.';
+assert(
+  'parseTFR: left-side year list, target=2000 → 2.06',
+  parseTFR(listLeftSnippet, 'United States', '2000'),
+  2.06
+);
+assert(
+  'parseTFR: left-side year list, target=2024 → 1.62',
+  parseTFR(listLeftSnippet, 'United States', '2024'),
+  1.62
+);
 
 // ─── Summary ─────────────────────────────────────────────────────────────────
 

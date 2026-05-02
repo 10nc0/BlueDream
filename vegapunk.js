@@ -52,6 +52,8 @@ const { registerPipeRoutes } = require('./routes/pipe');
 const { registerNyanAIRoutes, capacityManager, usageTracker } = require('./routes/nyan-ai');
 const { healQueue } = require('./lib/heal-queue');
 const phiBreathe = require('./lib/phi-breathe');
+const { runMonthlyEmail } = require('./lib/monthly-email');
+const { runMonthlyClosing } = require('./lib/monthly-closing');
 const { createSendToLedger } = require('./lib/discord-webhooks');
 const { createErrorHandler, notFoundHandler } = require('./lib/error-handler');
 const { config, buildConnectionString, getDbHost } = require('./config');
@@ -625,6 +627,58 @@ app.get('/api/genesis', (req, res) => {
     });
 });
 
+// ── Genesis-admin authorization ──────────────────────────────────────────
+// Checks is_genesis_admin in the DB. Used instead of requireRole('dev') because
+// the dev-role bypass is intentionally blocked in production by auth-middleware.
+// Must be composed after requireAuth (which populates req.userId / req.tenantSchema).
+async function requireGenesisAdmin(req, res, next) {
+    if (!req.userId || !req.tenantSchema) {
+        return res.status(401).json({ error: 'Authentication required' });
+    }
+    try {
+        const result = await pool.query(
+            `SELECT is_genesis_admin FROM ${req.tenantSchema}.users WHERE id = $1`,
+            [req.userId]
+        );
+        if (!result.rows.length || !result.rows[0].is_genesis_admin) {
+            return res.status(403).json({ error: 'Genesis admin access required' });
+        }
+        next();
+    } catch (err) {
+        logger.error({ err }, 'requireGenesisAdmin: DB query failed');
+        res.status(500).json({ error: 'Authorization check failed' });
+    }
+}
+
+// ── Admin: force-run monthly email (backfill / testing) ──────────────────
+// Protected by requireAuth + requireGenesisAdmin (is_genesis_admin DB flag).
+// Works in production — does not rely on the dev-role bypass.
+// Accepts optional query params:
+//   ?month=YYYY-MM   — override the month window (default: previous month)
+//   ?force=true      — clear the guard and re-send even if already ran
+//   ?closing=true    — also run monthly closing tallies before sending (default: false)
+app.post('/api/admin/monthly-email/fire', requireAuth, requireGenesisAdmin, async (req, res) => {
+    try {
+        const overrideMonth = typeof req.query.month === 'string' && /^\d{4}-\d{2}$/.test(req.query.month)
+            ? req.query.month
+            : null;
+        const force   = req.query.force   === 'true';
+        const closing = req.query.closing === 'true';
+
+        logger.info({ by: req.userId, overrideMonth, force, closing }, '📧 Admin: monthly-email fire requested');
+
+        if (closing) {
+            await runMonthlyClosing(pool, phiBreathe.bots || {});
+        }
+
+        const result = await runMonthlyEmail(pool, { overrideMonth, force });
+        res.json({ ok: true, result });
+    } catch (err) {
+        logger.error({ err }, '📧 Admin: monthly-email fire failed');
+        res.status(500).json({ ok: false, error: err.message });
+    }
+});
+
 // Manager initialization moved to app.listen() to prevent race conditions
 // This ensures managers are fully initialized before server accepts requests
 
@@ -953,6 +1007,13 @@ app.listen(PORT, '0.0.0.0', async () => {
 
         genesisCounter.start();
         logger.info('🔢 Genesis counter started (cat + φ breath tiers)');
+
+        // Warn early if RESEND_API_KEY is absent — monthly emails will silently
+        // skip until this is set. Surfaced here (not at fire-time) so the missing
+        // secret is visible in logs well before the 1st of the month arrives.
+        if (!process.env.RESEND_API_KEY) {
+            logger.warn('⚠️ RESEND_API_KEY not set — monthly summary emails will not send until this secret is configured');
+        }
 
         phiBreathe.setPool(pool);
         phiBreathe.setBots({ hermes: hermesBot, thoth: thothBot, idris: idrisBot, horus: horusBot });

@@ -35,31 +35,94 @@ function parseTFR(snippets, city = '', targetYear = '') {
   const targetYearNum = parseInt(targetYear) || 0;
   const targetDecadeBase = targetYearNum ? Math.floor(targetYearNum / 10) * 10 : 0;
 
-  const candidates = [];
+  // Pre-index every year/decade token in the text once. We use these to find
+  // the SINGLE NEAREST year-token to each candidate value (by character
+  // distance), rather than asking "is any year within a 200-char window?" —
+  // the latter ties up when both years sit in the same window and silently
+  // returns the first match for every target (the dense-snippet leak).
+  const yearTokens = [
+    ...[...text.matchAll(/\b(19[5-9]\d|20[0-4]\d)\b/g)].map(m => ({ year: parseInt(m[1]), idx: m.index, isDecade: false })),
+    ...[...text.matchAll(/\b(19[5-9]\d|20[0-4]\d)s\b/g)].map(m => ({ year: parseInt(m[1]), idx: m.index, isDecade: true })),
+  ];
+
+  // First pass: collect all candidate values + their indices (no year scoring yet).
+  const rawCandidates = [];
   for (const pat of patterns) {
     for (const m of text.matchAll(pat)) {
       const val = parseFloat(m[1]);
       if (val >= 0.5 && val <= 9.9) {
-        const window = text.slice(Math.max(0, m.index - 200), m.index + m[0].length + 200);
-        const windowLower = window.toLowerCase();
-        const nearCity = cityLower ? windowLower.includes(cityLower) : true;
-
-        let yearProximity = 0;
-        if (targetYearNum) {
-          const yearsInWindow = [...window.matchAll(/\b(19[5-9]\d|20[0-4]\d)\b/g)].map(y => parseInt(y[1]));
-          const decadesInWindow = [...window.matchAll(/\b(19[5-9]\d|20[0-4]\d)s\b/g)].map(d => parseInt(d[1]));
-          for (const y of yearsInWindow) {
-            if (Math.abs(y - targetYearNum) <= 3) { yearProximity = 3; break; }
-            if (Math.abs(y - targetYearNum) <= 10) yearProximity = Math.max(yearProximity, 2);
-          }
-          for (const d of decadesInWindow) {
-            if (d === targetDecadeBase) yearProximity = Math.max(yearProximity, 2);
-          }
-        }
-
-        candidates.push({ value: val, nearCity, yearProximity, index: m.index });
+        rawCandidates.push({ value: val, index: m.index, matchEnd: m.index + m[0].length });
       }
     }
+  }
+  // Dedup overlapping matches (same value at same idx caught by multiple patterns).
+  const seenIdx = new Set();
+  const uniqCandidates = rawCandidates.filter(c => {
+    const k = `${c.index}:${c.value}`;
+    if (seenIdx.has(k)) return false;
+    seenIdx.add(k);
+    return true;
+  });
+  // Sorted candidate-index list for "is another value between V and Y?" checks.
+  const candIdxSorted = uniqCandidates.map(c => c.index).sort((a, b) => a - b);
+
+  // Second pass: score each candidate, assigning the year-token that most
+  // plausibly belongs to it. Rules:
+  //   1. Prefer a year to the RIGHT of the value (English: "VALUE ... in YEAR").
+  //   2. A year is INELIGIBLE if another candidate value sits between it and
+  //      this candidate — that year belongs to the closer candidate.
+  //   3. Fall back to a left-side year only if no eligible right-side year exists.
+  const candidates = [];
+  for (const c of uniqCandidates) {
+    const window = text.slice(Math.max(0, c.index - 200), c.index + 200);
+    const windowLower = window.toLowerCase();
+    const nearCity = cityLower ? windowLower.includes(cityLower) : true;
+
+    let yearProximity = 0;
+    let nearestCharDist = Infinity;
+
+    if (targetYearNum && yearTokens.length > 0) {
+      // A year-token is INELIGIBLE for this candidate if another candidate
+      // value sits between it and this candidate — that year belongs to the
+      // closer candidate. Prevents mis-assignment in dense snippets.
+      const eligibleYear = (tok) => {
+        const lo = Math.min(tok.idx, c.index);
+        const hi = Math.max(tok.idx, c.index);
+        for (const otherIdx of candIdxSorted) {
+          if (otherIdx === c.index) continue;
+          if (otherIdx > lo && otherIdx < hi) return false;
+        }
+        return true;
+      };
+      // Right-side preferred ("VALUE … in YEAR" — English structure).
+      // Left-side is the fallback for "YEAR: VALUE" list-style snippets.
+      // Within the chosen side, pick the year-token whose CHAR DISTANCE to
+      // the value is smallest — that's the year the surrounding clause
+      // is talking about (e.g. for 1.62, the right-side year 2024 is the
+      // only eligible one once 1.62 has claimed its own clause).
+      const rightYears = yearTokens.filter(t => t.idx > c.index && eligibleYear(t));
+      const leftYears  = yearTokens.filter(t => t.idx <= c.index && eligibleYear(t));
+      const pickedSide = rightYears.length > 0 ? rightYears : leftYears;
+      let chosen = null;
+      let chosenDist = Infinity;
+      for (const tok of pickedSide) {
+        const d = Math.abs(tok.idx - c.index);
+        if (d < chosenDist) { chosenDist = d; chosen = tok; }
+      }
+      if (chosen) {
+        nearestCharDist = chosenDist;
+        const yearGap = Math.abs(chosen.year - targetYearNum);
+        if (chosen.isDecade) {
+          if (chosen.year === targetDecadeBase) yearProximity = 3;
+          else if (Math.abs(chosen.year - targetDecadeBase) <= 10) yearProximity = 1;
+        } else {
+          if (yearGap <= 3) yearProximity = 3;
+          else if (yearGap <= 10) yearProximity = 2;
+        }
+      }
+    }
+
+    candidates.push({ value: c.value, nearCity, yearProximity, nearestCharDist, index: c.index });
   }
 
   if (candidates.length === 0) return null;
@@ -70,9 +133,20 @@ function parseTFR(snippets, city = '', targetYear = '') {
   if (targetYearNum) {
     const maxProx = Math.max(...pool.map(c => c.yearProximity));
     if (maxProx > 0) {
+      // Among candidates tied on proximity bucket, prefer the one whose
+      // nearest year-token sits CLOSEST in characters — that's the value
+      // the surrounding sentence is actually talking about.
       const yearBest = pool.filter(c => c.yearProximity === maxProx);
+      yearBest.sort((a, b) => a.nearestCharDist - b.nearestCharDist);
       return yearBest[0].value;
     }
+    // STRICT YEAR GUARD: targetYear was specified but no candidate falls
+    // within the proximity window. Returning pool[0] here would leak a
+    // value from the wrong era (e.g. a 2025 number into a 2000s historical
+    // row, or vice-versa) — exactly the bug that caused identical TFR
+    // values to appear in both periods of the same city. Return null and
+    // let the caller try the next fallback or surface N/A.
+    return null;
   }
 
   return pool[0].value;

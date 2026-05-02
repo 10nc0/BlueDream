@@ -1,6 +1,7 @@
 const bcrypt = require('bcrypt');
 const { validate, schemas, assertValidSchemaName } = require('../lib/validators');
 const { config } = require('../config');
+const { EMAIL } = require('../config/constants');
 const {
     checkLoginRateLimit,
     recordFailedLogin,
@@ -430,7 +431,7 @@ function registerAuthRoutes(app, deps) {
                 const resend = new Resend(process.env.RESEND_API_KEY);
                 
                 await resend.emails.send({
-                    from: `Nyan <nyan@${domain}>`,
+                    from: `${EMAIL.FROM_NAME} <${EMAIL.FROM_ADDRESS}>`,
                     to: normalizedEmail,
                     subject: 'Reset Your Nyanbook Password',
                     html: `

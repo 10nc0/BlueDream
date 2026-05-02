@@ -1,4 +1,5 @@
 const { config } = require('../../config');
+const { EMAIL } = require('../../config/constants');
 const { verifyBookOwnership, checkShareRateLimit } = require('./shared');
 const { z } = require('../../lib/validators');
 
@@ -96,7 +97,7 @@ function register(app, deps) {
                     const dashboardLink = `https://${domain}/`;
 
                     await resend.emails.send({
-                        from: `Nyan <nyan@${domain}>`,
+                        from: `${EMAIL.FROM_NAME} <${EMAIL.FROM_ADDRESS}>`,
                         to: normalizedEmail,
                         subject: `${normalizedOwnerEmail} shared a book with you on Nyanbook`,
                         html: `

@@ -273,7 +273,7 @@ const PHI_BREATHE = {
   DORMANCY_CLEANUP_INTERVAL_MS: TIME.DAY, // 24 hours
   SHARE_INVITE_CLEANUP_INTERVAL_MS: TIME.DAY, // 24 hours
   USAGE_CLEANUP_INTERVAL_MS: TIME.HOUR, // 1 hour
-  MONTHLY_CLOSING_INTERVAL_MS: TIME.DAY, // 24 hours — checks daily, fires on 1st
+  MONTHLY_CLOSING_INTERVAL_MS: 5 * TIME.MINUTE, // 5 min — fires on 1st regardless of restart time
   MONTHLY_CLOSING_INACTIVITY_DAYS: 60 // Skip books with 0 drops in this window
 };
 
@@ -285,6 +285,19 @@ const IP_GEO = {
   SUCCESS_TTL_MS: TIME.HOUR,  // 1 hour for successful lookups (reduce API calls)
   FAILURE_TTL_MS: 5 * TIME.MINUTE,   // 5 minutes for failed lookups
   REQUEST_TIMEOUT_MS: 3000         // 3 second timeout for API calls
+};
+
+// ==================== Email (Resend) ====================
+// Forker-friendly: override RESEND_FROM_EMAIL in your environment to use your
+// own verified Resend domain. The default below is the upstream NyanBook
+// production address — forks should set their own to avoid the
+// "API key is not authorized to send from <domain>" error.
+const EMAIL = {
+  // @source: Resend
+  // @ref: https://resend.com/docs/dashboard/domains/introduction (sender domain must be verified)
+  // @verified: 2026-05-02
+  FROM_ADDRESS: process.env.RESEND_FROM_EMAIL || 'nyan@nyanbook.io',
+  FROM_NAME: process.env.RESEND_FROM_NAME || 'NyanBook'
 };
 
 // ==================== Miscellaneous ====================
@@ -313,6 +326,7 @@ module.exports = {
   AUDIT,
   PHI_BREATHE,
   IP_GEO,
+  EMAIL,
   MISC,
   LLM_BACKENDS,
   getLLMBackend,
