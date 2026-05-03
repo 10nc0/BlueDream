@@ -302,16 +302,6 @@ class IdrisBot {
             fields.push({ name: '🔍 Entities', value: entityStr.length > 500 ? entityStr.substring(0, 497) + '...' : entityStr, inline: false });
         }
 
-        const langKeys = Object.keys(tally.languages || {});
-        if (langKeys.length > 0) {
-            const total = langKeys.reduce((s, k) => s + tally.languages[k], 0);
-            const langStr = langKeys
-                .sort((a, b) => tally.languages[b] - tally.languages[a])
-                .map(k => `${k}: ${((tally.languages[k] / total) * 100).toFixed(0)}%`)
-                .join(', ');
-            fields.push({ name: '🌐 Languages', value: langStr, inline: false });
-        }
-
         const tagKeys = Object.keys(tally.tags || {});
         if (tagKeys.length > 0) {
             const tagStr = tagKeys

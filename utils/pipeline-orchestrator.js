@@ -72,6 +72,7 @@ const { cityToExpectedCurrency, CURRENCY_REGISTRY } = require('./geo-data');
 const { buildCeilingMap } = require('../lib/tools/income-ceiling');
 const { cleanMarkdownJson, EMPTY_TABLE_ROW_REGEX } = require('./parse-helpers');
 const { buildGatherPromptBlock } = require('../prompts/seed-metric');
+const { toToolDef, callWithTools, runToolCall } = require('./llm-tool-runner');
 
 function extractVisionSearchTerms(visionDescription) {
   if (!visionDescription || visionDescription.length < 20) return null;
@@ -225,6 +226,14 @@ class PipelineOrchestrator {
   async run(input) {
     const tenantId = input.clientIp || input.sessionId || 'anonymous';
     const state = new PipelineState(tenantId);
+
+    // Honest pipeline-entry signal so text-only queries get a real server
+    // stage within ~1 RTT instead of waiting silently until reasoning.
+    // Plain text — the client owns persona emoji decoration.
+    if (input.onStageChange) {
+      input.onStageChange({ type: 'thinking', stage: 'Routing your message...' });
+    }
+
     // Accept session lens from caller (e.g. executeCompoundQuery threading across sub-queries)
     if (input.sessionLens && typeof input.sessionLens === 'object') {
       state.sessionLens = { ...input.sessionLens };
@@ -277,7 +286,16 @@ class PipelineOrchestrator {
       const PLAYGROUND_GROQ_VISION_TOKEN = process.env.PLAYGROUND_GROQ_VISION_TOKEN;
       if (PLAYGROUND_GROQ_VISION_TOKEN) {
         logger.debug(`🔬 S-1: Processing ${photos.length} photo(s) with Groq Vision...`);
-        for (const photo of photos.slice(0, 5)) { // Max 5 photos
+        const _photoSlice = photos.slice(0, 5);
+        for (let _pIdx = 0; _pIdx < _photoSlice.length; _pIdx++) {
+          const photo = _photoSlice[_pIdx];
+          // Per-photo stage emit so the loader reflects real progress through a batch.
+          if (input.onStageChange && _photoSlice.length > 1) {
+            const _pName = photo?.name || `image ${_pIdx + 1}`;
+            input.onStageChange({ type: 'thinking', stage: `🖼️ Analyzing ${_pName} (${_pIdx + 1}/${_photoSlice.length})...` });
+          } else if (input.onStageChange && _pIdx === 0) {
+            input.onStageChange({ type: 'thinking', stage: `🖼️ Analyzing ${photo?.name || 'image'}...` });
+          }
           try {
             // Extract base64 and content type from data URL
             // Format: data:image/jpeg;base64,xxxx
@@ -749,7 +767,11 @@ class PipelineOrchestrator {
     // ========================================
     if (state.preflight.routingFlags?.needsRealtimeSearch && query) {
       logger.debug(`🌐 Real-time cascade: DDG → Brave for general query`);
-      
+
+      if (input.onStageChange) {
+        input.onStageChange({ type: 'thinking', stage: 'Searching the web...' });
+      }
+
       let searchQuery = await this.extractCoreQuestion(query, input.conversationHistory || input.history || [], getUrlAnchors(tenantId));
       // Geo-localised search: append digest geo context so results reflect the user's location
       if (state.preflight.digestGeo && searchQuery && !searchQuery.toLowerCase().includes(state.preflight.digestGeo.toLowerCase())) {
@@ -807,8 +829,82 @@ SYNTHESIS INSTRUCTIONS:
         logger.warn(`⚠️ Real-time search failed - will rely on training data`);
       }
     }
+
+    // ========================================
+    // LLM TOOL FALLBACK — when the deterministic preflight fired no tools
+    // for a non-trivial general query, expose the registry to the LLM and
+    // let it pick. Dark-launched behind NYAN_LLM_TOOL_FALLBACK=true.
+    // Mechanism shared with stepSeedMetricToolCall via llm-tool-runner.
+    // ========================================
+    if (
+      process.env.NYAN_LLM_TOOL_FALLBACK === 'true' &&
+      state.preflight.mode === 'general' &&
+      !state.didSearch &&  // realtime cascade above already grounded this query
+      !state.preflight.routingFlags?.usesForex &&
+      query && query.trim().length > 8
+    ) {
+      // Tools whose execute() is multi-positional — incompatible with the
+      // arity adapter in llm-tool-runner. Excluded from LLM-visible manifest.
+      // The deterministic preflight already covers their use cases.
+      const POSITIONAL_MULTI_ARG = new Set([
+        'brave-search', 'search-cascade', 'search-kernel', 'pdf-analyzer'
+      ]);
+      const { getManifest, getTool } = require('../lib/tools/registry');
+      const exposedTools = getManifest()
+        .filter(t => !POSITIONAL_MULTI_ARG.has(t.name))
+        .map(toToolDef);
+
+      if (exposedTools.length > 0) {
+        try {
+          logger.debug({ toolCount: exposedTools.length, query: query.slice(0, 80) }, '🪝 LLM tool fallback: invoking');
+          const llm = await callWithTools({
+            groqCall: this.groqWithRetry,
+            url: this.llmUrl,
+            model: this.llmModel,
+            token: this.groqToken,
+            timeout: this.llmTimeouts.toolCall,
+            messages: [
+              { role: 'system', content: 'You have tools available. If — and only if — the user query needs live data or external lookup that you cannot answer reliably from training, call a tool. If you can answer from training, return no tool calls. Prefer no calls over wrong calls.' },
+              { role: 'user', content: query }
+            ],
+            tools: exposedTools,
+            toolChoice: 'auto',
+            maxTokens: 600
+          });
+
+          if (llm.toolCalls.length > 0) {
+            logger.info(
+              { count: llm.toolCalls.length, names: llm.toolCalls.map(c => c.function?.name) },
+              '🪝 LLM tool fallback: tools invoked'
+            );
+            const results = [];
+            for (const tc of llm.toolCalls.slice(0, 4)) {
+              results.push(await runToolCall(tc, getTool));
+            }
+            const evidence = results.map(r =>
+              r.error
+                ? `[${r.name}] error: ${r.error}`
+                : `[${r.name}] args=${JSON.stringify(r.args)}\n${typeof r.result === 'string' ? r.result : JSON.stringify(r.result)}`
+            ).join('\n\n');
+            state.searchContext = `[LLM-SELECTED TOOL RESULTS — EVIDENCE LAYER]
+${evidence}
+
+SYNTHESIS: Use these tool results as the primary evidence. Cite values explicitly. If a tool returned an error, note the limitation honestly — never fabricate.`;
+            state.didSearch = true;
+            state.searchProvider = 'llm-tool-fallback';
+            state.writeToPackage(STAGE_IDS.PREFLIGHT, {
+              llmToolFallback: { tools: results.map(r => ({ name: r.name, ok: !r.error })) }
+            });
+          } else {
+            logger.debug('🪝 LLM tool fallback: LLM declined to call any tool');
+          }
+        } catch (err) {
+          logger.warn({ err: err.message }, '🪝 LLM tool fallback: failed (non-fatal, continuing)');
+        }
+      }
+    }
   }
-  
+
   async stepContextBuild(state, input) {
     state.transition(PIPELINE_STEPS.CONTEXT_BUILD);
     
@@ -846,7 +942,16 @@ SYNTHESIS INSTRUCTIONS:
   
   async stepReasoning(state, input) {
     state.transition(PIPELINE_STEPS.REASONING);
-    
+
+    if (input.onStageChange) {
+      const m = state.mode;
+      let stage;
+      if (m === 'seed-metric' || m === 'psi-ema') stage = 'Crunching numbers...';
+      else if (state.searchContext)               stage = 'Reading sources...';
+      else                                        stage = 'Thinking with Llama...';
+      input.onStageChange({ type: 'thinking', stage });
+    }
+
     const { query, conversationHistory, extractedContent, temperature, maxTokens } = input;
     
     // Sanitize conversation history to prevent Groq 400 errors
@@ -1620,36 +1725,32 @@ Rules:
 
     logger.debug(`🐕 Seed Metric: Walking the dog — LLM-driven Brave tool calls`);
 
-    let round1Response;
+    // Hoisted to llm-tool-runner.callWithTools — same Groq roundtrip,
+    // shared with the stepPreflight LLM tool fallback path.
+    // 'required' forces the LLM to call at least one brave_search tool;
+    // 'auto' lets it answer from training data — that's dogma, not live epistemics.
+    let llmResp;
     try {
-      round1Response = await this.groqWithRetry({
+      llmResp = await callWithTools({
+        groqCall: this.groqWithRetry,
         url: this.llmUrl,
-        data: {
-          model: this.llmModel,
-          messages: round1Messages,
-          tools: [braveSearchTool],
-          // 'required' forces the LLM to call at least one brave_search tool.
-          // 'auto' lets it answer from training data — that's dogma, not live epistemics.
-          tool_choice: 'required',
-          temperature: AI_MODELS.TEMPERATURE_PRECISE,
-          max_tokens: 800
-        },
-        config: {
-          headers: {
-            'Authorization': `Bearer ${this.groqToken}`,
-            'Content-Type': 'application/json'
-          },
-          timeout: this.llmTimeouts.toolCall
-        }
-      }, 3, 'text');
+        model: this.llmModel,
+        token: this.groqToken,
+        timeout: this.llmTimeouts.toolCall,
+        messages: round1Messages,
+        tools: [braveSearchTool],
+        toolChoice: 'required',
+        temperature: AI_MODELS.TEMPERATURE_PRECISE,
+        maxTokens: 800
+      });
     } catch (err) {
       console.error(`❌ stepSeedMetricToolCall round1 failed: ${err.message}`);
       throw err;
     }
 
-    const round1Msg = round1Response.data.choices[0]?.message;
-    const toolCalls  = round1Msg?.tool_calls || [];
-    const finishReason = round1Response.data.choices[0]?.finish_reason;
+    const round1Msg = { content: llmResp.content, tool_calls: llmResp.toolCalls };
+    const toolCalls = llmResp.toolCalls;
+    const finishReason = llmResp.finishReason;
 
     logger.debug(`🐕 Round 1: finish_reason=${finishReason}, tool_calls=${toolCalls.length}`);
 
@@ -2156,26 +2257,32 @@ Rules:
       // For historical periods we MUST have a year-anchored hit; better to return null
       // and surface N/A than to import the latest figure as if it were 25 years old.
       //
-      // KNOWN RESIDUAL: if a historical query returns a snippet anchored to a year inside
-      // the decade window (e.g. "London TFR in 2008 was 1.6") AND the current year-agnostic
-      // fallback retrieves the same snippet, both rows can show 1.6. To fully close this,
-      // parseTFR would need to return matched-year metadata so this orchestrator could
-      // dedup by source-year across periods. Out-of-scope for this fix; tracked as
-      // follow-up "TFR cross-period dedup via matched-year metadata".
+      // Cross-period dedup: parseTFR returns the matched year-token for the winning
+      // candidate. The outer per-city loop uses this to drop a "current" agnostic hit
+      // whose snippet was actually anchored to a year inside the historical decade
+      // window (e.g. "London TFR in 2008 was 1.6" leaking into both periods).
       if (label === 'current') {
         await new Promise(r => setTimeout(r, 1100));
         const agnosticTarget = country || city;
         const agnosticQuery = `${agnosticTarget} total fertility rate`;
         logger.debug(`🐣 TFR year-agnostic fallback: "${agnosticQuery}"`);
         const agnosticResult = await _tfrSearch(agnosticQuery);
-        const agnosticVal = parseTFR(agnosticResult, agnosticTarget, '');
-        if (agnosticVal) {
-          logger.debug(`🐣 TFR year-agnostic hit: ${city} ${label} = ${agnosticVal}`);
-          return agnosticVal;
+        const agnosticMeta = parseTFR(agnosticResult, agnosticTarget, '', { returnMeta: true });
+        if (agnosticMeta) {
+          logger.debug(`🐣 TFR year-agnostic hit: ${city} ${label} = ${agnosticMeta.value} (matchedYear=${agnosticMeta.matchedYear || 'none'})`);
+          return agnosticMeta;
         }
       }
 
       return null;
+    };
+
+    // Parse decade window from "1990s" / "2000s" / "1990" → [1990, 1999].
+    const _decadeRange = (decade) => {
+      const m = String(decade || '').match(/(\d{4})/);
+      if (!m) return null;
+      const base = Math.floor(parseInt(m[1], 10) / 10) * 10;
+      return [base, base + 9];
     };
 
     for (let i = 0; i < cities.length; i++) {
@@ -2186,8 +2293,29 @@ Rules:
 
       try {
         const histTargetYear = historicalDecade.replace(/s$/, '');
-        tfrCapsule[cityKey].current    = await _fetchTFR(city, country, currentYear, 'current');
-        tfrCapsule[cityKey].historical = await _fetchTFR(city, country, histTargetYear, 'historical');
+        const currentResult    = await _fetchTFR(city, country, currentYear, 'current');
+        const historicalResult = await _fetchTFR(city, country, histTargetYear, 'historical');
+
+        // Unwrap: _fetchTFR returns either a bare number (WB / year-anchored Brave
+        // paths) or { value, matchedYear } (year-agnostic fallback). We only have
+        // matched-year metadata for the agnostic path, which is precisely the path
+        // that can leak a historical-anchored snippet into the current row.
+        const currentVal       = currentResult    && typeof currentResult    === 'object' ? currentResult.value    : currentResult;
+        const currentMatchYear = currentResult    && typeof currentResult    === 'object' ? currentResult.matchedYear : null;
+        const histVal          = historicalResult && typeof historicalResult === 'object' ? historicalResult.value : historicalResult;
+
+        // Cross-period dedup: if the year-agnostic "current" hit is actually anchored
+        // to a year inside the historical decade window, drop it — better N/A than a
+        // duplicated historical figure dressed as a current statistic.
+        const decadeRange = _decadeRange(historicalDecade);
+        if (currentMatchYear && decadeRange &&
+            currentMatchYear >= decadeRange[0] && currentMatchYear <= decadeRange[1]) {
+          logger.debug(`🐣 TFR cross-period dedup: dropping ${city} current=${currentVal} (matchedYear=${currentMatchYear} in historical window ${decadeRange[0]}-${decadeRange[1]})`);
+          tfrCapsule[cityKey].current = null;
+        } else {
+          tfrCapsule[cityKey].current = currentVal;
+        }
+        tfrCapsule[cityKey].historical = histVal;
 
         if (i < cities.length - 1) await new Promise(r => setTimeout(r, 1100));
       } catch (err) {

@@ -347,16 +347,21 @@ function register(app, deps) {
                 return res.status(500).json({ error: 'Tenant context not found' });
             }
 
+            // Status must be one of the values allowed by the books_status_check
+            // CHECK constraint: 'inactive' | 'pending' | 'active' | 'suspended'.
+            // 'suspended' = intentionally taken out of service (vs 'inactive' which
+            // is the pre-launch state used at INSERT time). The `archived` boolean
+            // is the actual soft-delete flag the rest of the code filters on.
             await pool.query(`
                 UPDATE ${tenantSchema}.books
-                SET archived = true, status = 'archived', updated_at = NOW()
+                SET archived = true, status = 'suspended', updated_at = NOW()
                 WHERE id = $1
             `, [id]);
 
             _invalidateBooksCache(req.tenantSchema, req.userId);
             res.json({ success: true });
         } catch (error) {
-            logger.error({ err: error }, 'Error archiving book');
+            logger.error({ errMsg: error.message, errCode: error.code }, 'Error archiving book');
             res.status(500).json({ error: 'An internal error occurred. Please try again.' });
         }
     });
@@ -780,17 +785,19 @@ function register(app, deps) {
             logger.debug({ bookId: id }, 'Archiving book');
 
             if (book.output_0n_url) {
-                try {
-                    await axios.delete(book.output_0n_url);
-                    logger.info({ bookId: id }, 'Discord webhook deleted');
-                } catch (err) {
-                    logger.warn({ err, bookId: id }, 'Failed to delete webhook (maybe already gone)');
-                }
+                // Fire-and-forget with a short timeout — a dead/slow Discord
+                // webhook URL must not stall the request or starve the DB pool.
+                axios.delete(book.output_0n_url, { timeout: 2000 })
+                    .then(() => logger.info({ bookId: id }, 'Discord webhook deleted'))
+                    .catch(err => logger.warn({ errMsg: err.message, code: err.code, bookId: id }, 'Failed to delete webhook (maybe already gone)'));
             }
 
+            // Status must satisfy books_status_check: 'inactive'|'pending'|'active'|'suspended'.
+            // 'suspended' is the soft-delete state; the `archived` boolean is the
+            // canonical filter used by the rest of the code.
             const result = await client.query(`
                 UPDATE ${tenantSchema}.books
-                SET archived = true, status = 'archived', updated_at = NOW()
+                SET archived = true, status = 'suspended', updated_at = NOW()
                 WHERE fractal_id = $1
                 RETURNING *
             `, [id]);
@@ -819,7 +826,18 @@ function register(app, deps) {
                 });
             }
         } catch (error) {
-            logger.error({ err: error, bookId: id }, 'Error archiving book');
+            logger.error({
+                bookId: id,
+                errMsg: error.message,
+                errCode: error.code,
+                errStack: error.stack
+            }, `Error archiving book ${id}: ${error.message}`);
+            if (!res.headersSent) {
+                return res.status(500).json({
+                    error: error.message || 'Failed to archive book',
+                    code: error.code || 'ARCHIVE_FAILED'
+                });
+            }
             next(error);
         }
     });

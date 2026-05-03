@@ -272,6 +272,7 @@ const PHI_BREATHE = {
   MEDIA_PURGE_INTERVAL_MS: TIME.DAY, // 24 hours
   DORMANCY_CLEANUP_INTERVAL_MS: TIME.DAY, // 24 hours
   SHARE_INVITE_CLEANUP_INTERVAL_MS: TIME.DAY, // 24 hours
+  UNACTIVATED_BOOK_TIMEOUT_HOURS: 7 * 24, // 7 days — tenant books stuck at status='inactive' with zero drops get incinerated
   USAGE_CLEANUP_INTERVAL_MS: TIME.HOUR, // 1 hour
   MONTHLY_CLOSING_INTERVAL_MS: 5 * TIME.MINUTE, // 5 min — fires on 1st regardless of restart time
   MONTHLY_CLOSING_INACTIVITY_DAYS: 60 // Skip books with 0 drops in this window
@@ -297,7 +298,56 @@ const EMAIL = {
   // @ref: https://resend.com/docs/dashboard/domains/introduction (sender domain must be verified)
   // @verified: 2026-05-02
   FROM_ADDRESS: process.env.RESEND_FROM_EMAIL || 'nyan@nyanbook.io',
-  FROM_NAME: process.env.RESEND_FROM_NAME || 'NyanBook'
+  FROM_NAME: process.env.RESEND_FROM_NAME || 'NyanBook',
+
+  // Top-N keyword frequency extraction for monthly summary email.
+  // Tags = user-typed #hashtags, keywords = auto-extracted content words.
+  // Forks override via env vars; full stopword map is in lib/keyword-extractor.js.
+  KEYWORDS_TOP_N: parseInt(process.env.MONTHLY_EMAIL_KEYWORDS_TOP_N, 10) || 10,
+  KEYWORDS_MIN_LENGTH: parseInt(process.env.MONTHLY_EMAIL_KEYWORDS_MIN_LENGTH, 10) || 3,
+  // Optional stopword override. Format: JSON object mapping ISO 639-1 lang codes
+  // to arrays of words, e.g. {"en":["the","and"],"id":["yang","dan"]}.
+  // When set, REPLACES (not merges with) the built-in DEFAULT_STOPWORDS map for
+  // the languages it specifies. Languages not present fall back to defaults.
+  // Parsed once at boot — invalid JSON logs a warning and is ignored.
+  // Monthly-email reference-code extraction — pure-digit tokens within
+  // [DIGIT_MIN_LENGTH, DIGIT_MAX_LENGTH] are surfaced as a separate
+  // "Top reference codes" block in the monthly email. Captures plate
+  // digit-parts, order/invoice numbers, mileage milestones, etc. The
+  // upper cap kills phone-shaped tokens (10+ digit local numbers,
+  // 11-13 digit international with country code) for privacy.
+  // Forks: MONTHLY_EMAIL_KEYWORDS_DIGIT_MIN_LENGTH /
+  //        MONTHLY_EMAIL_KEYWORDS_DIGIT_MAX_LENGTH /
+  //        MONTHLY_EMAIL_KEYWORDS_REFERENCE_TOP_N.
+  KEYWORDS_DIGIT_MIN_LENGTH: parseInt(process.env.MONTHLY_EMAIL_KEYWORDS_DIGIT_MIN_LENGTH, 10) || 4,
+  KEYWORDS_DIGIT_MAX_LENGTH: parseInt(process.env.MONTHLY_EMAIL_KEYWORDS_DIGIT_MAX_LENGTH, 10) || 8,
+  KEYWORDS_REFERENCE_TOP_N:  parseInt(process.env.MONTHLY_EMAIL_KEYWORDS_REFERENCE_TOP_N, 10) || 5,
+
+  // Monthly-email send pacing — prevents bursts that would trip Resend's
+  // rate limit (2 req/s Free, 10 req/s Pro) at scale (>50 tenants).
+  // Stagger: minimum ms between launching new tenant sends.
+  // Concurrency: max tenant sends in flight at once.
+  // At Free-tier defaults (concurrency=2, pacing=500ms) we stay comfortably
+  // under 2 req/s; on Pro you can raise these via env to speed runs up.
+  SEND_PACING_MS: parseInt(process.env.MONTHLY_EMAIL_SEND_PACING_MS, 10) || 250,
+  SEND_CONCURRENCY: parseInt(process.env.MONTHLY_EMAIL_SEND_CONCURRENCY, 10) || 3,
+
+  KEYWORDS_STOPWORDS: (() => {
+    const raw = process.env.MONTHLY_EMAIL_KEYWORDS_STOPWORDS;
+    if (!raw) return null;
+    try {
+      const obj = JSON.parse(raw);
+      if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return null;
+      const out = {};
+      for (const [lang, words] of Object.entries(obj)) {
+        if (Array.isArray(words)) out[lang] = new Set(words.map(w => String(w).toLowerCase()));
+      }
+      return out;
+    } catch (e) {
+      console.warn('[constants] MONTHLY_EMAIL_KEYWORDS_STOPWORDS is not valid JSON, ignoring:', e.message);
+      return null;
+    }
+  })()
 };
 
 // ==================== Miscellaneous ====================

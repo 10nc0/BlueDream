@@ -18,7 +18,15 @@ const { CURRENCY_REGISTRY, CITY_EXPAND } = require('./geo-data');
 const { EMPTY_TABLE_ROW_REGEX } = require('./parse-helpers');
 
 // ─── TFR (Total Fertility Rate) parser ──────────────────────────────────────────
-function parseTFR(snippets, city = '', targetYear = '') {
+//
+// opts.returnMeta — when true, return { value, matchedYear } (or null) instead of
+// a bare number. matchedYear is the year-token the winning candidate claimed during
+// scoring (or null if no year context was used). Used by the orchestrator to dedup
+// the same year-anchored snippet leaking into multiple periods (e.g. an unanchored
+// "current" fallback returning a 2008 figure that already populated historical).
+function parseTFR(snippets, city = '', targetYear = '', opts = {}) {
+  const returnMeta = !!opts.returnMeta;
+  const _wrap = (v, y) => returnMeta ? { value: v, matchedYear: y } : v;
   if (!snippets) return null;
   const text = typeof snippets === 'string' ? snippets : JSON.stringify(snippets);
   if (!text || text.length < 10) return null;
@@ -80,8 +88,9 @@ function parseTFR(snippets, city = '', targetYear = '') {
 
     let yearProximity = 0;
     let nearestCharDist = Infinity;
+    let chosenYear = null;
 
-    if (targetYearNum && yearTokens.length > 0) {
+    if (yearTokens.length > 0) {
       // A year-token is INELIGIBLE for this candidate if another candidate
       // value sits between it and this candidate — that year belongs to the
       // closer candidate. Prevents mis-assignment in dense snippets.
@@ -111,18 +120,21 @@ function parseTFR(snippets, city = '', targetYear = '') {
       }
       if (chosen) {
         nearestCharDist = chosenDist;
-        const yearGap = Math.abs(chosen.year - targetYearNum);
-        if (chosen.isDecade) {
-          if (chosen.year === targetDecadeBase) yearProximity = 3;
-          else if (Math.abs(chosen.year - targetDecadeBase) <= 10) yearProximity = 1;
-        } else {
-          if (yearGap <= 3) yearProximity = 3;
-          else if (yearGap <= 10) yearProximity = 2;
+        chosenYear = chosen.year;
+        if (targetYearNum) {
+          const yearGap = Math.abs(chosen.year - targetYearNum);
+          if (chosen.isDecade) {
+            if (chosen.year === targetDecadeBase) yearProximity = 3;
+            else if (Math.abs(chosen.year - targetDecadeBase) <= 10) yearProximity = 1;
+          } else {
+            if (yearGap <= 3) yearProximity = 3;
+            else if (yearGap <= 10) yearProximity = 2;
+          }
         }
       }
     }
 
-    candidates.push({ value: c.value, nearCity, yearProximity, nearestCharDist, index: c.index });
+    candidates.push({ value: c.value, nearCity, yearProximity, nearestCharDist, chosenYear, index: c.index });
   }
 
   if (candidates.length === 0) return null;
@@ -138,7 +150,7 @@ function parseTFR(snippets, city = '', targetYear = '') {
       // the surrounding sentence is actually talking about.
       const yearBest = pool.filter(c => c.yearProximity === maxProx);
       yearBest.sort((a, b) => a.nearestCharDist - b.nearestCharDist);
-      return yearBest[0].value;
+      return _wrap(yearBest[0].value, yearBest[0].chosenYear);
     }
     // STRICT YEAR GUARD: targetYear was specified but no candidate falls
     // within the proximity window. Returning pool[0] here would leak a
@@ -149,7 +161,7 @@ function parseTFR(snippets, city = '', targetYear = '') {
     return null;
   }
 
-  return pool[0].value;
+  return _wrap(pool[0].value, pool[0].chosenYear);
 }
 
 function injectTFRColumn(tableText, tfrCapsule) {
