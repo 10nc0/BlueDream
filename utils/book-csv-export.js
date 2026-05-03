@@ -69,4 +69,26 @@ async function generateBookCsv(pool, tenantSchema, bookFractalId, bookName, sinc
     return [CSV_HEADER, ...rows].join('\n');
 }
 
-module.exports = { generateBookCsv, generateBookCsvRows, CSV_HEADER };
+function buildCsvFromMessages(messages, bookName, anattaCidByMsgId) {
+    const cidMap = anattaCidByMsgId || new Map();
+    const rows = (messages || []).map(msg => {
+        const firstAttachment = Array.isArray(msg.attachments) && msg.attachments.length > 0
+            ? msg.attachments[0]
+            : null;
+        const tsIso = msg._timestamp
+            ? new Date(msg._timestamp).toISOString()
+            : '';
+        return buildCsvRow([
+            tsIso,
+            bookName || '',
+            msg.phone || '',
+            msg.text || '',
+            firstAttachment?.url || '',
+            cidMap.get(msg.id) || '',
+            msg.id || ''
+        ]);
+    });
+    return [CSV_HEADER, ...rows].join('\n');
+}
+
+module.exports = { generateBookCsv, generateBookCsvRows, buildCsvFromMessages, CSV_HEADER };

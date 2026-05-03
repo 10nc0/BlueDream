@@ -1,7 +1,126 @@
 const archiver = require('archiver');
 const axios = require('axios');
 const crypto = require('crypto');
-const { generateBookCsv } = require('../../utils/book-csv-export');
+const { buildCsvFromMessages } = require('../../utils/book-csv-export');
+
+function formatTimestamp(date) {
+    const offset = -date.getTimezoneOffset();
+    const sign = offset >= 0 ? '+' : '-';
+    const absOffset = Math.abs(offset);
+    const tzHours = Math.floor(absOffset / 60);
+    const tzMinutes = absOffset % 60;
+    const tzString = `GMT${sign}${tzHours.toString().padStart(2, '0')}${tzMinutes > 0 ? ':' + tzMinutes.toString().padStart(2, '0') : ''}`;
+    return date.toLocaleString('en-US', {
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+    }).replace(/(\d{2})\/(\d{2})\/(\d{4})/, '$3/$1/$2') + ' ' + tzString;
+}
+
+async function loadBookExportData({ client, thothBot, tenantSchema, book_id, selectedMessageIds, isDev, logger }) {
+    let resolvedSchema = tenantSchema;
+    if (isDev) {
+        const reg = await client.query(
+            `SELECT tenant_schema FROM core.book_registry WHERE fractal_id = $1 LIMIT 1`,
+            [book_id]
+        );
+        if (reg.rows.length > 0) resolvedSchema = reg.rows[0].tenant_schema;
+    }
+
+    const bookResult = await client.query(
+        `SELECT id, name, output_credentials FROM ${resolvedSchema}.books WHERE fractal_id = $1`,
+        [book_id]
+    );
+    if (bookResult.rows.length === 0) {
+        return { notFound: true };
+    }
+    const book = bookResult.rows[0];
+    const outputCreds = book.output_credentials;
+
+    let messages = [];
+    if (thothBot?.client && thothBot.ready) {
+        try {
+            const threadId = outputCreds?.output_01?.thread_id;
+            if (threadId) {
+                const channel = await thothBot.client.channels.fetch(threadId);
+                const fetchedMessages = await channel.messages.fetch({ limit: 100 });
+
+                const allMessages = fetchedMessages.map(m => {
+                    const embed = m.embeds[0];
+                    const fields = embed?.fields || [];
+                    const getField = (name) => fields.find(f => f.name === name)?.value;
+
+                    const mediaField = getField('Media');
+                    let media = null;
+                    if (mediaField) {
+                        const match = mediaField.match(/^(.+?)\s*\((.+?)\)$/);
+                        media = match ? { type: match[1], size: match[2] } : { type: mediaField };
+                    }
+
+                    return {
+                        id: m.id,
+                        phone: getField('Phone'),
+                        time: formatTimestamp(m.createdAt),
+                        text: embed?.description || '',
+                        media,
+                        attachments: m.attachments.size > 0 ? m.attachments.map(a => ({
+                            url: a.url,
+                            filename: a.name,
+                            size: a.size
+                        })) : undefined,
+                        _timestamp: m.createdAt.toISOString()
+                    };
+                });
+
+                if (selectedMessageIds && selectedMessageIds.length > 0) {
+                    const selectedSet = new Set(selectedMessageIds);
+                    messages = allMessages.filter(m => selectedSet.has(m.id));
+                } else {
+                    messages = allMessages;
+                }
+                messages.sort((a, b) => new Date(a._timestamp) - new Date(b._timestamp));
+            }
+        } catch (err) {
+            logger.warn({ err }, 'Error fetching Discord messages for export');
+        }
+    }
+
+    const dropsResult = await client.query(
+        `SELECT * FROM ${resolvedSchema}.drops WHERE book_id = $1 ORDER BY created_at DESC`,
+        [book.id]
+    );
+    const dropsMap = new Map();
+    dropsResult.rows.forEach(drop => dropsMap.set(drop.discord_message_id, drop));
+
+    const anattaCidByMsgId = new Map();
+    try {
+        const cidResult = await client.query(
+            `SELECT message_fractal_id, attachment_cid
+             FROM ${resolvedSchema}.anatta_messages
+             WHERE book_fractal_id = $1 AND attachment_cid IS NOT NULL`,
+            [book_id]
+        );
+        cidResult.rows.forEach(r => {
+            if (r.message_fractal_id) anattaCidByMsgId.set(r.message_fractal_id, r.attachment_cid);
+        });
+    } catch (err) {
+        logger.warn({ err: err.message }, 'CID lookup failed (non-fatal)');
+    }
+
+    const enrichedMessages = messages.map(msg => {
+        const { _timestamp, ...cleanMsg } = msg;
+        return { ...cleanMsg, metadata: dropsMap.get(msg.id) || null };
+    });
+
+    return {
+        book,
+        tenantSchema: resolvedSchema,
+        messages,
+        dropsRows: dropsResult.rows,
+        dropsMap,
+        enrichedMessages,
+        anattaCidByMsgId
+    };
+}
 
 function register(app, deps) {
     const { pool, bots, helpers, middleware, tenantMiddleware, logger } = deps;
@@ -17,121 +136,16 @@ function register(app, deps) {
 
         try {
             const client = req.dbClient || pool;
-            let tenantSchema = req.tenantContext?.tenantSchema || req.tenantSchema;
+            const tenantSchema = req.tenantContext?.tenantSchema || req.tenantSchema;
             const isDev = req.tenantContext?.userRole === 'dev';
 
-            if (isDev) {
-                const registryLookup = await client.query(
-                    `SELECT tenant_schema FROM core.book_registry WHERE fractal_id = $1 LIMIT 1`,
-                    [book_id]
-                );
-                if (registryLookup.rows.length > 0) {
-                    tenantSchema = registryLookup.rows[0].tenant_schema;
-                }
-            }
-
-            const bookResult = await client.query(
-                `SELECT id, name, output_credentials FROM ${tenantSchema}.books WHERE fractal_id = $1`,
-                [book_id]
-            );
-
-            if (bookResult.rows.length === 0) {
+            const loaded = await loadBookExportData({
+                client, thothBot, tenantSchema, book_id, selectedMessageIds, isDev, logger
+            });
+            if (loaded.notFound) {
                 return res.status(404).json({ error: 'Book not found in your tenant' });
             }
-
-            const book = bookResult.rows[0];
-            const outputCreds = book.output_credentials;
-
-            let messages = [];
-
-            if (!thothBot || !thothBot.client || !thothBot.ready) {
-                messages = [];
-            } else {
-                try {
-                    const threadId = outputCreds?.output_01?.thread_id;
-                    if (threadId) {
-                        const channel = await thothBot.client.channels.fetch(threadId);
-                        const fetchedMessages = await channel.messages.fetch({ limit: 100 });
-
-                        let allMessages = fetchedMessages.map(m => {
-                            const embed = m.embeds[0];
-                            const fields = embed?.fields || [];
-                            const getField = (name) => fields.find(f => f.name === name)?.value;
-
-                            const mediaField = getField('Media');
-                            let media = null;
-                            if (mediaField) {
-                                const match = mediaField.match(/^(.+?)\s*\((.+?)\)$/);
-                                if (match) {
-                                    media = { type: match[1], size: match[2] };
-                                } else {
-                                    media = { type: mediaField };
-                                }
-                            }
-
-                            const formatTimestamp = (date) => {
-                                const offset = -date.getTimezoneOffset();
-                                const sign = offset >= 0 ? '+' : '-';
-                                const absOffset = Math.abs(offset);
-                                const tzHours = Math.floor(absOffset / 60);
-                                const tzMinutes = absOffset % 60;
-                                const tzString = `GMT${sign}${tzHours.toString().padStart(2, '0')}${tzMinutes > 0 ? ':' + tzMinutes.toString().padStart(2, '0') : ''}`;
-
-                                return date.toLocaleString('en-US', {
-                                    year: 'numeric',
-                                    month: '2-digit',
-                                    day: '2-digit',
-                                    hour: '2-digit',
-                                    minute: '2-digit',
-                                    second: '2-digit',
-                                    hour12: false
-                                }).replace(/(\d{2})\/(\d{2})\/(\d{4})/, '$3/$1/$2') + ' ' + tzString;
-                            };
-
-                            return {
-                                id: m.id,
-                                phone: getField('Phone'),
-                                time: formatTimestamp(m.createdAt),
-                                text: embed?.description || '',
-                                media,
-                                attachments: m.attachments.size > 0 ? m.attachments.map(a => ({
-                                    url: a.url,
-                                    filename: a.name,
-                                    size: a.size
-                                })) : undefined,
-                                _timestamp: m.createdAt.toISOString()
-                            };
-                        });
-
-                        if (selectedMessageIds && selectedMessageIds.length > 0) {
-                            const selectedSet = new Set(selectedMessageIds);
-                            messages = allMessages.filter(m => selectedSet.has(m.id));
-                        } else {
-                            messages = allMessages;
-                        }
-                    }
-                } catch (err) {
-                    logger.warn({ err }, 'Error fetching Discord messages for export');
-                }
-            }
-
-            const dropsResult = await client.query(
-                `SELECT * FROM ${tenantSchema}.drops WHERE book_id = $1 ORDER BY created_at DESC`,
-                [book.id]
-            );
-
-            const dropsMap = new Map();
-            dropsResult.rows.forEach(drop => {
-                dropsMap.set(drop.discord_message_id, drop);
-            });
-
-            const enrichedMessages = messages.map(msg => {
-                const { _timestamp, ...cleanMsg } = msg;
-                return {
-                    ...cleanMsg,
-                    metadata: dropsMap.get(msg.id) || null
-                };
-            });
+            const { book, messages, dropsRows, enrichedMessages, tenantSchema: resolvedSchema } = loaded;
 
             const exportTimestamp = new Date().toISOString();
 
@@ -142,10 +156,10 @@ function register(app, deps) {
                     exported_at: exportTimestamp
                 },
                 messages: enrichedMessages,
-                drops: dropsResult.rows,
+                drops: dropsRows,
                 statistics: {
                     total_messages: messages.length,
-                    total_drops: dropsResult.rows.length,
+                    total_drops: dropsRows.length,
                     messages_with_metadata: enrichedMessages.filter(m => m.metadata).length
                 }
             };
@@ -223,7 +237,7 @@ Exported: ${exportTimestamp}
 This archive contains:
 - messages.json: All messages with drops metadata
   - ${messages.length} messages total
-  - ${dropsResult.rows.length} metadata drops
+  - ${dropsRows.length} metadata drops
   - ${enrichedMessages.filter(m => m.metadata).length} messages with metadata
 
 - attachments/: Media files renamed for chronological sorting
@@ -258,7 +272,7 @@ To verify file integrity, compare SHA256 hashes in manifest.json:
                 statistics: {
                     total_files: fileHashes.length + 1,
                     total_messages: messages.length,
-                    total_drops: dropsResult.rows.length,
+                    total_drops: dropsRows.length,
                     attachments_downloaded: attachmentStats.downloaded,
                     attachments_failed: attachmentStats.failed
                 },
@@ -274,12 +288,12 @@ To verify file integrity, compare SHA256 hashes in manifest.json:
             await archive.finalize();
 
             if (logAudit) {
-                logAudit(pool, tenantSchema, req.userId, 'book_export',
+                logAudit(pool, resolvedSchema, req.userId, 'book_export',
                     `Exported book "${book.name}" (${messages.length} messages, ${attachmentStats.downloaded} attachments)`)
                     .catch(err => logger.warn({ err }, 'Failed to log export audit'));
             }
 
-            logger.info({ bookId: book_id, messages: messages.length, drops: dropsResult.rows.length }, 'Export created');
+            logger.info({ bookId: book_id, messages: messages.length, drops: dropsRows.length }, 'Export created');
 
         } catch (error) {
             logger.error({ err: error }, 'Error creating export');
@@ -297,28 +311,19 @@ To verify file integrity, compare SHA256 hashes in manifest.json:
         const { book_id } = req.params;
         try {
             const client = req.dbClient || pool;
-            let tenantSchema = req.tenantContext?.tenantSchema || req.tenantSchema;
+            const tenantSchema = req.tenantContext?.tenantSchema || req.tenantSchema;
             const isDev = req.tenantContext?.userRole === 'dev';
 
-            if (isDev) {
-                const reg = await client.query(
-                    `SELECT tenant_schema FROM core.book_registry WHERE fractal_id = $1 LIMIT 1`,
-                    [book_id]
-                );
-                if (reg.rows.length > 0) tenantSchema = reg.rows[0].tenant_schema;
-            }
-
-            const bookResult = await client.query(
-                `SELECT name FROM ${tenantSchema}.books WHERE fractal_id = $1`,
-                [book_id]
-            );
-            if (bookResult.rows.length === 0) {
+            const loaded = await loadBookExportData({
+                client, thothBot, tenantSchema, book_id, selectedMessageIds: null, isDev, logger
+            });
+            if (loaded.notFound) {
                 return res.status(404).json({ error: 'Book not found in your tenant' });
             }
+            const { book, messages, anattaCidByMsgId } = loaded;
 
-            const bookName = bookResult.rows[0].name;
-            const csv = await generateBookCsv(pool, tenantSchema, book_id, bookName, null, null);
-            const filename = `${bookName.replace(/[^a-z0-9]/gi, '_')}_export.csv`;
+            const csv = buildCsvFromMessages(messages, book.name, anattaCidByMsgId);
+            const filename = `${book.name.replace(/[^a-z0-9]/gi, '_')}_export.csv`;
 
             res.setHeader('Content-Type', 'text/csv; charset=utf-8');
             res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);

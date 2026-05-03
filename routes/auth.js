@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const bcrypt = require('bcrypt');
 const { validate, schemas, assertValidSchemaName } = require('../lib/validators');
 const { config } = require('../config');
@@ -393,7 +394,7 @@ function registerAuthRoutes(app, deps) {
             const { tenant_schema } = mappingResult.rows[0];
             
             // Genesis mark: only the creator_phone of the FIRST activated book for this
-            // email can trigger a reset. Later books activated by other phones don't matter.
+            // email can trigger a reset. Trust Twilio: first phone in = tenant owner's phone.
             // 1 phone → many emails ✓ | 1 email → 1 initiating phone ✓
             const phoneCheck = await pool.query(`
                 SELECT creator_phone
@@ -405,8 +406,21 @@ function registerAuthRoutes(app, deps) {
                 LIMIT 1
             `, [normalizedEmail]);
 
-            if (phoneCheck.rows.length === 0 || phoneCheck.rows[0].creator_phone !== standardizedPhone) {
-                logger.info({ email, phone: standardizedPhone }, 'Password reset: phone mismatch');
+            // Compare on digits-only form: legacy rows stored creator_phone without a
+            // leading "+" while newer Twilio activations store full E.164 ("+62…").
+            // Both should match the same human-entered number after normalization.
+            const digits = (s) => (s ? String(s).replace(/\D/g, '') : '');
+            const providedDigits = digits(standardizedPhone);
+            const storedDigits = digits(phoneCheck.rows[0]?.creator_phone);
+
+            if (phoneCheck.rows.length === 0 || providedDigits !== storedDigits) {
+                const tail = (s) => (s ? s.slice(-4) : null);
+                logger.info({
+                    email,
+                    providedTail: tail(providedDigits),
+                    storedTail: tail(storedDigits),
+                    hasFirstBook: phoneCheck.rows.length > 0
+                }, 'Password reset: phone mismatch');
                 return res.json({ success: true, message: 'If your details match, you will receive a reset link via email.' });
             }
             
@@ -466,7 +480,7 @@ function registerAuthRoutes(app, deps) {
             res.json({ success: true, message: 'Reset link sent to your email!' });
             
         } catch (error) {
-            logger.error({ err: error }, 'Password reset error');
+            logger.error({ err: error }, `Password reset error: ${error.message} | code=${error.code}`);
             res.status(500).json({ error: 'Password reset failed. Please try again.' });
         }
     });

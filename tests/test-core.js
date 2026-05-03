@@ -785,7 +785,7 @@ const booksCrudTests = [
 
     test('archive book', async () => {
         await pool.query(
-            `UPDATE ${SCHEMA_A}.books SET archived = true, status = 'archived', updated_at = NOW() WHERE id = $1`,
+            `UPDATE ${SCHEMA_A}.books SET archived = true, status = 'suspended', updated_at = NOW() WHERE id = $1`,
             [bookIdA]
         );
         const result = await pool.query(`SELECT archived, status FROM ${SCHEMA_A}.books WHERE id = $1`, [bookIdA]);

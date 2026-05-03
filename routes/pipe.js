@@ -353,6 +353,14 @@ function registerPipeRoutes(app, deps) {
         username: z.string().max(100, 'Username too long').optional().default('External'),
         avatar_url: z.string().url('Invalid avatar URL').refine(HTTPS_ONLY, 'Only HTTP/HTTPS URLs allowed').optional().nullable(),
         media_url: z.string().url('Invalid media URL').refine(HTTPS_ONLY, 'Only HTTP/HTTPS URLs allowed').optional().nullable(),
+        // Optional MIME type for the attachment (e.g. 'image/jpeg',
+        // 'application/pdf'). When supplied, it's persisted on the message
+        // row and feeds the monthly email's media-type breakdown. Capped
+        // at 255 chars (longer than any legitimate registered MIME type)
+        // and validated to look MIME-shaped (type/subtype with optional
+        // params). Bridges that don't know the MIME can omit it — the
+        // server falls back to URL-extension derivation.
+        media_type: z.string().max(255, 'media_type too long').regex(/^[a-zA-Z0-9!#$&^_.+-]+\/[a-zA-Z0-9!#$&^_.+-]+(;.*)?$/, 'Invalid MIME type').optional().nullable(),
         phone: z.string().regex(/^\+?[1-9]\d{1,14}$/, 'Invalid phone format').optional().nullable(),
         email: z.string().email('Invalid email format').optional().nullable()
     });
@@ -371,7 +379,7 @@ function registerPipeRoutes(app, deps) {
                     details: payloadResult.error.issues.map(i => i.message)
                 });
             }
-            const { text, username, avatar_url, media_url, phone, email } = payloadResult.data;
+            const { text, username, avatar_url, media_url, media_type, phone, email } = payloadResult.data;
             const fractalIdMod = require('../utils/fractal-id');
             const parsed = fractalIdMod.parse(fractalIdParam);
             if (!parsed || !parsed.tenantId) {
@@ -407,6 +415,7 @@ function registerPipeRoutes(app, deps) {
                     senderName,
                     avatar_url: avatar_url || null,
                     media_url: media_url || null,
+                    media_type: media_type || null,
                     phone: phone || null,
                     email: email || null,
                     hasMedia: !!media_url

@@ -657,6 +657,8 @@ async function requireGenesisAdmin(req, res, next) {
 //   ?month=YYYY-MM   — override the month window (default: previous month)
 //   ?force=true      — clear the guard and re-send even if already ran
 //   ?closing=true    — also run monthly closing tallies before sending (default: false)
+//   ?tenant=tenant_N — only process this single tenant (used to retry one
+//                     bounced recipient without re-sending to everyone else)
 app.post('/api/admin/monthly-email/fire', requireAuth, requireGenesisAdmin, async (req, res) => {
     try {
         const overrideMonth = typeof req.query.month === 'string' && /^\d{4}-\d{2}$/.test(req.query.month)
@@ -664,14 +666,17 @@ app.post('/api/admin/monthly-email/fire', requireAuth, requireGenesisAdmin, asyn
             : null;
         const force   = req.query.force   === 'true';
         const closing = req.query.closing === 'true';
+        const tenantSchemaFilter = typeof req.query.tenant === 'string' && /^tenant_\d+$/.test(req.query.tenant)
+            ? req.query.tenant
+            : null;
 
-        logger.info({ by: req.userId, overrideMonth, force, closing }, '📧 Admin: monthly-email fire requested');
+        logger.info({ by: req.userId, overrideMonth, force, closing, tenantSchemaFilter }, '📧 Admin: monthly-email fire requested');
 
         if (closing) {
             await runMonthlyClosing(pool, phiBreathe.bots || {});
         }
 
-        const result = await runMonthlyEmail(pool, { overrideMonth, force });
+        const result = await runMonthlyEmail(pool, { overrideMonth, force, tenantSchemaFilter });
         res.json({ ok: true, result });
     } catch (err) {
         logger.error({ err }, '📧 Admin: monthly-email fire failed');

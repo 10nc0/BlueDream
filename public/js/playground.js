@@ -13,6 +13,14 @@ const MAX_ATTACHMENTS = PLAYGROUND.MAX_ATTACHMENTS;
 const MAX_HISTORY_TURNS = PLAYGROUND.MAX_HISTORY_TURNS;
 let attachments = [];
 let isProcessing = false;
+// AbortController for the in-flight stream. Set at the start of sendMessage,
+// cleared on completion. Used by:
+//   1. The Stop button (sendBtn while streaming) to cancel the stream cleanly.
+//   2. The pagehide listener to abort + tear down the cat loader on refresh /
+//      navigation, so no setInterval ticker leaks if the page is restored from
+//      bfcache or transitions inside an SPA shell.
+let activeAbortController = null;
+const _origSendBtnText = (typeof document !== 'undefined' && document.getElementById('sendBtn')?.textContent) || 'Send';
 let conversationHistory = [];
 let cachedFileHashes = [];  // Store file hashes for follow-up queries (session-scoped)
 let mediaRecorder = null;
@@ -433,12 +441,33 @@ document.addEventListener('drop', (e) => {
     }
 });
 
-sendBtn.addEventListener('click', sendMessage);
+// Send / Stop dual-purpose handler. While a stream is in flight the button is
+// re-purposed as a Stop control that aborts the fetch — the catch path then
+// runs teardownStreamingMessage to clear the cat-loader interval immediately.
+sendBtn.addEventListener('click', () => {
+    if (isProcessing && activeAbortController) {
+        try { activeAbortController.abort(); } catch (_) {}
+        return;
+    }
+    sendMessage();
+});
 messageInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
+        if (isProcessing) return; // don't double-submit while streaming
         sendMessage();
     }
+});
+
+// Loader-leak guard: on page hide (refresh, tab close, SPA nav, bfcache) abort
+// any in-flight stream and tear down the cat loader so its setInterval ticker
+// is cleared before the document is detached.
+window.addEventListener('pagehide', () => {
+    if (activeAbortController) {
+        try { activeAbortController.abort(); } catch (_) {}
+        activeAbortController = null;
+    }
+    try { teardownStreamingMessage(); } catch (_) {}
 });
 
 // Paste support for clipboard images (Ctrl+V / Cmd+V)
@@ -936,201 +965,188 @@ function addMessage(role, content, messageAttachments = [], auditData = null) {
     return msgEl;
 }
 
-// Animated cat status messages for loading state
-const catStatusMessages = [
-    { emoji: '🐾', text: 'Purring..' },
-    { emoji: '🐱', text: 'Jumping..' },
-    { emoji: '😺', text: 'Peeking..' },
-    { emoji: '🙀', text: 'Stretching..' },
-    { emoji: '😸', text: 'Sniffing..' },
-    { emoji: '🐈', text: 'Prowling..' },
-    { emoji: '🐈‍⬛', text: 'Thinking..' },
-    { emoji: '✨', text: 'Conjuring..' }
-];
-let loadingAnimationInterval = null;
-let loadingMessageIndex = 0;
+// Map a server-side stage string to a cat-flavored emoji decoration.
+// The text comes from the server (real signal); only the emoji is added.
+function stageToPersona(stage) {
+    const raw = String(stage || '');
+    // Strip any leading non-letter characters (server sometimes prefixes its own emoji)
+    const text = raw.replace(/^[^\p{L}\p{N}]+/u, '').trim() || raw;
+    const s = text.toLowerCase();
+    if (/audit/.test(s))                      return { emoji: '🐈‍⬛', text };
+    if (/format/.test(s))                     return { emoji: '✨',   text };
+    if (/transcrib|audio|voice/.test(s))      return { emoji: '🎙️', text };
+    if (/read|fetch|url|http|page|sources/.test(s)) return { emoji: '😺', text };
+    if (/search|sniff|web|brave|ddg/.test(s)) return { emoji: '😼',   text };
+    if (/crunch|number|metric|calc/.test(s))  return { emoji: '🧮',   text };
+    if (/think|reason|plan|llama/.test(s))    return { emoji: '🐈‍⬛', text };
+    if (/rout/.test(s))                       return { emoji: '🐾',   text };
+    return { emoji: '🐾', text };
+}
 
-function addLoadingMessage() {
-    // Guard: clear any existing interval before starting new one
-    if (loadingAnimationInterval) {
-        clearInterval(loadingAnimationInterval);
-        loadingAnimationInterval = null;
-    }
-    
-    const msgEl = document.createElement('div');
-    msgEl.className = 'message assistant';
-    msgEl.id = 'loadingMessage';
-    
-    const labelDiv = document.createElement('div');
-    labelDiv.className = 'label';
-    labelDiv.textContent = 'Nyan AI';
-    
-    const loadingDiv = document.createElement('div');
-    loadingDiv.className = 'loading';
-    
-    const catThinkingDiv = document.createElement('div');
-    catThinkingDiv.className = 'cat-thinking';
-    catThinkingDiv.id = 'loadingEmoji';
-    catThinkingDiv.textContent = '🐾';
-    
-    const statusSpan = document.createElement('span');
-    statusSpan.id = 'loadingStatus';
-    statusSpan.style.cssText = 'color: #94a3b8; font-size: 0.875rem;';
-    statusSpan.textContent = 'Purring..';
-    
-    loadingDiv.appendChild(catThinkingDiv);
-    loadingDiv.appendChild(statusSpan);
-    
-    msgEl.appendChild(labelDiv);
-    msgEl.appendChild(loadingDiv);
-    
-    messagesEl.appendChild(msgEl);
-    messagesEl.scrollTop = messagesEl.scrollHeight;
-    
-    // Start animation cycle
-    loadingMessageIndex = 0;
-    loadingAnimationInterval = setInterval(() => {
-        loadingMessageIndex = (loadingMessageIndex + 1) % catStatusMessages.length;
-        const current = catStatusMessages[loadingMessageIndex];
-        const emojiEl = document.getElementById('loadingEmoji');
-        const statusEl = document.getElementById('loadingStatus');
-        if (emojiEl && statusEl) {
-            emojiEl.textContent = current.emoji;
-            statusEl.textContent = current.text;
+// Pick an opening cat frame from the shape of the user's message.
+// One frame, no cycling — replaced the moment the first real `thinking` event arrives.
+const _TIME_WORD_RE = /\b(today|tonight|now|yesterday|tomorrow|this\s+(week|month|year))\b/i;
+function pickOpeningFrame(message, attachments) {
+    const msg = String(message || '');
+    if ((attachments?.length || 0) > 0) return { emoji: '🐾', text: 'Opening the box...' };
+    if (/https?:\/\//.test(msg))        return { emoji: '😺', text: 'Padding to the link...' };
+    if (_TIME_WORD_RE.test(msg))        return { emoji: '✨', text: 'Checking the clocks...' };
+    if (msg.length > 300)               return { emoji: '🐈‍⬛', text: 'Settling in for a long read...' };
+    if (/\?\s*$/.test(msg))             return { emoji: '🐱', text: 'Tilts head...' };
+    return { emoji: '🐾', text: 'Routing your message...' };
+}
+
+// Single source of truth for the cat loader widget.
+// No carousel — opening frame is set once, then `setStage` updates it from real
+// server `thinking` events. A muted elapsed-time ticker counts wall-clock seconds.
+function createCatLoader(parent, opening) {
+    const wrap = document.createElement('div');
+    wrap.className = 'loading cat-loader';
+
+    const row = document.createElement('div');
+    row.className = 'cat-loader-row';
+
+    const emoji = document.createElement('span');
+    emoji.className = 'cat-thinking';
+    emoji.textContent = opening?.emoji || '🐾';
+
+    const status = document.createElement('span');
+    status.className = 'cat-loader-text';
+    status.textContent = opening?.text || 'Routing your message...';
+
+    row.appendChild(emoji);
+    row.appendChild(status);
+
+    const ticker = document.createElement('div');
+    ticker.className = 'cat-loader-ticker';
+    ticker.textContent = '🐾 0.0s';
+
+    wrap.appendChild(row);
+    wrap.appendChild(ticker);
+    parent.appendChild(wrap);
+
+    const startedAt = performance.now();
+    const tickerInterval = setInterval(() => {
+        const elapsed = (performance.now() - startedAt) / 1000;
+        ticker.textContent = `🐾 ${elapsed.toFixed(1)}s`;
+    }, 100);
+
+    return {
+        el: wrap,
+        setStage(stage) {
+            const p = stageToPersona(stage);
+            emoji.textContent = p.emoji;
+            status.textContent = p.text;
+        },
+        stop() {
+            clearInterval(tickerInterval);
+            wrap.remove();
         }
-    }, 800);
+    };
 }
 
-function removeLoadingMessage() {
-    // Clear animation interval
-    if (loadingAnimationInterval) {
-        clearInterval(loadingAnimationInterval);
-        loadingAnimationInterval = null;
+// Sticky-tail auto-scroll: only follow the stream when the user is already near
+// the bottom. Lets users scroll up to read without being yanked back by tokens.
+function stickyScroll(el) {
+    if (!el) return;
+    if (el.scrollHeight - el.scrollTop - el.clientHeight < 80) {
+        el.scrollTop = el.scrollHeight;
     }
-    const loading = document.getElementById('loadingMessage');
-    if (loading) loading.remove();
 }
 
-let streamingTextBuffer = '';
-
-function addStreamingMessage() {
+function addStreamingMessage(opening) {
     const welcome = messagesEl.querySelector('.welcome');
     if (welcome) welcome.remove();
-    
-    streamingTextBuffer = '';
-    
-    // Guard: clear any existing animation interval
-    if (loadingAnimationInterval) {
-        clearInterval(loadingAnimationInterval);
-        loadingAnimationInterval = null;
-    }
-    
+
     const msgEl = document.createElement('div');
     msgEl.className = 'message assistant streaming';
     msgEl.id = 'streamingMessage';
-    
+
     const labelDiv = document.createElement('div');
     labelDiv.className = 'label';
     labelDiv.textContent = 'Nyan AI';
-    
+
     const badgePlaceholder = document.createElement('div');
     badgePlaceholder.className = 'audit-badge-placeholder';
-    
+
     const copyBtn = document.createElement('button');
     copyBtn.className = 'copy-btn';
     copyBtn.title = 'Copy to clipboard';
     copyBtn.textContent = '📋 Copy';
     copyBtn.style.display = 'none';
-    
+
     const contentDiv = document.createElement('div');
     contentDiv.className = 'content streaming-content';
-    
-    // Show animated cat loading initially (before first token arrives)
-    const loadingContainer = document.createElement('div');
-    loadingContainer.id = 'streamingLoadingState';
-    loadingContainer.className = 'loading';
-    loadingContainer.style.cssText = 'display: flex; align-items: center; gap: 0.75rem;';
-    
-    const catEmoji = document.createElement('span');
-    catEmoji.id = 'streamingCatEmoji';
-    catEmoji.className = 'cat-thinking';
-    catEmoji.textContent = '🐾';
-    
-    const statusText = document.createElement('span');
-    statusText.id = 'streamingCatStatus';
-    statusText.style.cssText = 'color: #94a3b8; font-size: 0.875rem;';
-    statusText.textContent = 'Purring..';
-    
-    loadingContainer.appendChild(catEmoji);
-    loadingContainer.appendChild(statusText);
-    contentDiv.appendChild(loadingContainer);
-    
+
     msgEl.appendChild(labelDiv);
     msgEl.appendChild(badgePlaceholder);
     msgEl.appendChild(copyBtn);
     msgEl.appendChild(contentDiv);
-    
+
+    // Cat loader lives inside the content area; first token (or first real
+    // stage event) interacts with it via msgEl._catLoader.
+    msgEl._catLoader = createCatLoader(contentDiv, opening);
+
     messagesEl.appendChild(msgEl);
     messagesEl.scrollTop = messagesEl.scrollHeight;
-    
-    // Start animation cycle for cat status messages
-    loadingMessageIndex = 0;
-    loadingAnimationInterval = setInterval(() => {
-        loadingMessageIndex = (loadingMessageIndex + 1) % catStatusMessages.length;
-        const current = catStatusMessages[loadingMessageIndex];
-        const emojiEl = document.getElementById('streamingCatEmoji');
-        const statusEl = document.getElementById('streamingCatStatus');
-        if (emojiEl && statusEl) {
-            emojiEl.textContent = current.emoji;
-            statusEl.textContent = current.text;
-        }
-    }, 800);
-    
+
     return msgEl;
+}
+
+// Single teardown path for the streaming bubble — guarantees the cat-loader
+// interval is cleared before the element is removed (no orphan setIntervals
+// on HTTP error / SSE error / network failure paths).
+function teardownStreamingMessage() {
+    const el = document.getElementById('streamingMessage');
+    if (!el) return;
+    if (el._catLoader) { el._catLoader.stop(); el._catLoader = null; }
+    el._streamTextNode = null;
+    el.remove();
 }
 
 function updateStreamingContent(token) {
     const streamingEl = document.getElementById('streamingMessage');
     if (!streamingEl) return;
-    
+
+    // First token kills the cat loader — real content takes over.
+    if (streamingEl._catLoader) {
+        streamingEl._catLoader.stop();
+        streamingEl._catLoader = null;
+    }
+
     const contentEl = streamingEl.querySelector('.streaming-content');
     if (!contentEl) return;
-    
-    // On first token, clear the cat animation
-    if (loadingAnimationInterval) {
-        clearInterval(loadingAnimationInterval);
-        loadingAnimationInterval = null;
+
+    // Persistent text node — append-only, no DOM rebuild per token.
+    // Cursor is a CSS ::after pseudo on .streaming-content (no JS node to manage).
+    let textNode = streamingEl._streamTextNode;
+    if (!textNode) {
+        contentEl.replaceChildren();
+        textNode = document.createTextNode('');
+        contentEl.appendChild(textNode);
+        streamingEl._streamTextNode = textNode;
     }
-    
-    streamingTextBuffer += token;
-    
-    const textNode = document.createTextNode(streamingTextBuffer);
-    const cursorSpan = document.createElement('span');
-    cursorSpan.className = 'typing-cursor';
-    
-    contentEl.replaceChildren();
-    contentEl.appendChild(textNode);
-    contentEl.appendChild(cursorSpan);
-    
-    messagesEl.scrollTop = messagesEl.scrollHeight;
+    textNode.data += token;
+
+    stickyScroll(messagesEl);
 }
 
 function finalizeStreamingMessage(fullContent, auditData) {
-    // Ensure animation is stopped
-    if (loadingAnimationInterval) {
-        clearInterval(loadingAnimationInterval);
-        loadingAnimationInterval = null;
-    }
-    
     const streamingEl = document.getElementById('streamingMessage');
     if (!streamingEl) return;
-    
+
+    // Stop & detach the cat loader if it's still up (no tokens streamed).
+    if (streamingEl._catLoader) {
+        streamingEl._catLoader.stop();
+        streamingEl._catLoader = null;
+    }
+
     streamingEl.classList.remove('streaming');
     const copyBtnEl = streamingEl.querySelector('.copy-btn');
     if (copyBtnEl) copyBtnEl.style.display = '';
     streamingEl.id = '';
-    streamingTextBuffer = '';
-    
+    streamingEl._streamTextNode = null;
+
     const contentEl = streamingEl.querySelector('.streaming-content');
     contentEl.replaceChildren();
 
@@ -1170,50 +1186,12 @@ function finalizeStreamingMessage(fullContent, auditData) {
     }
 }
 
+// Real-stage status — drives the cat loader text from the actual pipeline signal.
+// Once tokens have started streaming, the loader is gone and there's nothing to update.
 function updateThinkingStage(stage) {
     const streamingEl = document.getElementById('streamingMessage');
-    if (!streamingEl) return;
-    
-    const contentEl = streamingEl.querySelector('.streaming-content');
-    const loadingEl = contentEl && contentEl.querySelector('#streamingLoadingState');
-
-    if (contentEl && contentEl.textContent.trim() === '') {
-        // Truly empty — replace with stage text
-        contentEl.replaceChildren();
-        const stageSpan = document.createElement('span');
-        stageSpan.style.cssText = 'color: #94a3b8; font-size: 0.875rem;';
-        stageSpan.textContent = stage;
-        const cursorSpan = document.createElement('span');
-        cursorSpan.className = 'typing-cursor';
-        contentEl.appendChild(stageSpan);
-        contentEl.appendChild(cursorSpan);
-    } else if (loadingEl) {
-        // Loading animation still showing — add hint row inside the loading block
-        const existing = loadingEl.querySelector('.streaming-stage-hint');
-        if (!existing) {
-            loadingEl.style.flexDirection = 'column';
-            loadingEl.style.alignItems = 'flex-start';
-            const hintRow = document.createElement('div');
-            hintRow.className = 'streaming-stage-hint';
-            hintRow.style.cssText = 'color:#94a3b8; font-size:0.8rem; font-style:italic; padding-top:0.25rem;';
-            hintRow.textContent = `🔍 ${stage}`;
-            loadingEl.appendChild(hintRow);
-        } else {
-            existing.textContent = `🔍 ${stage}`;
-        }
-    } else {
-        // Tokens already streamed — append below the draft text, inside contentEl
-        const existing = contentEl && contentEl.querySelector('.streaming-stage-hint');
-        if (!existing && contentEl) {
-            const hint = document.createElement('div');
-            hint.className = 'streaming-stage-hint';
-            hint.style.cssText = 'color:#94a3b8; font-size:0.8rem; margin-top:0.5rem; font-style:italic;';
-            hint.textContent = `🔍 ${stage}`;
-            contentEl.appendChild(hint);
-        } else if (existing) {
-            existing.textContent = `🔍 ${stage}`;
-        }
-    }
+    if (!streamingEl || !streamingEl._catLoader) return;
+    streamingEl._catLoader.setStage(stage);
 }
 
 function escapeHtml(text) {
@@ -1404,18 +1382,27 @@ async function sendMessage(_retryPayload = null) {
         console.log(`📂 Sending ${cachedFileHashes.length} cached file hash(es) for follow-up`);
     }
     
-    addStreamingMessage();
-    
+    addStreamingMessage(pickOpeningFrame(message, savedAttachments));
+
+    // Fresh AbortController per request — wired into both the Stop button and
+    // the pagehide listener so any teardown path (user-initiated or browser-
+    // initiated) cancels the fetch and triggers the catch handler that clears
+    // the cat-loader interval.
+    activeAbortController = new AbortController();
+    sendBtn.disabled = false;          // re-enable so Stop is clickable
+    sendBtn.textContent = 'Stop';
+    sendBtn.classList.add('streaming');
+
     try {
         const res = await fetch('/api/playground/stream', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
+            body: JSON.stringify(payload),
+            signal: activeAbortController.signal
         });
         
         if (!res.ok) {
-            const streamingEl = document.getElementById('streamingMessage');
-            if (streamingEl) streamingEl.remove();
+            teardownStreamingMessage();
             const errorData = await res.json().catch(() => ({}));
             if (res.status === 503 && errorData.code === 'warming_up') {
                 const retryCount = (payload._retryCount || 0) + 1;
@@ -1445,7 +1432,8 @@ async function sendMessage(_retryPayload = null) {
         let buffer = '';
         let fullContent = '';
         let auditData = null;
-        
+        let sawDone = false;
+
         while (true) {
             const { done, value } = await reader.read();
             if (done) break;
@@ -1470,6 +1458,7 @@ async function sendMessage(_retryPayload = null) {
                             updateStreamingContent(data.content);
                             fullContent += data.content;
                         } else if (data.type === 'done') {
+                            sawDone = true;
                             fullContent = data.fullContent || fullContent;
                             finalizeStreamingMessage(fullContent, auditData);
                             
@@ -1480,8 +1469,8 @@ async function sendMessage(_retryPayload = null) {
                                 console.log(`🌊 Streaming: ${auditData.verdict} (${auditData.confidence}% confidence, ${auditData.passCount} passes)`);
                             }
                         } else if (data.type === 'error') {
-                            const streamingEl = document.getElementById('streamingMessage');
-                            if (streamingEl) streamingEl.remove();
+                            sawDone = true; // terminal — prevents post-loop fallback from double-handling
+                            teardownStreamingMessage();
                             addMessage('assistant', data.message || 'An error occurred.');
                         }
                     } catch (e) {
@@ -1490,22 +1479,45 @@ async function sendMessage(_retryPayload = null) {
                 }
             }
         }
-        
+
+        // Stream ended without an explicit `done` event — finalize what we have,
+        // or tear down the empty bubble. Either way, the cat loader gets stopped.
+        if (!sawDone) {
+            if (fullContent) {
+                finalizeStreamingMessage(fullContent, auditData);
+                conversationHistory.push({ role: 'assistant', content: fullContent, audit: auditData });
+                saveConversationHistory();
+            } else {
+                teardownStreamingMessage();
+                addMessage('assistant', 'Stream ended unexpectedly. Please try again.');
+            }
+        }
+
     } catch (err) {
-        console.error('Streaming error:', err);
-        const streamingEl = document.getElementById('streamingMessage');
-        if (streamingEl) streamingEl.remove();
-        const isNetworkError = !navigator.onLine || err.name === 'TypeError' || err.message?.includes('Failed to fetch');
-        const errorMsg = isNetworkError
-            ? 'Connection lost. Please check your internet and try again.'
-            : 'The server encountered an issue. Please try again in a moment.';
-        addMessage('assistant', errorMsg);
+        // User-initiated abort (Stop button / pagehide): tear down silently —
+        // no error bubble, no toast. The loader interval is cleared by
+        // teardownStreamingMessage so nothing leaks.
+        if (err && (err.name === 'AbortError' || activeAbortController?.signal?.aborted)) {
+            console.log('🛑 Stream aborted by user');
+            teardownStreamingMessage();
+        } else {
+            console.error('Streaming error:', err);
+            teardownStreamingMessage();
+            const isNetworkError = !navigator.onLine || err.name === 'TypeError' || err.message?.includes('Failed to fetch');
+            const errorMsg = isNetworkError
+                ? 'Connection lost. Please check your internet and try again.'
+                : 'The server encountered an issue. Please try again in a moment.';
+            addMessage('assistant', errorMsg);
+        }
+    } finally {
+        activeAbortController = null;
+        sendBtn.classList.remove('streaming');
+        sendBtn.textContent = _origSendBtnText;
     }
     
-    setTimeout(() => {
-        messagesEl.scrollTop = messagesEl.scrollHeight;
-    }, 100);
-    
+    // Sticky-aware: only follow the tail if the user hasn't scrolled up to read.
+    setTimeout(() => stickyScroll(messagesEl), 100);
+
     isProcessing = false;
     sendBtn.disabled = false;
     messageInput.focus();
@@ -1542,6 +1554,10 @@ async function clearNyanHistory() {
         console.warn('⚠️ Could not clear localStorage:', e.message);
     }
     
+    // Tear down any in-flight streaming bubble first — guarantees the cat-loader
+    // ticker interval is cleared before its DOM is wiped.
+    teardownStreamingMessage();
+
     // Explicitly remove all child nodes from messages container
     while (messagesEl.firstChild) {
         messagesEl.removeChild(messagesEl.firstChild);

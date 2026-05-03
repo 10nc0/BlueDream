@@ -430,26 +430,68 @@
             min-height: 1.5rem;
         }
         
-        .typing-cursor {
+        /* Streaming cursor — CSS pseudo-element on .streaming-content.
+           Auto-shows while message has .streaming class, auto-hides on finalize.
+           No JS node to create/destroy per token (paired with persistent text node). */
+        .message.streaming .streaming-content::after {
+            content: '';
             display: inline-block;
             width: 8px;
             height: 1.1em;
             background: linear-gradient(135deg, #a78bfa, #3b82f6);
             border-radius: 2px;
             margin-left: 2px;
-            animation: blink 0.8s ease-in-out infinite;
             vertical-align: text-bottom;
+            animation: blink 0.8s ease-in-out infinite;
         }
-        
+
         @keyframes blink {
             0%, 50% { opacity: 1; }
             51%, 100% { opacity: 0.2; }
         }
-        
+
         @media (max-width: 640px) {
-            .typing-cursor {
+            .message.streaming .streaming-content::after {
                 width: 6px;
                 height: 1em;
+            }
+        }
+
+        /* Loader: vertical stack — emoji+text row, then a muted elapsed-time ticker.
+           Compound selector wins specificity over the later `.loading` rule which
+           otherwise overrides `align-items` and `gap` at equal specificity. */
+        .loading.cat-loader {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 0.25rem;
+        }
+
+        .cat-loader-row {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .cat-loader-text {
+            color: #94a3b8;
+            font-size: 0.875rem;
+        }
+
+        /* Honest wall-clock counter — reads as metadata, not content. */
+        .cat-loader-ticker {
+            color: #64748b;
+            font-size: 0.7rem;
+            opacity: 0.7;
+            font-variant-numeric: tabular-nums;
+            margin-left: calc(32px + 0.75rem);
+        }
+
+        /* Accessibility: respect the system reduced-motion preference. */
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
             }
         }
         

@@ -7393,6 +7393,13 @@
                     row.appendChild(info);
                     
                     if (!user.is_genesis_admin && user.role !== 'admin') {
+                        const pwBtn = document.createElement('button');
+                        pwBtn.className = 'btn-icon';
+                        pwBtn.title = 'Change Password';
+                        pwBtn.textContent = '🔑';
+                        pwBtn.addEventListener('click', () => changeUserPassword(user.id));
+                        row.appendChild(pwBtn);
+
                         const deleteBtn = document.createElement('button');
                         deleteBtn.className = 'btn-icon btn-danger';
                         deleteBtn.dataset.deleteUser = user.id;
@@ -7768,6 +7775,15 @@
                 info.appendChild(dateDiv);
                 row.appendChild(info);
                 
+                if (!user.is_genesis_admin && user.role !== 'admin' && user.id !== (currentUser && currentUser.id)) {
+                    const pwBtn = document.createElement('button');
+                    pwBtn.className = 'btn-icon';
+                    pwBtn.title = 'Change Password';
+                    pwBtn.textContent = '🔑';
+                    pwBtn.addEventListener('click', () => changeUserPassword(user.id));
+                    row.appendChild(pwBtn);
+                }
+
                 const deleteBtn = document.createElement('button');
                 deleteBtn.className = 'btn-icon btn-danger';
                 deleteBtn.dataset.deleteUser = user.id;
@@ -8102,6 +8118,8 @@ document.addEventListener('DOMContentLoaded', function() {
     if (changePasswordModal) {
         const passwordModalClose = changePasswordModal.querySelector('.close-btn');
         if (passwordModalClose) passwordModalClose.addEventListener('click', closeChangePasswordModal);
+        const changePasswordForm = document.getElementById('changePasswordForm');
+        if (changePasswordForm) changePasswordForm.addEventListener('submit', saveNewPassword);
     }
     
     const quickStartWizard = document.getElementById('quickStartWizard');

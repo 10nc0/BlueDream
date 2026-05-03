@@ -195,6 +195,12 @@ function registerPlaygroundRoutes(app, deps) {
             documents = (documents || []).concat(zipExtracted.documents);
 
             const docList = normalizeDocList(documents, document, documentName);
+            if (docList.length > 0 && sseStage) {
+                const docLabel = docList.length === 1
+                    ? `📄 Reading ${docList[0].name || 'document'}...`
+                    : `📄 Reading ${docList.length} documents...`;
+                sseStage({ type: 'thinking', stage: docLabel });
+            }
             await processAndCacheDocList(docList, cachedFileHashes, clientIp, extractedContent, responseFileHashes);
 
             const audioList = collectAudioList(audios, audio);
@@ -210,6 +216,12 @@ function registerPlaygroundRoutes(app, deps) {
             if (isClientDisconnected()) return;
 
             const photoList = normalizePhotoList(photos, photo);
+            if (photoList.length > 0 && sseStage) {
+                const imgLabel = photoList.length === 1
+                    ? `🖼️ Looking at ${photoList[0].name || 'image'}...`
+                    : `🖼️ Looking at ${photoList.length} images...`;
+                sseStage({ type: 'thinking', stage: imgLabel });
+            }
 
             const capacityCheck = await capacityManager.consumeToken(clientIp, photoList.length > 0 ? 'vision' : 'text');
             if (!capacityCheck.allowed) {
