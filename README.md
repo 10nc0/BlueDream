@@ -207,7 +207,7 @@ Add secrets (🔒 Secrets panel → padlock icon):
 
 | Key | Value |
 |-----|-------|
-| `DATABASE_URL` | [Supabase](https://supabase.com) → New Project → Settings → Database → Connection pooling URI (port `6543`) |
+| `DATABASE_URL` *or* `PGHOST`+`PGUSER`+`PGPASSWORD`+`PGDATABASE`+`PGPORT` | Any PostgreSQL provider (Replit DB, [Neon](https://neon.tech), [Supabase](https://supabase.com), Cloud SQL, RDS, self-hosted). The kernel tries `DATABASE_URL` first with a real handshake, then falls back to discrete `PG*` vars. |
 | `SESSION_SECRET` | Any random string, 32+ chars |
 | `NYANBOOK_AI_KEY` | [Groq](https://console.groq.com) → API Keys → Create |
 | `PLAYGROUND_AI_KEY` | Same Groq key (or a second one) |

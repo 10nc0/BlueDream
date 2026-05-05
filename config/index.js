@@ -4,6 +4,7 @@
  */
 
 const constants = require('./constants');
+const { parseHost, buildConnectionStringFromUrl } = require('../lib/db-resolver');
 
 const isProd = process.env.REPLIT_DEPLOYMENT === '1' || process.env.NODE_ENV === 'production';
 
@@ -22,7 +23,7 @@ const config = {
       rejectUnauthorized: isProd
     },
     pool: {
-      max: 20, // Direct pool limit; Supabase pooler handles 10k+ upstream
+      max: 20, // Direct pool limit; PgBouncer-style poolers (Supabase/Neon) handle 10k+ upstream
       min: 2,
       connectionTimeoutMillis: constants.TIMEOUTS.DATABASE_CONNECTION,
       idleTimeoutMillis: constants.TIMEOUTS.SESSION_IDLE,
@@ -94,14 +95,15 @@ const config = {
 };
 
 function getDbHost() {
-  return config.database.url?.split('@')[1]?.split('.')[0] || 'unknown';
+  const host = parseHost(config.database.url);
+  if (!host) return 'unknown';
+  return host.split('.')[0];
 }
 
+// Append pool_mode=transaction only for PgBouncer-style hosts; direct Postgres
+// hosts (RDS, Cloud SQL, Replit DB, plain Neon, self-hosted) reject the param.
 function buildConnectionString() {
-  const url = config.database.url;
-  if (!url) return null;
-  const poolModeParam = `pool_mode=${config.database.poolMode}`;
-  return url.includes('?') ? `${url}&${poolModeParam}` : `${url}?${poolModeParam}`;
+  return buildConnectionStringFromUrl(config.database.url);
 }
 
 module.exports = {

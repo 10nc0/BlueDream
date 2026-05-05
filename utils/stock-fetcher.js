@@ -96,8 +96,82 @@ function inferAtomicUnits(sector, industry) {
     return null;
 }
 
-// Allow optional .X / .XX class suffix (BRK.A, BRK.B, BF.B) — no \b after dot
-const DOLLAR_TICKER_REGEX = /\$([A-Za-z]{1,8}(?:\.[A-Za-z]{1,2})?)/gi;
+// Allow optional .X / .XX / .XXX suffix for class shares (BRK.A, BF.B) AND
+// Yahoo Finance exchange suffixes (BBCA.JK, 0700.HK, 7203.T, AIR.PA, BMW.DE).
+// Inner token allows digits to capture Asian numeric tickers ($0700.HK, $7203.T).
+const DOLLAR_TICKER_REGEX = /\$([A-Za-z0-9]{1,8}(?:\.[A-Za-z]{1,3})?)/gi;
+
+// Known Yahoo Finance exchange suffixes — when the trailing token after the dot
+// matches one of these, preserve the dot (Yahoo's required form). Otherwise the
+// 1-2 letter trailing token is treated as a US class-share suffix and converted
+// to hyphen (BRK.A → BRK-A). Single-letter exchange codes (T, L, F, V, K) take
+// priority over the class-share heuristic via this allowlist lookup.
+const YAHOO_EXCHANGE_SUFFIXES = new Set([
+  // Asia-Pacific
+  'JK',  // Jakarta (IDX)
+  'HK',  // Hong Kong
+  'T',   // Tokyo
+  'AX',  // Australia (ASX)
+  'NZ',  // New Zealand (NZX)
+  'SI',  // Singapore (SGX)
+  'KL',  // Kuala Lumpur (Bursa Malaysia)
+  'BK',  // Bangkok (SET)
+  'NS',  // National Stock Exchange of India
+  'BO',  // Bombay Stock Exchange
+  'KS',  // KOSPI (Korea)
+  'KQ',  // KOSDAQ (Korea)
+  'TW',  // Taiwan
+  'TWO', // Taiwan OTC
+  'SS',  // Shanghai
+  'SZ',  // Shenzhen
+  // Europe
+  'L',   // London (LSE)
+  'PA',  // Paris (Euronext)
+  'AS',  // Amsterdam (Euronext)
+  'BR',  // Brussels (Euronext)
+  'LS',  // Lisbon (Euronext)
+  'IR',  // Ireland
+  'DE',  // Xetra (Germany)
+  'F',   // Frankfurt
+  'MU',  // Munich
+  'BE',  // Berlin
+  'DU',  // Düsseldorf
+  'HM',  // Hamburg
+  'HA',  // Hanover
+  'SG',  // Stuttgart
+  'SW',  // Swiss (SIX)
+  'VX',  // Swiss (Virt-X legacy)
+  'MI',  // Milan (Borsa Italiana)
+  'MC',  // Madrid (BME)
+  'VI',  // Vienna
+  'HE',  // Helsinki
+  'ST',  // Stockholm
+  'CO',  // Copenhagen
+  'OL',  // Oslo
+  'IC',  // Iceland
+  'WA',  // Warsaw
+  'PR',  // Prague
+  'BD',  // Budapest
+  'AT',  // Athens
+  'IS',  // Istanbul (Borsa Istanbul)
+  'TA',  // Tel Aviv
+  'ME',  // Moscow (MOEX)
+  // Middle East / Africa
+  'SR',  // Saudi (Tadawul)
+  'QA',  // Qatar
+  'JO',  // Johannesburg (JSE)
+  'CA',  // Cairo (EGX)
+  // Americas (non-US)
+  'TO',  // Toronto (TSX)
+  'V',   // TSX Venture
+  'CN',  // Canadian Securities Exchange
+  'NE',  // NEO (Cboe Canada)
+  'MX',  // Mexico (BMV)
+  'SA',  // São Paulo (B3)
+  'BA',  // Buenos Aires
+  'SN',  // Santiago (Chile)
+  'LM',  // Lima
+]);
 
 // ========================================
 // Ψ-EMA LEGO KEYS (Push-based 2/3 detection)
@@ -182,7 +256,9 @@ function detectPotentialTicker(query) {
   const dollarMatches = query.match(DOLLAR_TICKER_REGEX);
   if (dollarMatches && dollarMatches.length > 0) {
     const ticker = dollarMatches[0].replace('$', '').toUpperCase();
-    if (ticker.length >= 1 && ticker.length <= 8) {
+    // ≤12 to match sanitizeTicker's max — accommodates digit-leading + 3-letter
+    // exchange suffix (e.g. "005930.KS", "600519.SS", "1234.TWO").
+    if (ticker.length >= 1 && ticker.length <= 12) {
       return ticker;
     }
   }
@@ -322,7 +398,9 @@ function detectPotentialTickerExcluding(query, excludeWords) {
   const dollarMatches = query.match(DOLLAR_TICKER_REGEX);
   if (dollarMatches && dollarMatches.length > 0) {
     const ticker = dollarMatches[0].replace('$', '').toUpperCase();
-    if (ticker.length >= 1 && ticker.length <= 8) {
+    // ≤12 to match sanitizeTicker's max — accommodates digit-leading + 3-letter
+    // exchange suffix (e.g. "005930.KS", "600519.SS", "1234.TWO").
+    if (ticker.length >= 1 && ticker.length <= 12) {
       return ticker;
     }
   }
@@ -366,14 +444,30 @@ function isPsiEMAStockQuery(query) {
  */
 function sanitizeTicker(ticker) {
   if (!ticker || typeof ticker !== 'string') return null;
-  
-  // Normalize class-share dot notation to hyphen (BRK.A → BRK-A, BF.B → BF-B)
-  const normalized = ticker.toUpperCase().replace(/\.([A-Z]{1,2})$/, '-$1');
+
+  const upper = ticker.toUpperCase().trim();
+
+  // Detect a trailing .XXX suffix (1-3 letters) and decide:
+  //   - Known Yahoo exchange suffix (.JK, .HK, .T, .L, .PA, .DE, ...) → keep dot
+  //   - 1-2 letter unknown suffix → US class share, convert to hyphen (BRK.A → BRK-A)
+  //   - 3-letter unknown suffix → leave as-is (preserved by scrub regex below);
+  //     Yahoo will reject it cleanly with "no data" rather than silently mangling.
+  const suffixMatch = upper.match(/^(.+)\.([A-Z]{1,3})$/);
+  let normalized;
+  if (suffixMatch && YAHOO_EXCHANGE_SUFFIXES.has(suffixMatch[2])) {
+    normalized = `${suffixMatch[1]}.${suffixMatch[2]}`;
+  } else if (suffixMatch && suffixMatch[2].length <= 2) {
+    normalized = `${suffixMatch[1]}-${suffixMatch[2]}`;
+  } else {
+    normalized = upper;
+  }
+
   const sanitized = normalized.replace(/[^A-Z0-9\-\.]/g, '');
-  
+
   if (sanitized.length < 1 || sanitized.length > 12) return null;
-  if (!/^[A-Z]/.test(sanitized)) return null;
-  
+  // Allow digit-leading tickers for Asian exchanges (0700.HK, 7203.T)
+  if (!/^[A-Z0-9]/.test(sanitized)) return null;
+
   return sanitized;
 }
 

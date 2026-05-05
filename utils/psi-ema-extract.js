@@ -38,15 +38,19 @@ function extractPsiEma(preflight) {
     return result;
 }
 
+// Match $TICKER, optionally with a 1-3 letter exchange/class suffix (.JK, .HK, .A, .B).
+// Allows digit-leading tickers for Asian exchanges (0700.HK, 7203.T).
+const MULTI_TICKER_REGEX = /\$[A-Z0-9]{1,8}(?:\.[A-Z]{1,3})?/g;
+
 function splitMultiTicker(message) {
     const trimmed = message.trim();
-    const tickerMatches = trimmed.match(/\$[A-Z]{1,5}\b/g);
+    const tickerMatches = trimmed.match(MULTI_TICKER_REGEX);
     const isComparison = /\b(compare|vs\.?|versus|correlation|relative|against|ratio|between)\b/i.test(trimmed);
     if (!tickerMatches || tickerMatches.length <= 1 || isComparison) return null;
     const uniqueTickers = [...new Set(tickerMatches)];
     if (uniqueTickers.length <= 1) return null;
     const baseQuery = trimmed
-        .replace(/\$[A-Z]{1,5}\b/g, '')
+        .replace(MULTI_TICKER_REGEX, '')
         .replace(/\b(and|,|&|also|plus)\b/gi, '')
         .replace(/\s+/g, ' ')
         .trim();

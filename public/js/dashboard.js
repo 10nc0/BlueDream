@@ -5215,7 +5215,7 @@
             const bookLabel = book.name || (book.input_platform + ' → ' + book.output_platform);
             nyanConfirm(
                 `Delete "${bookLabel}"?`,
-                'All messages will be preserved in Discord.',
+                'Webhook copies remain in webhook destinations, but the source book will be wiped.',
                 () => _executeDeleteBook(fractalId)
             );
         }

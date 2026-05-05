@@ -3,14 +3,28 @@
 // his consciousness into satellite bodies while maintaining a pure core.
 // This kernel orchestrates 4 modular routes (satellites) via dependency injection.
 
-// EARLY GUARD — fail loudly before any module loads
-// Without DATABASE_URL the pool crashes silently and CSS never serves (ghost UI)
-// NOTE: intentional console.error — process.exit(1) path fires before logger is initialized
-if (!process.env.DATABASE_URL) {
-    console.error('❌ DATABASE_URL is not set. Add it to Replit Secrets before starting.');
-    console.error('   Get a free PostgreSQL URL from https://supabase.com');
+// EARLY GUARD — resolve a working PostgreSQL source before any module loads.
+// Tries DATABASE_URL first (with a real handshake), falls back to discrete PG*
+// vars on network/auth failure. Fails closed only when both sources are
+// unavailable. NOTE: intentional console.error — runs before logger init.
+const { resolveDatabase, setActiveResolution } = require('./lib/db-resolver');
+let __dbResolution;
+try {
+    __dbResolution = resolveDatabase();
+    setActiveResolution(__dbResolution);
+} catch (err) {
+    console.error(err.message);
+    console.error('');
+    console.error('   Set DATABASE_URL OR PGHOST/PGUSER/PGPASSWORD/PGDATABASE/PGPORT.');
+    console.error('   Any PostgreSQL provider works (Replit DB, Neon, Supabase, Cloud SQL, RDS, self-hosted).');
     process.exit(1);
 }
+if (__dbResolution.attempts.length > 0) {
+    for (const a of __dbResolution.attempts) {
+        console.warn(`⚠️  ${a.source}: ${a.host} did not accept a postgres handshake (${a.code || 'ERR'}), trying next source`);
+    }
+}
+console.log(`✅ Database: using ${__dbResolution.source === 'DATABASE_URL' ? 'DATABASE_URL' : 'PG* env vars'} (${__dbResolution.shortHost})`);
 
 const { execSync } = require('child_process');
 const path = require('path');
@@ -66,8 +80,9 @@ const { createDbInit } = require('./lib/db-init');
 // Strategy: Throw hard errors on startup if critical secrets missing
 // Only enforce truly essential secrets - don't require optional integrations
 
+// NOTE: DATABASE_URL is no longer in this list — DB readiness is enforced
+// upstream by resolveDatabase() (handles DATABASE_URL OR PG* equivalently).
 const criticalSecrets = {
-    DATABASE_URL: 'PostgreSQL connection (Supabase pooler)',
     SESSION_SECRET: 'Session encryption key',
     FRACTAL_SALT: 'Secure book ID generation (crypto salt)',
     NYANBOOK_WEBHOOK_URL: 'Discord Ledger #01 (output book)',
@@ -101,39 +116,25 @@ const NYANBOOK_LEDGER_WEBHOOK = process.env.NYANBOOK_WEBHOOK_URL;
 // Replit sets REPLIT_DEPLOYMENT=1 when deployed (not 'true')
 const isProd = process.env.REPLIT_DEPLOYMENT === '1' || process.env.NODE_ENV === 'production';
 
-// TRANSACTION MODE: Append pool_mode=transaction to DATABASE_URL for scalability
-// Supabase pooler handles 10,000+ concurrent connections; local pool max=20 is direct connection limit
-// Trade-off: Cannot use SET search_path (must use explicit schema prefixes)
-const databaseUrl = process.env.DATABASE_URL;
-const poolModeParam = 'pool_mode=transaction';
-const connectionString = databaseUrl?.includes('?')
-    ? `${databaseUrl}&${poolModeParam}`  // Has existing params, append with &
-    : `${databaseUrl}?${poolModeParam}`;  // No params yet, start with ?
-
-// SECURITY NOTE: Supabase SSL/TLS
-// - SSL/TLS is automatic and enforced by Supabase pooler
-// - Connection is always encrypted (TLS termination at Supabase edge)
-// - Supabase uses self-signed certificates → rejectUnauthorized: false by default
-// - Optional: Set DATABASE_CA_CERT for verify-full mode (download from Supabase Dashboard)
-// - Production hardening: Use RLS policies, Attack Protection (CAPTCHA), secure key management
-// - See: https://supabase.com/docs/guides/platform/ssl-enforcement
-const isLocalDb = databaseUrl?.includes('localhost') || databaseUrl?.includes('127.0.0.1');
-const hasCustomCA = !!process.env.DATABASE_CA_CERT;
-
-const pool = new Pool({
-    connectionString,
-    ssl: isLocalDb ? false : { 
-        rejectUnauthorized: hasCustomCA,  // verify-full if CA provided, else trust Supabase infrastructure
-        ...(hasCustomCA && { ca: process.env.DATABASE_CA_CERT })
-    },
-    max: 20, // Direct pool limit; Supabase pooler handles 10k+ upstream
+// POOL: built from the resolver. The resolver only appends pool_mode=transaction
+// for PgBouncer-style hosts (Supabase pooler, Neon pooler, *.pgbouncer.*) and
+// turns SSL off for loopback / RFC1918 / single-label hosts. Custom CA via
+// DATABASE_CA_CERT is honored when present.
+const poolBaseConfig = {
+    ssl: __dbResolution.ssl,
+    max: 20,
     min: 2,
-    connectionTimeoutMillis: 30000, // 30s for cold starts
-    idleTimeoutMillis: 30000, // Release idle connections after 30s
+    connectionTimeoutMillis: 30000,
+    idleTimeoutMillis: 30000,
     statement_timeout: 30000,
     query_timeout: 30000,
-    idle_in_transaction_session_timeout: 30000
-});
+    idle_in_transaction_session_timeout: 30000,
+};
+const pool = new Pool(
+    __dbResolution.source === 'DATABASE_URL'
+        ? { ...poolBaseConfig, connectionString: __dbResolution.connectionString }
+        : { ...poolBaseConfig, ...__dbResolution.pgConfig }
+);
 
 // CONNECTION POOL MONITORING: Track connection lifecycle
 pool.on('connect', () => {
@@ -152,14 +153,10 @@ pool.on('remove', () => {
     logger.debug({ total: pool.totalCount, idle: pool.idleCount }, 'Pool: connection released');
 });
 
-// SAFETY: Defensive parsing with explicit format assertion
-const dbUrlParts = process.env.DATABASE_URL?.split('@');
-if (!dbUrlParts || dbUrlParts.length < 2) {
-    logger.warn('DATABASE_URL format unexpected, using fallback host identifier');
-}
-const dbHost = dbUrlParts?.[1]?.split('.')[0] || 'unknown';
+// Host identifier resolved upstream by db-resolver (handles URL & PG* uniformly).
+const dbHost = __dbResolution.shortHost;
 
-logger.info({ mode: isProd ? 'production' : 'development', dbHost, poolMax: pool.options.max, poolMin: pool.options.min, idleTimeoutMs: pool.options.idleTimeoutMillis }, '⚙️ Startup config');
+logger.info({ mode: isProd ? 'production' : 'development', dbSource: __dbResolution.source, dbHost, poolMax: pool.options.max, poolMin: pool.options.min, idleTimeoutMs: pool.options.idleTimeoutMillis }, '⚙️ Startup config');
 
 const tenantManager = new TenantManager(pool);
 

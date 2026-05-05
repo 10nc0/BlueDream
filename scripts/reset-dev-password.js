@@ -1,11 +1,11 @@
 #!/usr/bin/env node
-const { Pool } = require('pg');
 const bcrypt = require('bcrypt');
+const { createPool } = require('../lib/db-resolver');
 
-const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-    ssl: process.env.DATABASE_URL?.includes('localhost') ? false : { rejectUnauthorized: false }
-});
+// Route through the shared resolver so this script honors the same
+// DATABASE_URL → PG* fallback, PgBouncer pool_mode, and SSL config the
+// kernel uses. Never read process.env.DATABASE_URL directly here.
+const pool = createPool({ max: 2 });
 
 async function resetDevPassword() {
     const newPassword = process.argv[2] || 'dev_secure_2024';
