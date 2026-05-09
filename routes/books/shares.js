@@ -1,5 +1,6 @@
 const { config } = require('../../config');
 const { EMAIL } = require('../../config/constants');
+const { BRAND } = require('../../config/brand');
 const { verifyBookOwnership, checkShareRateLimit } = require('./shared');
 const { z } = require('../../lib/validators');
 
@@ -99,12 +100,12 @@ function register(app, deps) {
                     await resend.emails.send({
                         from: `${EMAIL.FROM_NAME} <${EMAIL.FROM_ADDRESS}>`,
                         to: normalizedEmail,
-                        subject: `${normalizedOwnerEmail} shared a book with you on Nyanbook`,
+                        subject: `${normalizedOwnerEmail} shared a book with you on ${BRAND.name}`,
                         html: `
                             <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
                                 <h2 style="color: #333;">You've been invited to view a book!</h2>
                                 <p style="color: #666; font-size: 16px;">
-                                    <strong>${normalizedOwnerEmail}</strong> has shared the book <strong>"${book.book_name}"</strong> with you on Nyanbook.
+                                    <strong>${normalizedOwnerEmail}</strong> has shared the book <strong>"${book.book_name}"</strong> with you on ${BRAND.name}.
                                 </p>
                                 <div style="background: rgba(124, 58, 237, 0.1); border: 1px solid rgba(124, 58, 237, 0.2); border-radius: 8px; padding: 1rem; margin: 20px 0;">
                                     <p style="color: #666; margin: 0;">
@@ -118,7 +119,7 @@ function register(app, deps) {
                                 </p>
                                 <div style="text-align: center; margin: 30px 0;">
                                     <a href="${dashboardLink}" style="background-color: #7c3aed; color: white; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: 600; display: inline-block;">
-                                        Open Nyanbook
+                                        Open ${BRAND.name}
                                     </a>
                                 </div>
                                 <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">

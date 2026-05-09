@@ -2,6 +2,7 @@ const axios = require('axios');
 const logger = require('../lib/logger');
 const usageTracker = require('./playground-usage');
 const { config } = require('../config');
+const { BRAND } = require('../config/brand');
 
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
@@ -166,8 +167,8 @@ async function groqWithRetry(axiosConfig, maxRetries = 3, serviceType = 'text') 
                 headers: {
                     ...(axiosConfig.config?.headers || {}),
                     Authorization: `Bearer ${OPENROUTER_API_KEY}`,
-                    'HTTP-Referer': 'https://nyanbook.io',
-                    'X-Title': 'Nyanbook',
+                    'HTTP-Referer': BRAND.openrouterReferer,
+                    'X-Title': BRAND.openrouterTitle,
                 },
             };
             const response = await axios.post(OPENROUTER_API_URL, orData, orConfig);

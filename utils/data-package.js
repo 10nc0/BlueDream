@@ -324,7 +324,8 @@ class DataPackage {
  * @returns {string} Hashed tenant key
  */
 function hashTenantKey(ip, userAgent = '') {
-  const data = `${ip}:${userAgent}:nyanbook-salt`;
+  const { BRAND } = require('../config/brand');
+  const data = `${ip}:${userAgent}:${BRAND.dataSalt}`;
   return crypto.createHash('sha256').update(data).digest('hex').slice(0, 16);
 }
 

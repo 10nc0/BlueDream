@@ -8,6 +8,7 @@ const { runDashboardAuditPipeline } = require('../../utils/dashboard-audit-pipel
 const { formatExecutiveResponse } = require('../../utils/executive-formatter');
 const { buildExecutiveAuditPrompt, buildRetryPrompt } = require('../../prompts/executive-audit');
 const { runMonthlyClosing } = require('../../lib/monthly-closing');
+const { getTemporalContext, DEFAULT_TZ } = require('../../utils/temporal-resolver');
 
 // In-flight guard — prevents the same user from firing two identical audit
 // calls simultaneously (double-click, retry while pending, etc.).
@@ -55,6 +56,15 @@ function registerAuditRoutes(app, deps) {
 
         logger.info({ userId: req.userId, bookCount: bookIds?.length || 0 }, 'Nyan AI Audit query');
 
+        // Temporal anchor for this request. One `now` is captured at the top
+        // and reused by the audit context builder, the verifier, and the LLM
+        // prompt — so all three resolve "kemarin / bulan lalu / YTD / …"
+        // against the same wall-clock + timezone. Future per-tenant TZ
+        // overrides should populate `auditTz` from the tenant catalog.
+        const auditTz = DEFAULT_TZ;
+        const auditNow = new Date();
+        const temporalContext = getTemporalContext({ now: auditNow, tz: auditTz });
+
         try {
             let bookContext = null;
             let contextPrompt = '';
@@ -64,7 +74,9 @@ function registerAuditRoutes(app, deps) {
                     pool,
                     thothBot,
                     userRole,
-                    maxMessages: AUDIT.MAX_MESSAGES
+                    maxMessages: AUDIT.MAX_MESSAGES,
+                    now: auditNow,
+                    tz: auditTz
                 });
 
                 if (bookContext && bookContext.totalMessages > 0) {
@@ -109,7 +121,7 @@ Analyze the data and answer the user's question. Count carefully when asked abou
                 data: {
                     model: _llm.model,
                     messages: [
-                        { role: 'system', content: buildExecutiveAuditPrompt(language, bookContext?.langComposition) },
+                        { role: 'system', content: buildExecutiveAuditPrompt(language, bookContext?.langComposition, temporalContext) },
                         { role: 'user', content: contextPrompt }
                     ],
                     temperature: AI_MODELS.TEMPERATURE_AUDIT,
@@ -161,7 +173,9 @@ Analyze the data and answer the user's question. Count carefully when asked abou
                     entityAggregates: bookContext.entityAggregates || {},
                     llmCallFn: retryFn,
                     engine: 'nyan-ai',
-                    maxRetries: 1
+                    maxRetries: 1,
+                    now: auditNow,
+                    tz: auditTz
                 });
 
                 pipelineVerified = pipelineResult.verified;

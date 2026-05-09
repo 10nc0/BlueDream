@@ -293,12 +293,16 @@ const IP_GEO = {
 // own verified Resend domain. The default below is the upstream NyanBook
 // production address — forks should set their own to avoid the
 // "API key is not authorized to send from <domain>" error.
+// FROM_ADDRESS / FROM_NAME are mirrored from config/brand.js (BRAND.fromEmail,
+// BRAND.fromName) so a forker can set RESEND_FROM_EMAIL once and have both
+// constant and brand surfaces pick it up.
+const { BRAND } = require('./brand');
 const EMAIL = {
   // @source: Resend
   // @ref: https://resend.com/docs/dashboard/domains/introduction (sender domain must be verified)
   // @verified: 2026-05-02
-  FROM_ADDRESS: process.env.RESEND_FROM_EMAIL || 'nyan@nyanbook.io',
-  FROM_NAME: process.env.RESEND_FROM_NAME || 'NyanBook',
+  FROM_ADDRESS: BRAND.fromEmail,
+  FROM_NAME: BRAND.fromName,
 
   // Top-N keyword frequency extraction for monthly summary email.
   // Tags = user-typed #hashtags, keywords = auto-extracted content words.

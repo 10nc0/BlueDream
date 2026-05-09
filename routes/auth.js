@@ -3,6 +3,7 @@ const bcrypt = require('bcrypt');
 const { validate, schemas, assertValidSchemaName } = require('../lib/validators');
 const { config } = require('../config');
 const { EMAIL } = require('../config/constants');
+const { BRAND } = require('../config/brand');
 const {
     checkLoginRateLimit,
     recordFailedLogin,
@@ -447,12 +448,12 @@ function registerAuthRoutes(app, deps) {
                 await resend.emails.send({
                     from: `${EMAIL.FROM_NAME} <${EMAIL.FROM_ADDRESS}>`,
                     to: normalizedEmail,
-                    subject: 'Reset Your Nyanbook Password',
+                    subject: `Reset Your ${BRAND.name} Password`,
                     html: `
                         <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
                             <h2 style="color: #333;">Reset Your Password</h2>
                             <p style="color: #666; font-size: 16px;">
-                                You requested a password reset for your Nyanbook account. Click the button below to set a new password:
+                                You requested a password reset for your ${BRAND.name} account. Click the button below to set a new password:
                             </p>
                             <div style="text-align: center; margin: 30px 0;">
                                 <a href="${resetLink}" style="background-color: #7c3aed; color: white; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: 600; display: inline-block;">

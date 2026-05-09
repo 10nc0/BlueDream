@@ -248,7 +248,9 @@ async function runDashboardAuditPipeline({
   llmCallFn = null,
   engine = 'unknown',
   maxRetries = 1,
-  requestId = null
+  requestId = null,
+  now = null,
+  tz = null
 }) {
   const startTime = Date.now();
   const capsuleId = requestId || `${engine}-${Date.now()}`;
@@ -259,13 +261,34 @@ async function runDashboardAuditPipeline({
     Object.entries(entityAggregates).map(([k, v]) => [k, typeof v === 'object' ? v.count : v])
   );
   
-  capsule.hydrate({ contextMessages, aggregates: flatAggregates });
+  // Pass the rich aggregate form (with per-entity .messages[] timestamps from C3)
+  // alongside the flat form. The verifier uses richAggregates to independently
+  // re-derive scoped counts from the user query, catching cases where the
+  // upstream chain's filtering didn't honor the query's date/action/sender
+  // intent (cf. Task #169 regression class).
+  capsule.hydrate({
+    contextMessages,
+    aggregates: flatAggregates,
+    richAggregates: entityAggregates,
+    query,
+    now,
+    tz
+  });
   
   pipelineLog.push(`S0: Received ${engine} response (${initialResponse.length} chars)`);
   pipelineLog.push(`S0: Capsule hydrated - ${contextMessages.length} messages, ${Object.keys(entityAggregates).length} aggregates, ${capsule.tallyByEntity.size} unique entities`);
+  if (capsule.scopeApplied) {
+    const s = capsule.scope;
+    pipelineLog.push(`S0: Independent scope re-derived from query — date(${s.datePatterns.length}) action(${s.actionKeywords.length}) plate(${s.plates.length}) sender(${s.senders.length})`);
+  }
   
   capsule.extractClaimsFromResponse(initialResponse);
   capsule.verify();
+  
+  const scopeViolations = capsule.corrections.filter(c => c.scopeFilterViolation).length;
+  if (scopeViolations > 0) {
+    pipelineLog.push(`S1: Verify - ${scopeViolations} scope_filter_violation(s) — verifier's independent scope disagreed with the LLM's working set`);
+  }
   
   const capsuleStatus = capsule.getStatus();
   pipelineLog.push(`S1: Verify - ${capsuleStatus.claimCount} claims, ${capsule.corrections.length} mismatches, ${capsule.unverifiable.length} unverifiable`);
@@ -341,7 +364,14 @@ async function runDashboardAuditPipeline({
     
     if (retryResponse) {
       const retryCapsule = createCapsule(`${capsuleId}-retry`, engine);
-      retryCapsule.hydrate({ contextMessages, aggregates: flatAggregates });
+      retryCapsule.hydrate({
+        contextMessages,
+        aggregates: flatAggregates,
+        richAggregates: entityAggregates,
+        query,
+        now,
+        tz
+      });
       retryCapsule.extractClaimsFromResponse(retryResponse);
       retryCapsule.verify();
       

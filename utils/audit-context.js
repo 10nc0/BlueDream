@@ -2,54 +2,46 @@ const crypto = require('crypto');
 const logger = require('../lib/logger');
 const { AUDIT } = require('../config/constants');
 const { CapsuleChain } = require('./capsule-chain');
+const {
+    extractDatePatterns,
+    resolveTemporalScope,
+    getTemporalContext,
+    DEFAULT_TZ
+} = require('./temporal-resolver');
 
-const MONTH_NAMES_EN = ['january', 'february', 'march', 'april', 'may', 'june', 
-                        'july', 'august', 'september', 'october', 'november', 'december'];
-const MONTH_NAMES_ID = ['januari', 'februari', 'maret', 'april', 'mei', 'juni',
-                        'juli', 'agustus', 'september', 'oktober', 'november', 'desember'];
 const STOP_WORDS = new Set(['what', 'when', 'where', 'which', 'yang', 'dalam', 'dengan', 
                             'untuk', 'from', 'this', 'that', 'have', 'berapa', 'banyak',
                             'many', 'much', 'book', 'buku', 'message', 'pesan', 'about',
                             'the', 'and', 'atau', 'adalah', 'ada', 'pada', 'untuk']);
 
-function buildCapsuleChain(allMessages, query) {
+// `now` and `tz` flow in from the route so the resolver expands relative
+// phrases (kemarin, bulan lalu, last 3 months, YTD, …) deterministically and
+// in the tenant's timezone. Both default to system time + Asia/Jakarta when
+// callers don't pass them, preserving prior behaviour for absolute-only
+// queries (which made up all pre-Temporal-Resolver test fixtures).
+function buildCapsuleChain(allMessages, query, opts = {}) {
     const chain = new CapsuleChain();
     chain.setQuery(query);
-    
+
     const c0 = chain.c0_universe(allMessages);
-    
-    const datePatterns = extractDatePatterns(query);
+
+    const datePatterns = extractDatePatterns(query, { now: opts.now, tz: opts.tz });
     const c1 = chain.c1_timeMatch(c0.output, datePatterns);
-    
+
     const c2 = chain.c2_actionMatch(c1.output, query);
-    
+
     chain.c3_aggregates(c2.output);
-    
+
     logger.debug(`📦 CapsuleChain: ${chain.getTraceCompact()} | ${chain.getTrace()}`);
-    
+
     return chain;
 }
 
-function extractDatePatterns(query) {
-    const queryLower = query.toLowerCase();
-    const patterns = [];
-    
-    for (let i = 0; i < MONTH_NAMES_EN.length; i++) {
-        const regex = new RegExp(`(${MONTH_NAMES_EN[i]}|${MONTH_NAMES_ID[i]})\\s*(\\d{4})`, 'i');
-        const match = queryLower.match(regex);
-        if (match) {
-            const monthNum = String(i + 1).padStart(2, '0');
-            patterns.push(`${match[2]}-${monthNum}`);
-        }
-    }
-    
-    const isoMatch = queryLower.match(/(\d{4})-(\d{1,2})/);
-    if (isoMatch) {
-        patterns.push(`${isoMatch[1]}-${isoMatch[2].padStart(2, '0')}`);
-    }
-    
-    return patterns;
-}
+// Note: the absolute-date parsing (endpoint parsing, range expansion, plate-
+// shape guard, etc.) lives in `./temporal-resolver`. Callers requiring the
+// classic YYYY-MM prefix list still get it via the imported `extractDatePatterns`,
+// which now also expands relative phrases (kemarin, bulan lalu, last 3 months,
+// YTD, …) when given { now, tz }.
 
 function extractKeywords(query) {
     return query.toLowerCase()
@@ -229,7 +221,7 @@ function applyQueryAwareFilter(messages, query, options = {}) {
         };
     }
     
-    const datePatterns = extractDatePatterns(query);
+    const datePatterns = extractDatePatterns(query, { now: options.now, tz: options.tz });
     const keywords = extractKeywords(query);
     
     const hasDateFilter = datePatterns.length > 0;
@@ -374,7 +366,7 @@ function parseTenantFromBookId(bookId) {
 }
 
 async function buildAuditContext(bookIds, fallbackTenantSchema, query, options = {}) {
-    const { pool, thothBot, userRole } = options;
+    const { pool, thothBot, userRole, now, tz } = options;
     const { maxMessages = AUDIT.MAX_MESSAGES } = options;
 
     if (!bookIds || !Array.isArray(bookIds) || bookIds.length === 0) {
@@ -443,7 +435,7 @@ async function buildAuditContext(bookIds, fallbackTenantSchema, query, options =
 
         // Extract keywords and raw tokens for FTS query
         const queryKeywords = extractKeywords(query);
-        const queryDatePatterns = extractDatePatterns(query);
+        const queryDatePatterns = extractDatePatterns(query, { now, tz });
         const rawTokens = query.toLowerCase().split(/\s+/).filter(Boolean);
 
         try {
@@ -462,8 +454,17 @@ async function buildAuditContext(bookIds, fallbackTenantSchema, query, options =
                 if (allDiscordMessages.length >= 5000) break;
             }
 
+            // Year/month filter on Discord stream: when the query carried any
+            // datePatterns (e.g. "tahun 2026"), the Discord-sourced messages
+            // must be constrained to those YYYY-MM prefixes too — otherwise
+            // off-period Discord messages leak into a year-scoped audit.
             const discordMessages = allDiscordMessages
-                .filter(msg => msg.createdAt >= bookCreatedAt)
+                .filter(msg => {
+                    if (msg.createdAt < bookCreatedAt) return false;
+                    if (!queryDatePatterns || queryDatePatterns.length === 0) return true;
+                    const ymPrefix = msg.createdAt.toISOString().substring(0, 7);
+                    return queryDatePatterns.some(p => ymPrefix.startsWith(p));
+                })
                 .map(msg => {
                     let content = msg.content;
                     if (!content && msg.embeds.length > 0) {
@@ -552,7 +553,7 @@ async function buildAuditContext(bookIds, fallbackTenantSchema, query, options =
         return b.createdAt - a.createdAt;
     });
 
-    const capsuleChain = buildCapsuleChain(allMessages, query);
+    const capsuleChain = buildCapsuleChain(allMessages, query, { now, tz });
     const terminalCapsule = capsuleChain.getTerminalCapsule();
     
     const c1Capsule = capsuleChain.capsules.find(c => c.stage === 'C1_TIME_MATCH');

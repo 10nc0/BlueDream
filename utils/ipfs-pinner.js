@@ -1,4 +1,5 @@
 const axios = require('axios');
+const { BRAND } = require('../config/brand');
 
 const PINATA_JWT = process.env.PINATA_JWT;
 
@@ -24,7 +25,7 @@ async function pinJson(data, maxRetries = 2) {
         try {
             const res = await axios.post(PIN_JSON_URL, {
                 pinataContent: data,
-                pinataMetadata: { name: `nyanbook-capsule-${Date.now()}` }
+                pinataMetadata: { name: `${BRAND.ipfsPrefix}-${Date.now()}` }
             }, {
                 headers: {
                     'Authorization': `Bearer ${PINATA_JWT}`,

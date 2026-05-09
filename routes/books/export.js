@@ -2,6 +2,7 @@ const archiver = require('archiver');
 const axios = require('axios');
 const crypto = require('crypto');
 const { buildCsvFromMessages } = require('../../utils/book-csv-export');
+const { BRAND } = require('../../config/brand');
 
 function formatTimestamp(date) {
     const offset = -date.getTimezoneOffset();
@@ -229,7 +230,7 @@ function register(app, deps) {
                 }
             }
 
-            const readme = `# Your Nyanbook Export
+            const readme = `# Your ${BRAND.name} Export
 
 Book: ${book.name}
 Exported: ${exportTimestamp}
@@ -262,9 +263,9 @@ To verify file integrity, compare SHA256 hashes in manifest.json:
 
             const manifest = {
                 version: '1.0',
-                format: 'nyanbook-export',
+                format: BRAND.exportFormatTag,
                 provenance: {
-                    source: process.env.REPLIT_DEV_DOMAIN || process.env.REPL_SLUG || 'nyanbook',
+                    source: process.env.REPLIT_DEV_DOMAIN || process.env.REPL_SLUG || BRAND.exportSourceFallback,
                     exported_at: exportTimestamp,
                     book_id: book_id,
                     book_name: book.name

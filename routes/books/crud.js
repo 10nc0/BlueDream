@@ -51,7 +51,11 @@ function register(app, deps) {
         res.json({
             lineOaId:            config.line?.lineOaId || null,
             telegramConfigured:  !!process.env.TELEGRAM_BOT_TOKEN,
-            telegramBotUsername: process.env.TELEGRAM_BOT_USERNAME || null
+            telegramBotUsername: process.env.TELEGRAM_BOT_USERNAME || null,
+            // Twilio sandbox — fork-configurable so every deployment routes to its own number.
+            // Defaults preserve the upstream sandbox values (unset = no behavior change).
+            twilioJoinCommand:   process.env.TWILIO_JOIN_COMMAND   || 'join baby-ability',
+            twilioSandboxNumber: process.env.TWILIO_SANDBOX_NUMBER || '14155238886',
         });
     });
 
@@ -450,7 +454,8 @@ function register(app, deps) {
                 webhooks: userOutputCredentials?.webhooks || []
             };
 
-            const finalContactInfo = contactInfo || (inputPlatform === 'whatsapp' ? 'join baby-ability' : null);
+            const TWILIO_JOIN_COMMAND = process.env.TWILIO_JOIN_COMMAND || 'join baby-ability';
+            const finalContactInfo = contactInfo || (inputPlatform === 'whatsapp' ? TWILIO_JOIN_COMMAND : null);
 
             if (!isGenesisAdmin) {
                 const unlinkCount = await client.query(
@@ -491,9 +496,9 @@ function register(app, deps) {
                     UPDATE ${tenantSchema}.books
                     SET contact_info = $1
                     WHERE id = $2
-                `, [`join baby-ability ${joinCode}`, book.id]);
+                `, [`${TWILIO_JOIN_COMMAND} ${joinCode}`, book.id]);
 
-                book.contact_info = `join baby-ability ${joinCode}`;
+                book.contact_info = `${TWILIO_JOIN_COMMAND} ${joinCode}`;
                 logger.info({ fractalId: generatedFractalId, joinCode }, 'Generated join code for book');
             } else if (inputPlatform === 'line') {
                 const randomCode = crypto.randomBytes(4).toString('hex');

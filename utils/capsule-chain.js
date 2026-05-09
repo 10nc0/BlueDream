@@ -11,13 +11,8 @@
  * If a stage yields {}, the trail explains why.
  */
 
-const PLATE_REGEX = /\b([A-Z]{1,2})\s*(\d{1,4})\s*([A-Z]{1,3})\b/gi;
-
-const ACTION_KEYWORDS = {
-    repair: ['perbaikan', 'perbaiki', 'servis', 'service', 'ganti', 'repair', 'fix', 'maintenance'],
-    masuk: ['masuk', 'datang', 'tiba', 'arrive', 'check-in', 'checkin'],
-    keluar: ['keluar', 'selesai', 'ambil', 'pick up', 'pickup', 'done', 'complete']
-};
+const { PLATE_REGEX } = require('../lib/entity-shapes');
+const { ACTION_KEYWORDS } = require('../lib/audit-lexicon');
 
 class Capsule {
     constructor(stage, inputCount, output, rationale, stats = {}) {
@@ -82,7 +77,7 @@ class CapsuleChain {
             messages.length,
             filtered,
             `Filtered by date ${datePatterns.join('/')}: ${messages.length} → ${filtered.length}`,
-            { datePatterns, inputCount: messages.length, outputCount: filtered.length }
+            { datePatterns, filtered: true, inputCount: messages.length, outputCount: filtered.length }
         );
     }
 

@@ -3821,7 +3821,7 @@
             container.appendChild(webhookGroup);
             
             // Address (contact_info — phone number or routing join code)
-            const rawContact = (currentBook.contact_info || '').replace(/^join baby-ability\s+/i, '').trim();
+            const rawContact = (currentBook.contact_info || '').replace(/^join\s+\S+\s+/i, '').trim();
             if (rawContact) {
                 container.appendChild(createFormGroup('Address', rawContact));
             }
@@ -4539,12 +4539,26 @@
                 if (lineSteps) lineSteps.style.display = 'block';
                 console.log('🟢 Showing LINE activation for:', book.name, 'Code:', joinCode);
             } else {
-                const joinCode = (book.contact_info || '').replace(/^join baby-ability\s+/i, '').trim();
+                // Strip any sandbox join-command prefix (handles any fork's command, not just ours).
+                const joinCode = (book.contact_info || '').replace(/^join\s+\S+\s+/i, '').trim();
                 if (!joinCode) {
                     showToast('❌ No activation code found', 'error');
                     return;
                 }
                 document.getElementById('book-join-code').textContent = joinCode;
+
+                // Populate Step 1 with this fork's sandbox details (from channel-config).
+                const sandboxCmd = _channelConfig?.twilioJoinCommand
+                    || (book.contact_info || '').split(/\s+/).slice(0, -1).join(' ')
+                    || 'join baby-ability';
+                const sandboxNumRaw = _channelConfig?.twilioSandboxNumber || '14155238886';
+                const sandboxNum = sandboxNumRaw.replace(/\D/g, '');
+
+                const sandboxCodeEl = document.getElementById('sandbox-join-code');
+                if (sandboxCodeEl) sandboxCodeEl.textContent = sandboxCmd;
+
+                const joinLink = document.getElementById('whatsapp-join-link');
+                if (joinLink) joinLink.href = `https://wa.me/${sandboxNum}?text=${encodeURIComponent(sandboxCmd)}`;
 
                 if (subtitle) subtitle.textContent = 'Follow 2 steps to activate WhatsApp';
                 if (waSteps) waSteps.style.display = 'block';
@@ -8224,11 +8238,15 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // Copy sandbox code button (Step 1: join baby-ability)
+    // Copy sandbox code button (Step 1: fork-configured sandbox join command)
     const copySandboxCodeBtn = document.getElementById('copy-sandbox-code-btn');
     if (copySandboxCodeBtn) {
         copySandboxCodeBtn.addEventListener('click', function() {
-            const sandboxCode = 'join baby-ability';
+            // Read whatever the modal currently displays — set by showBookActivationModal
+            // from channel-config so it reflects this fork's Twilio sandbox command.
+            const sandboxCode = document.getElementById('sandbox-join-code')?.textContent
+                || _channelConfig?.twilioJoinCommand
+                || 'join baby-ability';
             const btn = this;
             const originalText = btn.textContent;
             
