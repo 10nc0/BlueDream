@@ -749,6 +749,16 @@ app.listen(PORT, '0.0.0.0', async () => {
 
     await Promise.all([initBots(), initDb()]);
 
+    // One-shot backfill: sync pre-existing tenant agent tokens into
+    // core.book_registry so POST /api/agent/message works for tokens
+    // generated before migration 009. Idempotent; safe on every boot.
+    try {
+        const { backfillAgentTokens } = require('./lib/backfill-agent-tokens');
+        await backfillAgentTokens(pool, logger);
+    } catch (err) {
+        logger.warn({ err }, 'Agent token backfill module failed to load — skipping (non-fatal)');
+    }
+
     // Register all bots in the NyanMesh node registry (in-memory, snapshotted to DB at 86-breath).
     // Initial status reflects actual bot readiness (may be 'offline' if token missing).
     phiBreathe.registerNode('hermes', { role: 'creator', symbol: 'φ', status: hermesBot.isReady() ? 'online' : 'offline' });

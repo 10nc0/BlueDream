@@ -4763,7 +4763,16 @@
             const agentTokenSection = document.getElementById('agentTokenSection');
             if (agentTokenSection) {
                 agentTokenSection.style.display = 'block';
-                loadAgentTokenStatus(fractalId);
+                // active = live; suspended = deactivated but previously active (archive access OK).
+                // pending / inactive = never activated → lock the section.
+                if (book.status === 'active' || book.status === 'suspended') {
+                    loadAgentTokenStatus(fractalId);
+                } else {
+                    const agentDisplay = document.getElementById('agentTokenDisplay');
+                    const agentActions = document.getElementById('agentTokenActions');
+                    if (agentDisplay) agentDisplay.innerHTML = '<span style="color: #64748b; font-size: 0.8rem;">&#x1F512; Activate this book via WhatsApp to unlock agent access.</span>';
+                    if (agentActions) agentActions.innerHTML = '';
+                }
             }
 
             const monthlyEmailSection = document.getElementById('monthlyEmailSection');

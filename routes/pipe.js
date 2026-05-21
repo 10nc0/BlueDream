@@ -431,6 +431,103 @@ function registerPipeRoutes(app, deps) {
     });
     registeredRoutes.push('POST /api/webhook/:fractalId');
 
+    // Shared message-fetch helper used by both GET /api/webhook/:fractalId/messages
+    // (legacy fractal_id-in-URL form) and GET /api/agent/messages (token-only form).
+    // Assumes caller has already authenticated and validated tenantSchema + book.
+    async function fetchAndRespondMessages({ tenantSchema, fractalIdParam, book, req, res }) {
+        const limit = Math.min(Math.max(parseInt(req.query.limit) || 50, 1), 100);
+        const afterParam = req.query.after;
+        const beforeParam = req.query.before;
+
+        if (afterParam && DISCORD_SNOWFLAKE_RE.test(afterParam)) {
+            return res.status(400).json({ error: 'Discord snowflake cursors are no longer supported. Use ISO 8601 timestamps (e.g. 2024-01-01T00:00:00.000Z) via the after or before parameters.' });
+        }
+        if (beforeParam && DISCORD_SNOWFLAKE_RE.test(beforeParam)) {
+            return res.status(400).json({ error: 'Discord snowflake cursors are no longer supported. Use ISO 8601 timestamps (e.g. 2024-01-01T00:00:00.000Z) via the after or before parameters.' });
+        }
+        if (afterParam && beforeParam) {
+            return res.status(400).json({ error: 'Cannot use both after and before cursors' });
+        }
+        if (afterParam && !ISO8601_STRICT_RE.test(afterParam)) {
+            return res.status(400).json({ error: 'Invalid after cursor — must be a strict ISO 8601 timestamp (e.g. 2024-01-01T00:00:00.000Z)' });
+        }
+        if (beforeParam && !ISO8601_STRICT_RE.test(beforeParam)) {
+            return res.status(400).json({ error: 'Invalid before cursor — must be a strict ISO 8601 timestamp (e.g. 2024-01-01T00:00:00.000Z)' });
+        }
+
+        let afterTs = null, beforeTs = null;
+        if (afterParam) {
+            afterTs = new Date(afterParam);
+            if (isNaN(afterTs.getTime())) return res.status(400).json({ error: 'Invalid after cursor — date value is out of range' });
+        }
+        if (beforeParam) {
+            beforeTs = new Date(beforeParam);
+            if (isNaN(beforeTs.getTime())) return res.status(400).json({ error: 'Invalid before cursor — date value is out of range' });
+        }
+
+        const queryParams = [fractalIdParam, limit + 1];
+        let whereClause = 'book_fractal_id = $1';
+        if (afterTs) {
+            queryParams.push(afterTs.toISOString());
+            whereClause += ` AND recorded_at > $${queryParams.length}`;
+        } else if (beforeTs) {
+            queryParams.push(beforeTs.toISOString());
+            whereClause += ` AND recorded_at < $${queryParams.length}`;
+        }
+
+        const msgRows = await pool.query(
+            format(
+                `SELECT id, message_fractal_id, sender_name, body, has_attachment,
+                        attachment_cid, media_url, recorded_at
+                 FROM %I.anatta_messages
+                 WHERE ${whereClause}
+                 ORDER BY recorded_at DESC
+                 LIMIT $2`,
+                tenantSchema
+            ),
+            queryParams
+        );
+
+        const hasMore = msgRows.rows.length > limit;
+        const rows = hasMore ? msgRows.rows.slice(0, limit) : msgRows.rows;
+
+        const PINATA_GATEWAY = 'https://gateway.pinata.cloud/ipfs';
+        const messages = rows.map(row => {
+            const cid = row.attachment_cid || null;
+            return {
+                id: row.id,
+                message_fractal_id: row.message_fractal_id || null,
+                sender: row.sender_name || null,
+                text: row.body || '',
+                timestamp: row.recorded_at instanceof Date
+                    ? row.recorded_at.toISOString()
+                    : new Date(row.recorded_at).toISOString(),
+                has_media: row.has_attachment || false,
+                media_ipfs_cid: cid,
+                media_ipfs_gateway_url: cid ? `${PINATA_GATEWAY}/${cid}` : null,
+                media_url: row.media_url || null
+            };
+        });
+
+        const newestTs = messages.length > 0 ? messages[0].timestamp : null;
+        const oldestTs = messages.length > 0 ? messages[messages.length - 1].timestamp : null;
+
+        res.json({
+            book: book.name,
+            book_id: fractalIdParam,
+            _meta: {
+                source: 'postgresql',
+                media_note: 'media_ipfs_cid is verifiable against content_hash in core.message_ledger. media_ipfs_gateway_url is a convenience URL for direct access. media_url is a Discord CDN URL and may expire.'
+            },
+            messages,
+            total: messages.length,
+            hasMore,
+            cursor: { newest: newestTs, oldest: oldestTs }
+        });
+
+        logger.info({ bookId: fractalIdParam, count: messages.length }, 'Agent read: messages fetched from PostgreSQL');
+    }
+
     app.get('/api/webhook/:fractalId/messages', webhookLimiter, async (req, res) => {
         try {
             const fractalIdParam = req.params.fractalId;
@@ -472,120 +569,135 @@ function registerPipeRoutes(app, deps) {
             }
 
             const book = bookResult.rows[0];
-
-            const limit = Math.min(Math.max(parseInt(req.query.limit) || 50, 1), 100);
-            const afterParam = req.query.after;
-            const beforeParam = req.query.before;
-
-            // Reject legacy Discord snowflake cursors — ISO 8601 required
-            if (afterParam && DISCORD_SNOWFLAKE_RE.test(afterParam)) {
-                return res.status(400).json({
-                    error: 'Discord snowflake cursors are no longer supported. Use ISO 8601 timestamps (e.g. 2024-01-01T00:00:00.000Z) via the after or before parameters.'
-                });
-            }
-            if (beforeParam && DISCORD_SNOWFLAKE_RE.test(beforeParam)) {
-                return res.status(400).json({
-                    error: 'Discord snowflake cursors are no longer supported. Use ISO 8601 timestamps (e.g. 2024-01-01T00:00:00.000Z) via the after or before parameters.'
-                });
-            }
-            if (afterParam && beforeParam) {
-                return res.status(400).json({ error: 'Cannot use both after and before cursors' });
-            }
-
-            // Strict ISO-8601 cursor validation (ISO8601_STRICT_RE from lib/validators)
-            if (afterParam && !ISO8601_STRICT_RE.test(afterParam)) {
-                return res.status(400).json({ error: 'Invalid after cursor — must be a strict ISO 8601 timestamp (e.g. 2024-01-01T00:00:00.000Z)' });
-            }
-            if (beforeParam && !ISO8601_STRICT_RE.test(beforeParam)) {
-                return res.status(400).json({ error: 'Invalid before cursor — must be a strict ISO 8601 timestamp (e.g. 2024-01-01T00:00:00.000Z)' });
-            }
-
-            // Parse validated cursors — also reject semantically invalid dates (e.g. month 99)
-            let afterTs = null;
-            let beforeTs = null;
-            if (afterParam) {
-                afterTs = new Date(afterParam);
-                if (isNaN(afterTs.getTime())) {
-                    return res.status(400).json({ error: 'Invalid after cursor — date value is out of range' });
-                }
-            }
-            if (beforeParam) {
-                beforeTs = new Date(beforeParam);
-                if (isNaN(beforeTs.getTime())) {
-                    return res.status(400).json({ error: 'Invalid before cursor — date value is out of range' });
-                }
-            }
-
-            // Build PostgreSQL query against tenant messages table
-            const queryParams = [fractalIdParam, limit + 1];
-            let whereClause = 'book_fractal_id = $1';
-            if (afterTs) {
-                queryParams.push(afterTs.toISOString());
-                whereClause += ` AND recorded_at > $${queryParams.length}`;
-            } else if (beforeTs) {
-                queryParams.push(beforeTs.toISOString());
-                whereClause += ` AND recorded_at < $${queryParams.length}`;
-            }
-
-            const msgRows = await pool.query(
-                format(
-                    `SELECT id, message_fractal_id, sender_name, body, has_attachment,
-                            attachment_cid, media_url, recorded_at
-                     FROM %I.anatta_messages
-                     WHERE ${whereClause}
-                     ORDER BY recorded_at DESC
-                     LIMIT $2`,
-                    tenantSchema
-                ),
-                queryParams
-            );
-
-            const hasMore = msgRows.rows.length > limit;
-            const rows = hasMore ? msgRows.rows.slice(0, limit) : msgRows.rows;
-
-            const PINATA_GATEWAY = 'https://gateway.pinata.cloud/ipfs';
-            const messages = rows.map(row => {
-                const cid = row.attachment_cid || null;
-                return {
-                    id: row.id,
-                    message_fractal_id: row.message_fractal_id || null,
-                    sender: row.sender_name || null,
-                    text: row.body || '',
-                    timestamp: row.recorded_at instanceof Date
-                        ? row.recorded_at.toISOString()
-                        : new Date(row.recorded_at).toISOString(),
-                    has_media: row.has_attachment || false,
-                    media_ipfs_cid: cid,
-                    media_ipfs_gateway_url: cid ? `${PINATA_GATEWAY}/${cid}` : null,
-                    media_url: row.media_url || null
-                };
-            });
-
-            const newestTs = messages.length > 0 ? messages[0].timestamp : null;
-            const oldestTs = messages.length > 0 ? messages[messages.length - 1].timestamp : null;
-
-            res.json({
-                book: book.name,
-                _meta: {
-                    source: 'postgresql',
-                    media_note: 'media_ipfs_cid is verifiable against content_hash in core.message_ledger. media_ipfs_gateway_url is a convenience URL for direct access. media_url is a Discord CDN URL and may expire.'
-                },
-                messages,
-                total: messages.length,
-                hasMore,
-                cursor: {
-                    newest: newestTs,
-                    oldest: oldestTs
-                }
-            });
-
-            logger.info({ bookId: fractalIdParam, count: messages.length }, 'Webhook read: messages fetched from PostgreSQL');
+            return await fetchAndRespondMessages({ tenantSchema, fractalIdParam, book, req, res });
         } catch (error) {
             logger.error({ err: error }, 'Webhook read: error fetching messages');
             res.status(500).json({ error: 'Failed to fetch messages' });
         }
     });
     registeredRoutes.push('GET /api/webhook/:fractalId/messages');
+
+    // Token-only read route (Task #206 follow-up): Bearer token is the sole
+    // credential. Server resolves fractal_id + tenant_schema from
+    // core.book_registry.agent_token_hash. Mirrors POST /api/agent/message
+    // for full write/read symmetry — agent holds one token for everything.
+    app.get('/api/agent/messages', webhookLimiter, async (req, res) => {
+        try {
+            const authHeader = req.headers.authorization;
+            if (!authHeader || !authHeader.startsWith('Bearer ')) {
+                return res.status(401).json({ error: 'Authorization required. Use: Authorization: Bearer <agent_token>' });
+            }
+            const providedToken = authHeader.slice(7).trim();
+            if (!providedToken) {
+                return res.status(401).json({ error: 'Bearer token must not be empty' });
+            }
+            const crypto = require('crypto');
+            const providedHash = crypto.createHash('sha256').update(providedToken).digest('hex');
+
+            const registryResult = await pool.query(
+                `SELECT br.fractal_id, br.tenant_schema
+                 FROM core.book_registry br
+                 WHERE br.agent_token_hash = $1`,
+                [providedHash]
+            );
+            if (registryResult.rows.length === 0) {
+                return res.status(401).json({ error: 'Invalid agent token' });
+            }
+            const { fractal_id: fractalIdParam, tenant_schema: tenantSchema } = registryResult.rows[0];
+            if (!VALID_SCHEMA_PATTERN.test(tenantSchema)) {
+                return res.status(400).json({ error: 'Invalid tenant schema' });
+            }
+
+            const bookResult = await pool.query(
+                format(`SELECT id, name FROM %I.books WHERE fractal_id = $1`, tenantSchema),
+                [fractalIdParam]
+            );
+            if (bookResult.rows.length === 0) {
+                return res.status(404).json({ error: 'Book not found' });
+            }
+
+            return await fetchAndRespondMessages({
+                tenantSchema, fractalIdParam, book: bookResult.rows[0], req, res
+            });
+        } catch (error) {
+            logger.error({ err: error }, 'Agent read (token-only): error fetching messages');
+            res.status(500).json({ error: 'Failed to fetch messages' });
+        }
+    });
+    registeredRoutes.push('GET /api/agent/messages');
+
+    // Token-based write route (Task #206): bot/agent holds one Bearer token —
+    // server resolves fractal_id + tenant_schema from core.book_registry using
+    // the agent_token_hash column (migration 009). No fractalId in the URL.
+    // Identical queue shape to POST /api/webhook/:fractalId.
+    app.post('/api/agent/message', webhookLimiter, async (req, res) => {
+        try {
+            const authHeader = req.headers.authorization;
+            if (!authHeader || !authHeader.startsWith('Bearer ')) {
+                return res.status(401).json({ error: 'Authorization required. Use: Authorization: Bearer <agent_token>' });
+            }
+            const providedToken = authHeader.slice(7).trim();
+            if (!providedToken) {
+                return res.status(401).json({ error: 'Bearer token must not be empty' });
+            }
+            const crypto = require('crypto');
+            const providedHash = crypto.createHash('sha256').update(providedToken).digest('hex');
+
+            // O(1) cross-tenant lookup — no need to scan every tenant schema.
+            const registryResult = await pool.query(
+                `SELECT fractal_id, tenant_schema FROM core.book_registry WHERE agent_token_hash = $1`,
+                [providedHash]
+            );
+            if (registryResult.rows.length === 0) {
+                return res.status(401).json({ error: 'Invalid agent token' });
+            }
+            const { fractal_id: fractalIdParam, tenant_schema: tenantSchema } = registryResult.rows[0];
+            if (!VALID_SCHEMA_PATTERN.test(tenantSchema)) {
+                return res.status(400).json({ error: 'Invalid tenant schema' });
+            }
+
+            const payloadResult = webhookPayloadSchema.safeParse(req.body);
+            if (!payloadResult.success) {
+                return res.status(400).json({
+                    error: 'Invalid payload',
+                    details: payloadResult.error.issues.map(i => i.message)
+                });
+            }
+            const { text, username, avatar_url, media_url, media_type, phone, email } = payloadResult.data;
+
+            if (await totalQueueDepth() >= MAX_QUEUE_SIZE) {
+                logger.warn({ ip: req.ip }, 'Agent message: queue full');
+                return res.status(503).json({ error: 'Server busy, please retry' });
+            }
+
+            const senderName = username || phone || email || 'Agent';
+            await enqueueItem({
+                msg: {
+                    fractalId: fractalIdParam,
+                    tenantSchema,
+                    body: text || '',
+                    senderName,
+                    avatar_url: avatar_url || null,
+                    media_url: media_url || null,
+                    media_type: media_type || null,
+                    phone: phone || null,
+                    email: email || null,
+                    hasMedia: !!media_url
+                },
+                rawPayload: payloadResult.data,
+                channel: 'webhook',
+                messageSid: `wh_${Date.now()}_${require('crypto').randomBytes(4).toString('hex')}`,
+                queuedAt: Date.now()
+            });
+
+            logger.info({ sender: senderName, bookId: fractalIdParam, queueDepth: getCachedDepth() }, 'Agent message: queued via token routing');
+            res.json({ success: true, message: 'Message accepted', book_id: fractalIdParam });
+        } catch (error) {
+            logger.error({ err: error }, 'Agent message: error queuing');
+            res.status(500).json({ error: error.message });
+        }
+    });
+    registeredRoutes.push('POST /api/agent/message');
 
     logger.info('📥 Pipe routes registered: %s', registeredRoutes.join(', '));
 
