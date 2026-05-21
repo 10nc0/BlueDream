@@ -14,7 +14,7 @@
  * - Regime: <10yr 🟢 Optimism | 10-25yr 🟡 Extraction | >25yr 🔴 Fatalism
  */
 
-const { CURRENCY_REGISTRY, CITY_EXPAND } = require('./geo-data');
+const { CURRENCY_REGISTRY, CITY_EXPAND, normaliseCurrency } = require('./geo-data');
 const { EMPTY_TABLE_ROW_REGEX } = require('./parse-helpers');
 
 // ─── TFR (Total Fertility Rate) parser ──────────────────────────────────────────
@@ -302,13 +302,13 @@ function buildSeedMetricTable(parsedData, historicalDecade = String(new Date().g
     // and income is also LCU (from World Bank NY.GNP.PCAP.CN). When they match,
     // years is meaningful; when they differ (e.g. Numbeo returned a USD price but
     // income is in JPY) we refuse to divide and show N/A — no forex guessing.
-    const currPriceCurrency = data.current?.pricePerSqm?.currency || 'USD';
-    const currIncomeCurrency = data.current?.income?.currency || 'USD';
+    const currPriceCurrency = normaliseCurrency(data.current?.pricePerSqm?.currency) || 'USD';
+    const currIncomeCurrency = normaliseCurrency(data.current?.income?.currency) || 'USD';
     const currCurrency = currPriceCurrency; // used for price/land columns only
 
     const rawHistPriceSqm = data.historical?.pricePerSqm?.value;
-    const histPriceCurrency = data.historical?.pricePerSqm?.currency || 'USD';
-    const histIncomeCurrency = data.historical?.income?.currency || 'USD';
+    const histPriceCurrency = normaliseCurrency(data.historical?.pricePerSqm?.currency) || 'USD';
+    const histIncomeCurrency = normaliseCurrency(data.historical?.income?.currency) || 'USD';
     const histCurrency = histPriceCurrency; // used for price/land columns only
     // Temporal contamination guard — price: if historical price == current price exactly,
     // the same Brave page fed both period extractions. No real market has had zero
@@ -737,6 +737,102 @@ function rescueTotalPrice(value, text) {
 }
 
 /**
+ * PHYSICAL_PRICE_CEILING_PER_SQM — per-currency sanity ceilings for price/sqm.
+ *
+ * Hardcoded by intent: these are physical-market ceilings (~2-3× the most
+ * expensive real-world prime neighbourhood in each currency zone, with buffer
+ * for ultra-luxury outliers), not statistical bounds. Any value above these
+ * is almost certainly an extraction error — either a regex that bled across
+ * Numbeo HTML rows and grabbed an apartment TOTAL price, a sqft↔sqm unit
+ * confusion, or a BIS backcast that compounded a bad anchor.
+ *
+ * Reference prime markets (as of 2024, peak luxury):
+ *   JPY  ~¥3-4M/sqm (Tokyo Ginza penthouse)        → ceiling ¥10M
+ *   KRW  ~₩20-25M/sqm (Seoul Gangnam Hannam)       → ceiling ₩50M
+ *   USD  ~$30-50k/sqm (Manhattan Billionaires' Row)→ ceiling $100k
+ *   EUR  ~€40k/sqm (Monaco, Paris VIII)            → ceiling €80k
+ *   GBP  ~£35k/sqm (London Mayfair)                → ceiling £70k
+ *   HKD  ~HK$200k/sqm (The Peak)                   → ceiling HK$400k
+ *   SGD  ~S$30k/sqm (Sentosa Cove)                 → ceiling S$60k
+ *
+ * If a market actually approaches these numbers, revisit — but it'll be a
+ * news story before it's a bug report.
+ */
+const PHYSICAL_PRICE_CEILING_PER_SQM = {
+  USD:     100000,
+  EUR:      80000,
+  GBP:      70000,
+  CHF:     100000,
+  AUD:      60000,
+  CAD:      50000,
+  NZD:      50000,
+  SGD:      60000,
+  HKD:     400000,
+  JPY:  10000000,
+  KRW:  50000000,
+  CNY:    300000,
+  TWD:   3000000,
+  INR:   1000000,
+  IDR: 200000000,
+  VND: 500000000,
+  THB:   1000000,
+  MYR:     50000,
+  PHP:   1000000,
+  AED:    100000,
+  SAR:    100000,
+  QAR:    200000,
+  KWD:     10000,
+  ILS:    200000,
+  EGP:    200000,
+  ZAR:    200000,
+  NGN:  50000000,
+  // Europe (non-euro)
+  CZK:    500000,
+  PLN:    100000,
+  HUF:   5000000,
+  RON:    100000,
+  SEK:    300000,
+  NOK:    300000,
+  DKK:    200000,
+  UAH:    500000,
+  // Inflation-prone / weak unit — generous ceilings, revisit if hit
+  TRY:   5000000,
+  RUB:   5000000,
+  ARS:  50000000,
+  // Latin America
+  BRL:    100000,
+  MXN:    500000,
+  CLP:  30000000,
+  COP:  50000000,
+  PEN:    100000,
+  // Central Asia
+  KZT:   5000000,
+  AZN:     20000,
+};
+
+/**
+ * L3 rescue for price/sqm extractions: detect and neutralise impossibly-high
+ * values that almost certainly came from a regex bleed, a sqft↔sqm flip, or
+ * a BIS backcast on a bad anchor.
+ *
+ * Per-currency physical ceilings (PHYSICAL_PRICE_CEILING_PER_SQM) are used —
+ * unknown currencies pass through unchecked (defensive: don't null on misuse).
+ *
+ * Returns:
+ *   value unchanged — if within ceiling, or currency unknown, or input is bad
+ *   null            — if value > ceiling for its currency
+ */
+function rescuePricePerSqm(value, currency) {
+  if (value == null || !isFinite(value) || value <= 0) return null;
+  const code = currency ? String(currency).toUpperCase() : null;
+  if (!code) return value;
+  const ceiling = PHYSICAL_PRICE_CEILING_PER_SQM[code];
+  if (!ceiling) return value;
+  if (value > ceiling) return null;
+  return value;
+}
+
+/**
  * emptyCityRecord — the canonical empty city record skeleton used throughout
  * seed-metric flow when initializing parsedData.cities[city]. Pass `histDecade`
  * (string like "1995-2005") to stamp the historical bucket with its decade
@@ -766,6 +862,8 @@ module.exports = {
   rescueDroppedSuffix,
   rescueTotalPrice,
   rescueIncome,
+  rescuePricePerSqm,
+  PHYSICAL_PRICE_CEILING_PER_SQM,
   validateSeedMetricInvariants,
   emptyCityRecord,
 };

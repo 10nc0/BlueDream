@@ -368,8 +368,9 @@ function registerPipeRoutes(app, deps) {
     app.post('/api/webhook/:fractalId', webhookLimiter, async (req, res) => {
         try {
             const fractalIdParam = req.params.fractalId;
-            const fractalIdPattern = /^bridge_[a-z][0-9a-z]_[a-zA-Z0-9]{6,32}$/;
-            if (!fractalIdParam || !fractalIdPattern.test(fractalIdParam)) {
+            const fractalIdMod = require('../utils/fractal-id');
+            const parsed = fractalIdMod.parse(fractalIdParam);
+            if (!parsed || !parsed.tenantId || (parsed.type !== 'book' && parsed.type !== 'bridge')) {
                 return res.status(400).json({ error: 'Invalid book ID format' });
             }
             const payloadResult = webhookPayloadSchema.safeParse(req.body);
@@ -380,11 +381,6 @@ function registerPipeRoutes(app, deps) {
                 });
             }
             const { text, username, avatar_url, media_url, media_type, phone, email } = payloadResult.data;
-            const fractalIdMod = require('../utils/fractal-id');
-            const parsed = fractalIdMod.parse(fractalIdParam);
-            if (!parsed || !parsed.tenantId) {
-                return res.status(400).json({ error: 'Invalid book ID format' });
-            }
             if (!Number.isInteger(parsed.tenantId) || parsed.tenantId <= 0 || parsed.tenantId > 999999) {
                 return res.status(400).json({ error: 'Invalid tenant ID' });
             }
@@ -438,14 +434,9 @@ function registerPipeRoutes(app, deps) {
     app.get('/api/webhook/:fractalId/messages', webhookLimiter, async (req, res) => {
         try {
             const fractalIdParam = req.params.fractalId;
-            const fractalIdPattern = /^bridge_[a-z][0-9a-z]_[a-zA-Z0-9]{6,32}$/;
-            if (!fractalIdParam || !fractalIdPattern.test(fractalIdParam)) {
-                return res.status(400).json({ error: 'Invalid book ID format' });
-            }
-
             const fractalIdMod = require('../utils/fractal-id');
             const parsed = fractalIdMod.parse(fractalIdParam);
-            if (!parsed || !parsed.tenantId) {
+            if (!parsed || !parsed.tenantId || (parsed.type !== 'book' && parsed.type !== 'bridge')) {
                 return res.status(400).json({ error: 'Invalid book ID format' });
             }
             if (!Number.isInteger(parsed.tenantId) || parsed.tenantId <= 0 || parsed.tenantId > 999999) {

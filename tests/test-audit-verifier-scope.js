@@ -489,6 +489,52 @@ await test('TZ boundary — UTC-late-evening msg counts as NEXT local day in Asi
         `expected scoped count 2 (boundary msg + clean May msg), got ${result.corrections[0].to}`);
 });
 
+await test('TZ boundary — non-default tenant tz (PDT) preserved through rich-aggregate augmentation', async () => {
+    // Regression for the augment-path tz drop:
+    // `_buildScopedTally`'s `dateOnlyScope` previously omitted `temporalContext`,
+    // so the rich-aggregate (richAggregates) augmentation fell back to DEFAULT_TZ
+    // (Asia/Jakarta). Under a PDT tenant, a UTC-late-evening boundary msg would
+    // be bucketed into May locally (Jakarta) instead of April (PDT), and the
+    // `Math.max(richCount, ctxCount)` would overcount and falsely "verify" the
+    // LLM's wrong claim. With temporalContext preserved, augmentation uses the
+    // injected tenant tz and the boundary msg is correctly excluded.
+    //
+    // 2026-05-01T02:00:00Z = 2026-04-30T19:00 PDT (UTC-7, DST in May) → April locally
+    //                      = 2026-05-01T09:00 Jakarta (UTC+7)         → May locally
+    const msgs = [
+        // Boundary msg — May in Jakarta, April in PDT. Must NOT count under PDT.
+        { id: 'b-0', content: 'BA 9960 QO perbaikan',
+          timestamp: '2026-05-01T02:00:00.000Z' },
+        // Clean May msg #1 — May in both tz. Always counts.
+        { id: 'm-1', content: 'BA 9960 QO perbaikan',
+          timestamp: '2026-05-03T18:00:00.000Z' },
+        // Clean May msg #2 — May in both tz. Always counts.
+        { id: 'm-2', content: 'BA 9960 QO perbaikan',
+          timestamp: '2026-05-10T18:00:00.000Z' }
+    ];
+    const aggregates = {
+        'BA 9960 QO': {
+            count: 3,
+            messages: msgs.map(m => ({ id: m.id, timestamp: m.timestamp, preview: m.content }))
+        }
+    };
+    const result = await runDashboardAuditPipeline({
+        query: 'perbaikan bulan ini',
+        initialResponse: 'BA 9960 QO: 3 kali perbaikan',
+        contextMessages: msgs,
+        entityAggregates: aggregates,
+        llmCallFn: null,
+        engine: 'test',
+        maxRetries: 0,
+        now: new Date('2026-05-15T19:00:00.000Z'),
+        tz: 'America/Los_Angeles'
+    });
+    assert(result.corrected === true,
+        `expected corrected=true (PDT scope sees only 2 May msgs), got corrected=${result.corrected}, verified=${result.verified}`);
+    assertEqual(result.corrections[0].to, 2,
+        `expected scoped count 2 under PDT (boundary msg excluded), got ${result.corrections[0].to} — augmentation likely fell back to DEFAULT_TZ`);
+});
+
 // ────────────────────────────────────────────────────────────────────────
 // Task #177 — entity-shapes + lexicon consolidation fixtures
 //

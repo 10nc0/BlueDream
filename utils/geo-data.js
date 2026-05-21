@@ -218,6 +218,61 @@ const ISO2_TO_CURRENCY = {
   QA: 'QAR', KW: 'KWD', ZW: 'USD',
 };
 
+// Static symbol/word → ISO-4217 map for unambiguous tokens.
+// Ambiguous symbols (¥, $) are handled inline in normaliseCurrency via cityHint.
+const _SYMBOL_TO_ISO = {
+  '€': 'EUR', '£': 'GBP', '₩': 'KRW', '₹': 'INR', '₣': 'CHF',
+  '₪': 'ILS', '฿': 'THB', '₫': 'VND', '₱': 'PHP', '₦': 'NGN',
+  '₺': 'TRY', '₴': 'UAH', '₸': 'KZT', '₼': 'AZN', '₽': 'RUB',
+  'yen': 'JPY', 'won': 'KRW', 'yuan': 'CNY', 'renminbi': 'CNY',
+  'baht': 'THB', 'dong': 'VND', 'ringgit': 'MYR', 'peso': 'PHP',
+  'rupee': 'INR', 'rupiah': 'IDR', 'real': 'BRL', 'lira': 'TRY',
+  'dirham': 'AED', 'franc': 'CHF', 'frank': 'CHF', 'krona': 'SEK',
+  'krone': 'NOK', 'forint': 'HUF', 'zloty': 'PLN', 'koruna': 'CZK',
+  'shekel': 'ILS', 'dinar': 'KWD', 'riyal': 'SAR', 'rand': 'ZAR',
+};
+
+/**
+ * Normalise a raw currency token (symbol, text name, or ISO code) to its
+ * ISO-4217 three-letter code.  Ambiguous symbols (¥, $) are resolved via
+ * cityHint when provided; otherwise they fall back to JPY and USD respectively.
+ *
+ * This is a safety net — the LLM prompt already asks for ISO codes.  It catches
+ * cases where the LLM returns a glyph ("¥") or a word ("yen") instead.
+ *
+ * @param {string}  raw   - Raw currency token from LLM or scraper output
+ * @param {string}  [city] - Lowercased city key for disambiguation (optional)
+ * @returns {string|null}  - ISO-4217 code, original token if unrecognised, or null/undefined passthrough
+ */
+function normaliseCurrency(raw, city) {
+  if (raw == null) return raw;
+  const t = typeof raw === 'string' ? raw.trim() : String(raw).trim();
+  if (!t) return t;
+
+  // Ambiguous: ¥ / ￥ (JPY in Japan, CNY in China) — checked before the map.
+  if (t === '¥' || t === '￥') {
+    const expected = city ? cityToExpectedCurrency(city) : null;
+    return (expected === 'JPY' || expected === 'CNY') ? expected : 'JPY';
+  }
+
+  // Ambiguous: $ (USD, AUD, SGD, CAD, HKD, NZD, …) — checked before the map.
+  if (t === '$') {
+    const expected = city ? cityToExpectedCurrency(city) : null;
+    return expected || 'USD';
+  }
+
+  // Unambiguous symbol / text name lookup — checked BEFORE the 3-letter ISO
+  // pass-through so that "yen", "won", "won" etc. resolve correctly rather
+  // than being uppercased to "YEN", "WON" as pseudo-ISO codes.
+  const fromMap = _SYMBOL_TO_ISO[t] || _SYMBOL_TO_ISO[t.toLowerCase()];
+  if (fromMap) return fromMap;
+
+  // Already a 3-letter ISO code (case-insensitive) — normalise case only.
+  if (/^[A-Za-z]{3}$/.test(t)) return t.toUpperCase();
+
+  return t;
+}
+
 module.exports = {
   CITY_EXPAND,
   COUNTRY_TO_CITY,
@@ -230,4 +285,5 @@ module.exports = {
   COUNTRY_ISO2,
   ISO2_TO_CURRENCY,
   cityToExpectedCurrency,
+  normaliseCurrency,
 };

@@ -190,6 +190,12 @@ class AuditCapsule {
                 actionKeywords: [],
                 plates: [],
                 senders: [],
+                // Preserve the tenant timezone the LLM saw so messageMatchesScope
+                // doesn't silently fall back to DEFAULT_TZ during rich-aggregate
+                // augmentation. Without this, a query like "bulan ini" under a
+                // non-Jakarta tenant tz would bucket UTC boundary messages into
+                // the wrong local day and the verifier would overcount.
+                temporalContext: scope.temporalContext,
                 hasAny: true
             };
             for (const entity of Object.keys(this.richAggregates)) {

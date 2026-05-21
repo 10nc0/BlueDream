@@ -12,156 +12,8 @@
  * └────────────────────────────────────────────────────────────────────┘
  */
 
-const { AUDIT, AI_MODELS } = require('../config/constants');
+const { AI_MODELS } = require('../config/constants');
 const { createCapsule, destroyCapsule } = require('./audit-capsule');
-
-// ==================== Entity Extractors ====================
-
-const ENTITY_PATTERNS = {
-  indonesianPlate: /\b(B[A-Z])\s*(\d{4})\s*([A-Z]{2,3})\b/gi,
-  genericCount: /(\d+)\s*(kali|times?|x)\b/gi
-};
-
-function extractPlates(text) {
-  const plates = [];
-  const regex = /\b(B[A-Z])\s*(\d{4})\s*([A-Z]{2,3})\b/gi;
-  let match;
-  while ((match = regex.exec(text)) !== null) {
-    const normalized = `${match[1].toUpperCase()} ${match[2]} ${match[3].toUpperCase()}`;
-    plates.push(normalized);
-  }
-  return plates;
-}
-
-function normalizeEntity(entity) {
-  return entity.toUpperCase().replace(/\s+/g, ' ').trim();
-}
-
-// ==================== S1: Verify ====================
-
-function extractClaimsFromResponse(responseText) {
-  const claims = [];
-  
-  const lines = responseText.split('\n');
-  for (const line of lines) {
-    const plates = extractPlates(line);
-    
-    const countMatch = line.match(/\((\d+)\s*kali/i) || 
-                       line.match(/(\d+)\s*kali\s*(perbaikan|repair)/i) ||
-                       line.match(/:\s*(\d+)\s*(times?|kali)/i);
-    
-    if (plates.length > 0 && countMatch) {
-      const claimedCount = parseInt(countMatch[1], 10);
-      for (const plate of plates) {
-        claims.push({
-          entity: normalizeEntity(plate),
-          claimedCount,
-          line: line.trim()
-        });
-      }
-    }
-  }
-  
-  return claims;
-}
-
-function countEntityInContext(contextMessages, entity) {
-  const normalized = normalizeEntity(entity);
-  let count = 0;
-  
-  for (const msg of contextMessages) {
-    const content = msg.content || msg.text || '';
-    const escapedEntity = normalized.replace(/\s+/g, '\\s*');
-    const regex = new RegExp(escapedEntity, 'gi');
-    const matches = content.match(regex);
-    if (matches) {
-      count += matches.length;
-    }
-  }
-  
-  return count;
-}
-
-function countEntityInResponse(responseText, entity) {
-  const normalized = normalizeEntity(entity);
-  const escapedEntity = normalized.replace(/\s+/g, '\\s*');
-  const regex = new RegExp(escapedEntity, 'gi');
-  
-  let count = 0;
-  const lines = responseText.split('\n');
-  for (const line of lines) {
-    if (line.includes('[') || line.includes('2025-') || line.includes('2024-') || line.includes('2026-')) {
-      const matches = line.match(regex);
-      if (matches) {
-        count += matches.length;
-      }
-    }
-  }
-  
-  return count;
-}
-
-function verifyResponse(responseText, contextMessages = [], entityAggregates = {}) {
-  const claims = extractClaimsFromResponse(responseText);
-  const mismatches = [];
-  const unverifiable = [];
-  
-  const hasContext = contextMessages.length > 0;
-  const hasAggregates = Object.keys(entityAggregates).length > 0;
-  
-  if (!hasContext && !hasAggregates) {
-    return {
-      passed: true,
-      claims,
-      mismatches: [],
-      unverifiable: claims.length > 0 ? claims : [],
-      hasContext: false,
-      hasAggregates: false
-    };
-  }
-  
-  for (const claim of claims) {
-    let actualCount = 0;
-    let verificationSource = null;
-    
-    if (hasAggregates && entityAggregates[claim.entity]) {
-      actualCount = entityAggregates[claim.entity].count || entityAggregates[claim.entity];
-      verificationSource = 'aggregates';
-    } else if (hasContext) {
-      actualCount = countEntityInContext(contextMessages, claim.entity);
-      verificationSource = 'context';
-    }
-    
-    if (claim.claimedCount !== actualCount) {
-      if (actualCount === 0) {
-        unverifiable.push({
-          entity: claim.entity,
-          claimed: claim.claimedCount,
-          actual: 0,
-          line: claim.line,
-          reason: 'Entity not found in context - cannot verify'
-        });
-      } else {
-        mismatches.push({
-          entity: claim.entity,
-          claimed: claim.claimedCount,
-          actual: actualCount,
-          line: claim.line,
-          verificationSource
-        });
-      }
-    }
-  }
-  
-  return {
-    passed: mismatches.length === 0 && unverifiable.length === 0,
-    claims,
-    mismatches,
-    unverifiable,
-    hasContext,
-    hasAggregates
-  };
-}
 
 // ==================== S2: Retry ====================
 
@@ -203,39 +55,6 @@ Please provide a corrected response with accurate counts that match the instance
     console.warn(`⚠️ Dashboard audit retry failed:`, error.message);
     return null;
   }
-}
-
-// ==================== S3: Deliver ====================
-
-function applyDeterministicCorrections(responseText, mismatches) {
-  let correctedText = responseText;
-  const corrections = [];
-  
-  for (const mismatch of mismatches) {
-    const patterns = [
-      new RegExp(`\\(${mismatch.claimed}\\s*kali`, 'gi'),
-      new RegExp(`${mismatch.claimed}\\s*kali\\s*(perbaikan|repair)`, 'gi'),
-      new RegExp(`:\\s*${mismatch.claimed}\\s*(times?|kali)`, 'gi')
-    ];
-    
-    for (const pattern of patterns) {
-      const originalText = correctedText;
-      correctedText = correctedText.replace(pattern, (match) => {
-        return match.replace(String(mismatch.claimed), String(mismatch.actual));
-      });
-      
-      if (correctedText !== originalText) {
-        corrections.push({
-          entity: mismatch.entity,
-          from: mismatch.claimed,
-          to: mismatch.actual
-        });
-        break;
-      }
-    }
-  }
-  
-  return { correctedText, corrections };
 }
 
 // ==================== Pipeline Orchestrator ====================
@@ -468,13 +287,5 @@ async function runDashboardAuditPipeline({
 // ==================== Exports ====================
 
 module.exports = {
-  runDashboardAuditPipeline,
-  verifyResponse,
-  extractClaimsFromResponse,
-  countEntityInContext,
-  countEntityInResponse,
-  applyDeterministicCorrections,
-  extractPlates,
-  normalizeEntity,
-  ENTITY_PATTERNS
+  runDashboardAuditPipeline
 };

@@ -67,8 +67,8 @@ const PIPELINE_STEPS = {
 const { AttachmentIngestion } = require('./attachment-ingestion');
 const { analyzeImageWithGroqVision, processChemistryContent, classifyScholasticDomain } = require('./attachment-cascade');
 const { createQueryTimestamp, buildTemporalContent } = require('./time-format');
-const { buildSeedMetricTable, validateSeedMetricOutput, parseTFR, injectTFRColumn, rescueDroppedSuffix, rescueTotalPrice, rescueIncome, validateSeedMetricInvariants, emptyCityRecord } = require('./seed-metric-calculator');
-const { cityToExpectedCurrency, CURRENCY_REGISTRY } = require('./geo-data');
+const { buildSeedMetricTable, validateSeedMetricOutput, parseTFR, injectTFRColumn, rescueDroppedSuffix, rescueTotalPrice, rescueIncome, rescuePricePerSqm, validateSeedMetricInvariants, emptyCityRecord } = require('./seed-metric-calculator');
+const { cityToExpectedCurrency, CURRENCY_REGISTRY, normaliseCurrency } = require('./geo-data');
 const { buildCeilingMap } = require('../lib/tools/income-ceiling');
 const { cleanMarkdownJson, EMPTY_TABLE_ROW_REGEX } = require('./parse-helpers');
 const { buildGatherPromptBlock } = require('../prompts/seed-metric');
@@ -1354,25 +1354,31 @@ User query: ${query}`;
 
           if (fredCurrent && fredCurrent.value > 0 && !parsedData.cities[city].current.pricePerSqm) {
             const afterL3 = rescueTotalPrice(fredCurrent.value, '');
-            if (afterL3 !== null) {
-              parsedData.cities[city].current.pricePerSqm = { value: afterL3, currency: 'USD' };
+            const guarded = rescuePricePerSqm(afterL3, 'USD');
+            if (guarded !== null) {
+              parsedData.cities[city].current.pricePerSqm = { value: guarded, currency: 'USD' };
               const fredUrl = `https://fred.stlouisfed.org/series/MEDLISPRIPERSQUFEE${msaCode}`;
               dedupPushUrl(sourceUrls, { title: `FRED MEDLISPRIPERSQUFEE${msaCode} — ${city} current price/sqft`, url: fredUrl });
-              logger.debug(`📡 FRED: ${city} current $/sqm = ${afterL3}`);
+              logger.debug(`📡 FRED: ${city} current $/sqm = ${guarded}`);
+            } else if (afterL3 !== null) {
+              logger.warn({ city, value: afterL3, currency: 'USD' }, '🛡️ FRED current $/sqm exceeded physical ceiling — nulled');
             }
           }
 
           if (fredHistorical && fredHistorical.value > 0 && !parsedData.cities[city].historical.pricePerSqm) {
             const afterL3 = rescueTotalPrice(fredHistorical.value, '');
-            if (afterL3 !== null) {
-              parsedData.cities[city].historical.pricePerSqm = { value: afterL3, currency: 'USD' };
+            const guarded = rescuePricePerSqm(afterL3, 'USD');
+            if (guarded !== null) {
+              parsedData.cities[city].historical.pricePerSqm = { value: guarded, currency: 'USD' };
               // Store the actual FRED observation date so downstream code can surface the proxy-year
               // (e.g. targetYear=2000, FRED starts 2016 → observationDate='2016-01-01')
               parsedData.cities[city].historical.pricePerSqmObservationDate = fredHistorical.date || null;
               const fredUrl = `https://fred.stlouisfed.org/series/MEDLISPRIPERSQUFEE${msaCode}`;
               dedupPushUrl(sourceUrls, { title: `FRED MEDLISPRIPERSQUFEE${msaCode} — ${city} historical price/sqft`, url: fredUrl });
               const obsYear = fredHistorical.date ? fredHistorical.date.slice(0, 4) : histYear;
-              logger.debug(`📡 FRED: ${city} historical (target:${histYear} obs:${obsYear}) $/sqm = ${afterL3}`);
+              logger.debug(`📡 FRED: ${city} historical (target:${histYear} obs:${obsYear}) $/sqm = ${guarded}`);
+            } else if (afterL3 !== null) {
+              logger.warn({ city, value: afterL3, currency: 'USD' }, '🛡️ FRED historical $/sqm exceeded physical ceiling — nulled');
             }
           }
         } catch (err) {
@@ -1396,7 +1402,13 @@ User query: ${query}`;
             // Numbeo shows "Price per Square Feet" OR "Price per Square Met(er|re)" depending on locale.
             // Both patterns are accepted; sqft values are converted to sqm (× 10.7639).
             const SQM_PER_SQFT = 10.7639;
-            const BUY_REGEX = /Price\s+per\s+Square\s+(Fe(?:et|et)|Met(?:er|re)).*?(?:to\s+Buy\s+)?.*?City\s+Cent(?:re|er)\s+(\$|[¥€£₩₹])\s*([\d,]+(?:\.\d+)?)/i;
+            // Tightened to prevent cross-field bleed: no newlines, no `<` (would
+            // mean we crossed an HTML tag boundary), and a 200-char hard cap on
+            // each gap. Without this, the lazy `.*?` would happily skip across
+            // unrelated Numbeo rows (e.g. "Apartment Price in City Centre — ¥80M
+            // total") and capture an apartment TOTAL price as if it were the
+            // per-sqm value, producing absurdities like ¥67M/sqm for Tokyo.
+            const BUY_REGEX = /Price\s+per\s+Square\s+(Fe(?:et|et)|Met(?:er|re))[^\n<]{0,200}?(?:to\s+Buy\s+)?[^\n<]{0,80}?City\s+Cent(?:re|er)\s+(\$|[¥€£₩₹])\s*([\d,]+(?:\.\d+)?)/i;
             const matchBuy = normText.match(BUY_REGEX);
             if (matchBuy) {
               const isSqft = /fe/i.test(matchBuy[1]);
@@ -1410,10 +1422,13 @@ User query: ${query}`;
                 if (sym === '$') {
                   if (!parsedData.cities[city].current.pricePerSqm) {
                     const afterL3 = rescueTotalPrice(raw, normText.slice(0, 500));
-                    if (afterL3 !== null) {
-                      parsedData.cities[city].current.pricePerSqm = { value: afterL3, currency: 'USD' };
+                    const guarded = rescuePricePerSqm(afterL3, 'USD');
+                    if (guarded !== null) {
+                      parsedData.cities[city].current.pricePerSqm = { value: guarded, currency: 'USD' };
                       dedupPushUrl(sourceUrls, { title: `Numbeo Property Investment — ${city}`, url: numbeoUrl });
-                      logger.debug(`📡 Numbeo: ${city} current $/sqm = ${afterL3}${isSqft ? ' (converted from sqft)' : ''}`);
+                      logger.debug(`📡 Numbeo: ${city} current $/sqm = ${guarded}${isSqft ? ' (converted from sqft)' : ''}`);
+                    } else if (afterL3 !== null) {
+                      logger.warn({ city, value: afterL3, currency: 'USD', raw, isSqft }, '🛡️ Numbeo USD current $/sqm exceeded physical ceiling — likely regex bleed across HTML rows, nulled');
                     }
                   }
                 } else {
@@ -1429,8 +1444,17 @@ User query: ${query}`;
                     detectedCurrency = (expected === 'CNY' || expected === 'JPY') ? expected : 'JPY';
                   }
                   if (detectedCurrency) {
-                    numbeoLcuValue = { value: raw, currency: detectedCurrency, isSqft };
-                    logger.debug(`📡 Numbeo: ${city} LCU price/sqm = ${sym}${raw} (${detectedCurrency}${isSqft ? ', converted from sqft — Phase 0 BIS anchor skipped' : ', BIS anchor'})`);
+                    // Apply physical-market ceiling BEFORE this becomes the BIS
+                    // anchor — otherwise a single bad regex match (e.g. Tokyo
+                    // ¥67M/sqm from cross-field bleed) would propagate into the
+                    // BIS backcast and contaminate the historical bucket too.
+                    const guarded = rescuePricePerSqm(raw, detectedCurrency);
+                    if (guarded !== null) {
+                      numbeoLcuValue = { value: guarded, currency: detectedCurrency, isSqft };
+                      logger.debug(`📡 Numbeo: ${city} LCU price/sqm = ${sym}${guarded} (${detectedCurrency}${isSqft ? ', converted from sqft — Phase 0 BIS anchor skipped' : ', BIS anchor'})`);
+                    } else {
+                      logger.warn({ city, value: raw, currency: detectedCurrency, isSqft }, '🛡️ Numbeo LCU $/sqm exceeded physical ceiling — likely regex bleed, BIS anchor NOT set');
+                    }
                   }
                 }
               }
@@ -1461,14 +1485,19 @@ User query: ${query}`;
               phase0LcuAnchor ? phase0LcuAnchor.currency : null
             );
             if (intlHist) {
-              parsedData.cities[city].historical.pricePerSqm = { value: intlHist.value, currency: intlHist.currency };
-              if (intlHist.sourceUrl) {
-                dedupPushUrl(sourceUrls, {
-                  title: `${city} historical price/sqm ${intlHist.date ? '(' + intlHist.date + ')' : ''}`,
-                  url: intlHist.sourceUrl
-                });
+              const guarded = rescuePricePerSqm(intlHist.value, intlHist.currency);
+              if (guarded !== null) {
+                parsedData.cities[city].historical.pricePerSqm = { value: guarded, currency: intlHist.currency };
+                if (intlHist.sourceUrl) {
+                  dedupPushUrl(sourceUrls, {
+                    title: `${city} historical price/sqm ${intlHist.date ? '(' + intlHist.date + ')' : ''}`,
+                    url: intlHist.sourceUrl
+                  });
+                }
+                logger.debug({ city, year: histYear, value: guarded, currency: intlHist.currency }, '📡 IntlHist: price/sqm');
+              } else {
+                logger.warn({ city, value: intlHist.value, currency: intlHist.currency }, '🛡️ IntlHist historical $/sqm exceeded physical ceiling — nulled');
               }
-              logger.debug({ city, year: histYear, value: intlHist.value, currency: intlHist.currency }, '📡 IntlHist: price/sqm');
             }
           }
         } catch (err) {
@@ -1496,25 +1525,40 @@ User query: ${query}`;
       const indicator = isUS ? 'NY.GNP.PCAP.CD' : 'NY.GNP.PCAP.CN';
 
       try {
-        const [currentIncome, historicalIncome] = await Promise.all([
+        let [currentIncome, historicalIncome] = await Promise.all([
           fetchFn(undefined),
           fetchFn(histYear)
         ]);
+
+        // When LCU fetch returns null (data gap, rate-limit, or network hiccup),
+        // fall back to the USD Atlas indicator so the Income column stays populated.
+        // Years will correctly show N/A (price is LCU, income is USD → guard fires),
+        // but income itself won't be blank, making the mismatch visible to the user.
+        if (!isUS) {
+          if (!currentIncome) {
+            currentIncome = await fetchWorldBankGni(iso2, undefined);
+            if (currentIncome) logger.debug(`📡 WorldBank: ${rawCountry} LCU null — USD Atlas fallback current=${currentIncome.value}`);
+          }
+          if (!historicalIncome) {
+            historicalIncome = await fetchWorldBankGni(iso2, histYear);
+            if (historicalIncome) logger.debug(`📡 WorldBank: ${rawCountry} LCU null — USD Atlas fallback hist=${historicalIncome.value}`);
+          }
+        }
 
         if (!parsedData.cities[city]) {
           parsedData.cities[city] = emptyCityRecord();
         }
 
         if (currentIncome && !parsedData.cities[city].current.income) {
-          parsedData.cities[city].current.income = { value: currentIncome.value, currency: currentIncome.currency, type: 'single' };
+          parsedData.cities[city].current.income = { value: currentIncome.value, currency: normaliseCurrency(currentIncome.currency), type: 'single' };
         }
         if (historicalIncome && !parsedData.cities[city].historical.income) {
-          parsedData.cities[city].historical.income = { value: historicalIncome.value, currency: historicalIncome.currency, type: 'single' };
+          parsedData.cities[city].historical.income = { value: historicalIncome.value, currency: normaliseCurrency(historicalIncome.currency), type: 'single' };
         }
 
         const wbUrl = `https://data.worldbank.org/indicator/${indicator}?locations=${iso2}`;
         dedupPushUrl(sourceUrls, { title: `World Bank GNI per capita — ${rawCountry} (${indicator})`, url: wbUrl });
-        logger.debug(`📡 WorldBank: ${rawCountry} [${lcu}] income current=${currentIncome?.value ?? 'N/A'} hist=${historicalIncome?.value ?? 'N/A'}`);
+        logger.debug({ city, iso2, lcu, currentIncome: currentIncome?.value ?? null, currentCurrency: currentIncome?.currency ?? null, histIncome: historicalIncome?.value ?? null }, `📡 WorldBank GNI resolved`);
       } catch (err) {
         logger.warn({ city, err: err.message }, '📡 WorldBank fetch failed, falling through');
       }
@@ -1593,7 +1637,7 @@ User query: ${query}`;
     if (extracted.value == null || !isFinite(extracted.value) || extracted.value <= 0) {
       return null;
     }
-    const currency = extracted.currency || 'USD';
+    const currency = normaliseCurrency(extracted.currency) || 'USD';
     const rawValue = extracted.value;
     const value = rescueDroppedSuffix(rawValue, body);
     return {
@@ -1928,7 +1972,15 @@ Rules:
               if (afterL3 !== value) {
                 logger.debug(`🔧 L3 price guard: ${value} → ${afterL3 ?? 'null'} ${currency} (${matchedCity}/${period})`);
               }
-              value = afterL3;
+              // L3b: physical-market ceiling — even when the text doesn't say
+              // "median home price", an absurd per-sqm value (post-suffix-
+              // rescue) is almost always a unit confusion or a totaled-out
+              // apartment price. Reject before it pollutes downstream buckets.
+              const afterCeiling = rescuePricePerSqm(afterL3, normaliseCurrency(currency, matchedCity));
+              if (afterCeiling !== afterL3) {
+                logger.warn({ matchedCity, period, value: afterL3, currency }, '🛡️ Dog-walk $/sqm exceeded physical ceiling — nulled');
+              }
+              value = afterCeiling;
             } else if (resolvedType === 'income') {
               // L3: Income contamination guard — text-pattern + min-sanity +
               // structural ceiling (Monaco/Switz/Lux median × 1.5). Currency-
@@ -1948,10 +2000,11 @@ Rules:
             }
             const bucket = parsedData.cities[matchedCity][period];
             if (!bucket[resolvedType]) {
+              const normCurr = normaliseCurrency(currency, matchedCity);
               bucket[resolvedType] = resolvedType === 'income'
-                ? { value, currency, type: 'single' }
-                : { value, currency };
-              logger.debug(`👁️ Extract #${i + 1}: ${matchedCity}/${period}/${resolvedType} = ${value} ${currency}`);
+                ? { value, currency: normCurr, type: 'single' }
+                : { value, currency: normCurr };
+              logger.debug(`👁️ Extract #${i + 1}: ${matchedCity}/${period}/${resolvedType} = ${value} ${normCurr}`);
             } else {
               logger.debug(`👁️ Extract #${i + 1}: ${matchedCity}/${period}/${resolvedType} already filled, skipping`);
             }
@@ -2016,8 +2069,9 @@ Rules:
             }
             value = afterL3;
             if (value != null && !data[period].income) {
-              data[period].income = { value, currency, type: 'single' };
-              logger.debug(`🔄 Fallback hit: ${city}/${period}/income = ${value} ${currency} (via ${country})`);
+              const normCurr = normaliseCurrency(currency, city);
+              data[period].income = { value, currency: normCurr, type: 'single' };
+              logger.debug(`🔄 Fallback hit: ${city}/${period}/income = ${value} ${normCurr} (via ${country})`);
             } else if (value == null) {
               logger.debug(`🔄 Fallback nulled by L3 guard: ${city}/${period}/income (via ${country})`);
             }
@@ -2094,14 +2148,19 @@ Rules:
           lcuCurrency: currentPsm.currency,
         });
         if (bisResult) {
-          data.historical.pricePerSqm = { value: bisResult.value, currency: bisResult.currency };
-          if (bisResult.sourceUrl) {
-            dedupPushUrl(sourceUrls, {
-              title: `BIS ${country} residential property index — ${cityKey} historical`,
-              url: bisResult.sourceUrl
-            });
+          const guarded = rescuePricePerSqm(bisResult.value, bisResult.currency);
+          if (guarded !== null) {
+            data.historical.pricePerSqm = { value: guarded, currency: bisResult.currency };
+            if (bisResult.sourceUrl) {
+              dedupPushUrl(sourceUrls, {
+                title: `BIS ${country} residential property index — ${cityKey} historical`,
+                url: bisResult.sourceUrl
+              });
+            }
+            logger.debug(`📡 BIS fill (post-dogwalk): ${cityKey} historical = ${guarded} ${bisResult.currency} (anchor: ${currentPsm.value} ${currentPsm.currency})`);
+          } else {
+            logger.warn({ cityKey, value: bisResult.value, currency: bisResult.currency, anchorValue: currentPsm.value, anchorCurrency: currentPsm.currency }, '🛡️ BIS backcast $/sqm exceeded physical ceiling — likely bad anchor, nulled');
           }
-          logger.debug(`📡 BIS fill (post-dogwalk): ${cityKey} historical = ${bisResult.value} ${bisResult.currency} (anchor: ${currentPsm.value} ${currentPsm.currency})`);
         }
       } catch (err) {
         logger.warn({ cityKey, err: err.message }, '📡 BIS fill (post-dogwalk) failed');
