@@ -124,12 +124,22 @@ Read source is **PostgreSQL** (`anatta_messages` table, tenant schema). No Disco
 
 **Setup:** Dashboard → Edit Book → HTTP Token → Generate Token. Copy immediately; only the SHA-256 hash is stored.
 
-**Endpoint:**
+**One token, both directions.** The same Bearer token covers read and write for the same book. Token is resolved via `core.book_registry.agent_token_hash` — single source of truth, O(1) lookup, no per-tenant silo scan.
+
+**Endpoints:**
+
+```
+POST /api/webhook/:fractalId
+Authorization: Bearer <agent_token>
+Content-Type: application/json
+```
 
 ```
 GET /api/webhook/:fractalId/messages
 Authorization: Bearer <agent_token>
 ```
+
+Both endpoints validate the token against `core.book_registry`. A token issued for Book A returns 403 (not 401) if presented to Book B — the distinction signals "valid credential, wrong door" vs "unknown credential".
 
 | Param | Type | Description |
 |-------|------|-------------|

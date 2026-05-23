@@ -368,11 +368,37 @@ function registerPipeRoutes(app, deps) {
     app.post('/api/webhook/:fractalId', webhookLimiter, async (req, res) => {
         try {
             const fractalIdParam = req.params.fractalId;
-            const fractalIdMod = require('../utils/fractal-id');
-            const parsed = fractalIdMod.parse(fractalIdParam);
-            if (!parsed || !parsed.tenantId || (parsed.type !== 'book' && parsed.type !== 'bridge')) {
-                return res.status(400).json({ error: 'Invalid book ID format' });
+
+            // Auth first — O(1) lookup from core.book_registry.
+            // core.book_registry is the single source of truth for the token↔book mapping.
+            // Same pattern as POST /api/agent/message. No fractalId parse needed —
+            // the registry row already carries tenant_schema and confirms the fractal_id.
+            const authHeader = req.headers.authorization;
+            if (!authHeader || !authHeader.startsWith('Bearer ')) {
+                return res.status(401).json({ error: 'Authorization required. Use: Authorization: Bearer <agent_token>' });
             }
+            const providedToken = authHeader.slice(7).trim();
+            if (!providedToken) {
+                return res.status(401).json({ error: 'Bearer token must not be empty' });
+            }
+            const crypto = require('crypto');
+            const providedHash = crypto.createHash('sha256').update(providedToken).digest('hex');
+            const registryRow = await pool.query(
+                `SELECT fractal_id, tenant_schema FROM core.book_registry WHERE agent_token_hash = $1`,
+                [providedHash]
+            );
+            if (registryRow.rows.length === 0) {
+                return res.status(401).json({ error: 'Invalid agent token' });
+            }
+            const { fractal_id: registryFractalId, tenant_schema: tenantSchema } = registryRow.rows[0];
+            // Defense in depth: the token must be scoped to THIS specific book.
+            if (registryFractalId !== fractalIdParam) {
+                return res.status(403).json({ error: 'Token is not authorized for this book' });
+            }
+            if (!VALID_SCHEMA_PATTERN.test(tenantSchema)) {
+                return res.status(400).json({ error: 'Invalid tenant schema' });
+            }
+
             const payloadResult = webhookPayloadSchema.safeParse(req.body);
             if (!payloadResult.success) {
                 return res.status(400).json({
@@ -381,21 +407,6 @@ function registerPipeRoutes(app, deps) {
                 });
             }
             const { text, username, avatar_url, media_url, media_type, phone, email } = payloadResult.data;
-            if (!Number.isInteger(parsed.tenantId) || parsed.tenantId <= 0 || parsed.tenantId > 999999) {
-                return res.status(400).json({ error: 'Invalid tenant ID' });
-            }
-            const tenantSchema = `tenant_${parsed.tenantId}`;
-            if (!VALID_SCHEMA_PATTERN.test(tenantSchema)) {
-                return res.status(400).json({ error: 'Invalid tenant schema' });
-            }
-
-            const bookCheck = await pool.query(
-                format(`SELECT id FROM %I.books WHERE fractal_id = $1`, tenantSchema),
-                [fractalIdParam]
-            );
-            if (bookCheck.rows.length === 0) {
-                return res.status(404).json({ error: 'Book not found' });
-            }
 
             if (await totalQueueDepth() >= MAX_QUEUE_SIZE) {
                 logger.warn({ queueSize: getCachedDepth() }, 'Queue full — rejecting webhook message');
@@ -465,23 +476,25 @@ function registerPipeRoutes(app, deps) {
             if (isNaN(beforeTs.getTime())) return res.status(400).json({ error: 'Invalid before cursor — date value is out of range' });
         }
 
+        // Canonical sort key: sent_at (inpipe origination time) when available,
+        // falling back to recorded_at (server insertion time) for older rows.
         const queryParams = [fractalIdParam, limit + 1];
         let whereClause = 'book_fractal_id = $1';
         if (afterTs) {
             queryParams.push(afterTs.toISOString());
-            whereClause += ` AND recorded_at > $${queryParams.length}`;
+            whereClause += ` AND COALESCE(sent_at, recorded_at) > $${queryParams.length}`;
         } else if (beforeTs) {
             queryParams.push(beforeTs.toISOString());
-            whereClause += ` AND recorded_at < $${queryParams.length}`;
+            whereClause += ` AND COALESCE(sent_at, recorded_at) < $${queryParams.length}`;
         }
 
         const msgRows = await pool.query(
             format(
                 `SELECT id, message_fractal_id, sender_name, body, has_attachment,
-                        attachment_cid, media_url, recorded_at
+                        attachment_cid, media_url, recorded_at, sent_at
                  FROM %I.anatta_messages
                  WHERE ${whereClause}
-                 ORDER BY recorded_at DESC
+                 ORDER BY COALESCE(sent_at, recorded_at) DESC
                  LIMIT $2`,
                 tenantSchema
             ),
@@ -494,14 +507,16 @@ function registerPipeRoutes(app, deps) {
         const PINATA_GATEWAY = 'https://gateway.pinata.cloud/ipfs';
         const messages = rows.map(row => {
             const cid = row.attachment_cid || null;
+            // Prefer sent_at (original send time) over recorded_at (server insertion time)
+            const effectiveTs = row.sent_at || row.recorded_at;
             return {
                 id: row.id,
                 message_fractal_id: row.message_fractal_id || null,
                 sender: row.sender_name || null,
                 text: row.body || '',
-                timestamp: row.recorded_at instanceof Date
-                    ? row.recorded_at.toISOString()
-                    : new Date(row.recorded_at).toISOString(),
+                timestamp: effectiveTs instanceof Date
+                    ? effectiveTs.toISOString()
+                    : new Date(effectiveTs).toISOString(),
                 has_media: row.has_attachment || false,
                 media_ipfs_cid: cid,
                 media_ipfs_gateway_url: cid ? `${PINATA_GATEWAY}/${cid}` : null,
@@ -531,45 +546,44 @@ function registerPipeRoutes(app, deps) {
     app.get('/api/webhook/:fractalId/messages', webhookLimiter, async (req, res) => {
         try {
             const fractalIdParam = req.params.fractalId;
-            const fractalIdMod = require('../utils/fractal-id');
-            const parsed = fractalIdMod.parse(fractalIdParam);
-            if (!parsed || !parsed.tenantId || (parsed.type !== 'book' && parsed.type !== 'bridge')) {
-                return res.status(400).json({ error: 'Invalid book ID format' });
-            }
-            if (!Number.isInteger(parsed.tenantId) || parsed.tenantId <= 0 || parsed.tenantId > 999999) {
-                return res.status(400).json({ error: 'Invalid tenant ID' });
-            }
 
-            const tenantSchema = `tenant_${parsed.tenantId}`;
+            // Auth via core.book_registry — single source of truth, same as GET /api/agent/messages.
+            // No tenant silo read; the token hash is the sole credential.
+            const authHeader = req.headers.authorization;
+            if (!authHeader || !authHeader.startsWith('Bearer ')) {
+                return res.status(401).json({ error: 'Authorization required. Use: Authorization: Bearer <agent_token>' });
+            }
+            const providedToken = authHeader.slice(7).trim();
+            if (!providedToken) {
+                return res.status(401).json({ error: 'Bearer token must not be empty' });
+            }
+            const crypto = require('crypto');
+            const providedHash = crypto.createHash('sha256').update(providedToken).digest('hex');
+            const registryRow = await pool.query(
+                `SELECT fractal_id, tenant_schema FROM core.book_registry WHERE agent_token_hash = $1`,
+                [providedHash]
+            );
+            if (registryRow.rows.length === 0) {
+                return res.status(401).json({ error: 'Invalid agent token' });
+            }
+            const { fractal_id: registryFractalId, tenant_schema: tenantSchema } = registryRow.rows[0];
+            // Defense in depth: the token must be scoped to THIS specific book.
+            if (registryFractalId !== fractalIdParam) {
+                return res.status(403).json({ error: 'Token is not authorized for this book' });
+            }
             if (!VALID_SCHEMA_PATTERN.test(tenantSchema)) {
                 return res.status(400).json({ error: 'Invalid tenant schema' });
             }
 
             const bookResult = await pool.query(
-                format(`SELECT id, name, agent_token_hash FROM %I.books WHERE fractal_id = $1`, tenantSchema),
+                format(`SELECT id, name FROM %I.books WHERE fractal_id = $1`, tenantSchema),
                 [fractalIdParam]
             );
             if (bookResult.rows.length === 0) {
                 return res.status(404).json({ error: 'Book not found' });
             }
 
-            const tokenHash = bookResult.rows[0].agent_token_hash;
-            if (!tokenHash) {
-                return res.status(403).json({ error: 'Agent access not enabled for this book. Generate a token in the dashboard.' });
-            }
-            const authHeader = req.headers.authorization;
-            if (!authHeader || !authHeader.startsWith('Bearer ')) {
-                return res.status(401).json({ error: 'Authorization required. Use: Authorization: Bearer <agent_token>' });
-            }
-            const providedToken = authHeader.slice(7);
-            const crypto = require('crypto');
-            const providedHash = crypto.createHash('sha256').update(providedToken).digest('hex');
-            if (!crypto.timingSafeEqual(Buffer.from(tokenHash, 'hex'), Buffer.from(providedHash, 'hex'))) {
-                return res.status(401).json({ error: 'Invalid agent token' });
-            }
-
-            const book = bookResult.rows[0];
-            return await fetchAndRespondMessages({ tenantSchema, fractalIdParam, book, req, res });
+            return await fetchAndRespondMessages({ tenantSchema, fractalIdParam, book: bookResult.rows[0], req, res });
         } catch (error) {
             logger.error({ err: error }, 'Webhook read: error fetching messages');
             res.status(500).json({ error: 'Failed to fetch messages' });

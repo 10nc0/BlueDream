@@ -37,6 +37,13 @@ function register(app, deps) {
 
             const stamp = phiBreathe.phiBreatheCount;
 
+            const { sent_at } = req.validated;
+            // Validate sent_at is a real date if provided (schema already does ISO check,
+            // but guard here too so a bad value never reaches the DB parameter).
+            const sentAtValue = (sent_at && !isNaN(new Date(sent_at).getTime()))
+                ? new Date(sent_at).toISOString()
+                : null;
+
             if (existingDrop.rows.length > 0) {
                 const combinedText = existingDrop.rows[0].metadata_text + ' ' + metadata_text;
                 extracted = metadataExtractor.extract(combinedText);
@@ -47,18 +54,19 @@ function register(app, deps) {
                         extracted_tags = $2::text[],
                         extracted_dates = $3::text[],
                         phi_breathe_stamp = $4,
+                        sent_at = COALESCE($7, sent_at),
                         updated_at = NOW()
                     WHERE book_id = $5 AND discord_message_id = $6
                     RETURNING *
-                `, [combinedText, extracted.tags, extracted.dates, stamp, internalBookId, discord_message_id]);
+                `, [combinedText, extracted.tags, extracted.dates, stamp, internalBookId, discord_message_id, sentAtValue]);
             } else {
                 extracted = metadataExtractor.extract(metadata_text);
 
                 dropResult = await client.query(`
-                    INSERT INTO ${tenantSchema}.drops (book_id, discord_message_id, metadata_text, extracted_tags, extracted_dates, phi_breathe_stamp)
-                    VALUES ($1, $2, $3, $4::text[], $5::text[], $6)
+                    INSERT INTO ${tenantSchema}.drops (book_id, discord_message_id, metadata_text, extracted_tags, extracted_dates, phi_breathe_stamp, sent_at)
+                    VALUES ($1, $2, $3, $4::text[], $5::text[], $6, $7)
                     RETURNING *
-                `, [internalBookId, discord_message_id, metadata_text, extracted.tags, extracted.dates, stamp]);
+                `, [internalBookId, discord_message_id, metadata_text, extracted.tags, extracted.dates, stamp, sentAtValue]);
             }
 
             res.json({ success: true, drop: dropResult.rows[0], extracted });
@@ -84,7 +92,7 @@ function register(app, deps) {
             }
 
             const dropsResult = await client.query(
-                `SELECT * FROM ${tenantSchema}.drops WHERE book_id = $1 ORDER BY created_at DESC`,
+                `SELECT * FROM ${tenantSchema}.drops WHERE book_id = $1 ORDER BY COALESCE(sent_at, created_at) DESC`,
                 [bookResult.rows[0].id]
             );
 
@@ -261,7 +269,7 @@ function register(app, deps) {
                           SELECT 1 FROM unnest(extracted_tags) t
                           WHERE lower(t) LIKE $2
                       )
-                    ORDER BY created_at DESC
+                    ORDER BY COALESCE(sent_at, created_at) DESC
                     LIMIT 100
                 `, [bookInternalId, `${tagTerm}%`]);
             } else {
@@ -277,7 +285,7 @@ function register(app, deps) {
                             WHERE lower(t) LIKE $4
                         )
                     )
-                    ORDER BY rank DESC, created_at DESC
+                    ORDER BY rank DESC, COALESCE(sent_at, created_at) DESC
                     LIMIT 100
                 `, [query, bookInternalId, ftsConfig, `%${query.toLowerCase()}%`]);
             }

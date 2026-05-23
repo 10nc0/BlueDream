@@ -7,13 +7,15 @@ function register(app, deps) {
     const { requireAuth } = middleware;
     const { logAudit } = helpers || {};
 
+    // Check whether an agent token exists for this book.
+    // Reads from core.book_registry — single source of truth (Task #211).
+    // The tenant-schema column (tenantSchema.books.agent_token_hash) is dormant.
     app.get('/api/books/:book_id/agent-token', requireAuth, async (req, res) => {
         try {
             const book = await verifyBookOwnership(pool, req.params.book_id, req.userEmail, req.tenantSchema);
             if (!book) return res.status(404).json({ error: 'Book not found or access denied' });
-            assertValidSchemaName(req.tenantSchema);
             const result = await pool.query(
-                `SELECT agent_token_hash FROM ${req.tenantSchema}.books WHERE fractal_id = $1`,
+                `SELECT agent_token_hash FROM core.book_registry WHERE fractal_id = $1`,
                 [req.params.book_id]
             );
             if (result.rows.length === 0) return res.status(404).json({ error: 'Book not found' });
@@ -24,6 +26,8 @@ function register(app, deps) {
         }
     });
 
+    // Generate a new agent token for this book.
+    // Only writes to core.book_registry (Task #211 — tenant silo retired).
     app.post('/api/books/:book_id/agent-token', requireAuth, async (req, res) => {
         try {
             const book = await verifyBookOwnership(pool, req.params.book_id, req.userEmail, req.tenantSchema);
@@ -43,12 +47,7 @@ function register(app, deps) {
             }
             const rawToken = crypto.randomBytes(32).toString('base64url');
             const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
-            await pool.query(
-                `UPDATE ${req.tenantSchema}.books SET agent_token_hash = $1 WHERE fractal_id = $2`,
-                [tokenHash, req.params.book_id]
-            );
-            // Mirror to core.book_registry so POST /api/agent/message can do an
-            // O(1) cross-tenant lookup without scanning every tenant schema.
+            // Single write — core.book_registry is the sole token store.
             await pool.query(
                 `UPDATE core.book_registry SET agent_token_hash = $1 WHERE fractal_id = $2`,
                 [tokenHash, req.params.book_id]
@@ -64,16 +63,13 @@ function register(app, deps) {
         }
     });
 
+    // Revoke the agent token for this book.
+    // Only clears core.book_registry (Task #211 — tenant silo retired).
     app.delete('/api/books/:book_id/agent-token', requireAuth, async (req, res) => {
         try {
             const book = await verifyBookOwnership(pool, req.params.book_id, req.userEmail, req.tenantSchema);
             if (!book) return res.status(404).json({ error: 'Book not found or access denied' });
-            assertValidSchemaName(req.tenantSchema);
-            await pool.query(
-                `UPDATE ${req.tenantSchema}.books SET agent_token_hash = NULL WHERE fractal_id = $1`,
-                [req.params.book_id]
-            );
-            // Clear the core mirror so the token stops routing immediately.
+            // Clear the core registry so the token stops routing immediately.
             await pool.query(
                 `UPDATE core.book_registry SET agent_token_hash = NULL WHERE fractal_id = $1`,
                 [req.params.book_id]

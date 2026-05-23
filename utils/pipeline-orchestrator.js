@@ -700,6 +700,7 @@ class PipelineOrchestrator {
       return {
         success: true,
         answer: state.finalAnswer,
+        draftAnswer: state.draftAnswer || null,
         mode: state.mode,
         source,
         preflight: state.preflight,
@@ -1289,11 +1290,20 @@ User query: ${query}`;
       { role: 'user', content: finalPrompt }
     ];
     
+    // BYOK Watchtower: use caller's key/model/url for S2 reasoning only.
+    // auditToken (NyanBook's key) is untouched — their model answers, we verify.
+    const _reasoningToken = input.byokToken || this.groqToken;
+    const _reasoningUrl   = input.byokUrl   || this.llmUrl;
+    const _reasoningModel = input.byokModel || this.llmModel;
+    if (input.byokToken) {
+      logger.info({ model: _reasoningModel, url: _reasoningUrl }, '🔑 BYOK Watchtower: S2 reasoning via caller key');
+    }
+
     try {
       const response = await this.groqWithRetry({
-        url: this.llmUrl,
+        url: _reasoningUrl,
         data: {
-          model: this.llmModel,
+          model: _reasoningModel,
           messages,
           temperature: temperature || AI_MODELS.TEMPERATURE_REASONING,
           max_tokens: maxTokens || 1500,
@@ -1301,7 +1311,7 @@ User query: ${query}`;
         },
         config: {
           headers: {
-            'Authorization': `Bearer ${this.groqToken}`,
+            'Authorization': `Bearer ${_reasoningToken}`,
             'Content-Type': 'application/json'
           },
           timeout: this.llmTimeouts.reasoning

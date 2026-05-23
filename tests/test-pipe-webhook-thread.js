@@ -84,6 +84,29 @@ test('missing Authorization header is rejected', () => {
 // ── 3. Thread credential resolution ───────────────────────────────────────────
 console.log('\n\uD83E\uDDF5  Thread credential resolution');
 
+// Task #207: lib/output-resolver is now the canonical entry point.
+const { resolveOutput } = require('../lib/output-resolver');
+
+test('packet-queue → sendToLedger envelope: thread_id reaches the URL builder', () => {
+    // Regression for the limbo-channel bug — caller used to pass flat {threadId} but
+    // discord-webhooks reads {output:{thread_id}}. Mismatch dropped delivery to parent
+    // channel. After Task #207, caller passes options.output = resolveOutput(book,'output_01').
+    const book = {
+        output_01_url: 'https://discord.com/api/webhooks/AAA/BBB',
+        output_credentials: { output_01: { type: 'thread', thread_id: 'TTT', webhook_url: 'https://discord.com/api/webhooks/AAA/BBB' } }
+    };
+    const options = { isMedia: false, output: resolveOutput(book, 'output_01') };
+    assert(options.output, 'envelope must be present');
+    assertEqual(options.output.thread_id, 'TTT');
+
+    const url = new URL(book.output_01_url);
+    url.searchParams.set('wait', 'true');
+    if (options.output?.type === 'thread' && options.output?.thread_id) {
+        url.searchParams.set('thread_id', options.output.thread_id);
+    }
+    assertEqual(url.searchParams.get('thread_id'), 'TTT');
+});
+
 test('nested output_01.thread_id wins over legacy flat thread_id', () => {
     const creds = {
         thread_id: 'legacy-flat-id',
@@ -136,44 +159,43 @@ test('UI loads token section for suspended (deactivated archive) book', () => {
     assert(passesActivationGuard(book.status), 'UI must load token status for suspended');
 });
 
-// ── 5 & 6. agent.js sync to core.book_registry ────────────────────────────────
-console.log('\n\uD83D\uDD04  agent.js core.book_registry sync');
+// ── 5 & 6. agent.js single-silo write to core.book_registry (Task #211) ──────
+// Task #211 hoisted the token store to core.book_registry exclusively.
+// The tenant-schema column (tenantSchema.books.agent_token_hash) is now dormant.
+// Generate and revoke each issue exactly ONE query — to core.book_registry only.
+console.log('\n\uD83D\uDD04  agent.js core.book_registry (single silo, Task #211)');
 
-test('generate: both tenant and core UPDATEs are issued', () => {
+test('generate: only core.book_registry UPDATE is issued (tenant silo retired)', () => {
     const queries = [];
     const trackQuery = (sql, params) => { queries.push({ sql, params }); };
 
     const rawToken = 'test_token_for_generate';
     const tokenHash = hashToken(rawToken);
     const fractalId = 'book_t1_abc123def456';
-    const tenantSchema = 'tenant_1';
 
-    // Simulate what agent.js POST handler does (synchronous tracking)
-    trackQuery(`UPDATE ${tenantSchema}.books SET agent_token_hash = $1 WHERE fractal_id = $2`, [tokenHash, fractalId]);
+    // Simulate what agent.js POST handler does after Task #211 — single write
     trackQuery(`UPDATE core.book_registry SET agent_token_hash = $1 WHERE fractal_id = $2`, [tokenHash, fractalId]);
 
-    assertEqual(queries.length, 2, 'expected exactly 2 UPDATE queries');
-    assert(queries[0].sql.includes(tenantSchema), 'first query must target tenant schema');
-    assert(queries[1].sql.includes('core.book_registry'), 'second query must target core.book_registry');
-    assertEqual(queries[0].params[0], tokenHash, 'tenant UPDATE must include token hash');
-    assertEqual(queries[1].params[0], tokenHash, 'core UPDATE must include token hash');
+    assertEqual(queries.length, 1, 'expected exactly 1 UPDATE query (core only)');
+    assert(queries[0].sql.includes('core.book_registry'), 'query must target core.book_registry');
+    assert(!queries[0].sql.includes('tenant_'), 'query must NOT target tenant schema');
+    assertEqual(queries[0].params[0], tokenHash, 'core UPDATE must include token hash');
+    assertEqual(queries[0].params[1], fractalId, 'core UPDATE must include fractal_id');
 });
 
-test('revoke: both tenant NULL and core NULL UPDATEs are issued', () => {
+test('revoke: only core.book_registry NULL UPDATE is issued (tenant silo retired)', () => {
     const queries = [];
     const trackQuery = (sql, params) => { queries.push({ sql, params }); };
 
     const fractalId = 'book_t1_abc123def456';
-    const tenantSchema = 'tenant_1';
 
-    // Simulate what agent.js DELETE handler does (synchronous tracking)
-    trackQuery(`UPDATE ${tenantSchema}.books SET agent_token_hash = NULL WHERE fractal_id = $1`, [fractalId]);
+    // Simulate what agent.js DELETE handler does after Task #211 — single clear
     trackQuery(`UPDATE core.book_registry SET agent_token_hash = NULL WHERE fractal_id = $1`, [fractalId]);
 
-    assertEqual(queries.length, 2, 'expected exactly 2 NULL UPDATE queries');
-    assert(queries[0].sql.includes('NULL'), 'tenant UPDATE must set NULL');
-    assert(queries[1].sql.includes('core.book_registry'), 'second query must target core');
-    assert(queries[1].sql.includes('NULL'), 'core UPDATE must set NULL');
+    assertEqual(queries.length, 1, 'expected exactly 1 NULL UPDATE query (core only)');
+    assert(queries[0].sql.includes('core.book_registry'), 'query must target core.book_registry');
+    assert(!queries[0].sql.includes('tenant_'), 'query must NOT target tenant schema');
+    assert(queries[0].sql.includes('NULL'), 'core UPDATE must set NULL');
 });
 
 // ── 10. POST /api/agent/message returns book_id in response ───────────────────

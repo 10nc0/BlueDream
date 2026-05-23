@@ -759,6 +759,15 @@ app.listen(PORT, '0.0.0.0', async () => {
         logger.warn({ err }, 'Agent token backfill module failed to load — skipping (non-fatal)');
     }
 
+    // One-shot normalize: rewrite legacy-flat output_credentials.thread_id
+    // into canonical nested output_01 shape. Idempotent; safe on every boot.
+    try {
+        const { normalizeOutputCredentials } = require('./lib/normalize-output-credentials');
+        await normalizeOutputCredentials(pool);
+    } catch (err) {
+        logger.warn({ err: err.message, stack: err.stack }, 'Output credentials normalizer failed — skipping (non-fatal)');
+    }
+
     // Register all bots in the NyanMesh node registry (in-memory, snapshotted to DB at 86-breath).
     // Initial status reflects actual bot readiness (may be 'offline' if token missing).
     phiBreathe.registerNode('hermes', { role: 'creator', symbol: 'φ', status: hermesBot.isReady() ? 'online' : 'offline' });

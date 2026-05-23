@@ -1832,18 +1832,18 @@
         }
 
         // Helper function to format timestamp with timezone
+        // Uses undefined locale so Intl.DateTimeFormat resolves from the browser
+        // automatically — Bangkok user sees +07, London user sees BST/GMT, etc.
         function formatTimestampWithTZ(timestamp) {
             const date = new Date(timestamp);
-            return date.toLocaleString('en-US', {
-                timeZone: 'America/Los_Angeles',
+            return date.toLocaleString(undefined, {
                 month: '2-digit',
                 day: '2-digit',
                 year: 'numeric',
                 hour: '2-digit',
                 minute: '2-digit',
                 second: '2-digit',
-                hour12: false,
-                timeZoneName: 'short'
+                hour12: false
             });
         }
 
@@ -1857,13 +1857,14 @@
         }
 
         // Format timestamp Discord-style (Today at 3:45 PM)
+        // Uses undefined locale so the browser's Intl timezone is used automatically.
         function formatDiscordTime(timestamp) {
             const date = new Date(timestamp);
             const now = new Date();
             const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
             const msgDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
             
-            const timeStr = date.toLocaleTimeString('en-US', {
+            const timeStr = date.toLocaleTimeString(undefined, {
                 hour: 'numeric',
                 minute: '2-digit',
                 hour12: true
@@ -1874,7 +1875,7 @@
             } else if (msgDate.getTime() === today.getTime() - 86400000) {
                 return `Yesterday at ${timeStr}`;
             } else {
-                return date.toLocaleDateString('en-US', {
+                return date.toLocaleDateString(undefined, {
                     month: '2-digit',
                     day: '2-digit',
                     year: 'numeric'
@@ -1945,7 +1946,7 @@
             } else if (messageDay.getTime() === yesterday.getTime()) {
                 dayLabel = 'Yesterday';
             } else {
-                dayLabel = dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                dayLabel = dt.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
             }
             
             if (bucketHours === 24) {
@@ -2133,7 +2134,7 @@
                                 📎
                             </a>
                         ` : ''}
-                        <button class="tag-add-btn" data-message-id="${escapeHtml(msg.id)}" data-book-id="${escapeHtml(bookId)}" title="Add tags" style="display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; background: rgba(148, 163, 184, 0.2); border: 1px solid rgba(148, 163, 184, 0.3); border-radius: 4px; color: #cbd5e1; font-size: 0.9rem; transition: all 0.2s; flex-shrink: 0; cursor: pointer; margin: 0; padding: 0; line-height: 1;">
+                        <button class="tag-add-btn" data-message-id="${escapeHtml(msg.id)}" data-book-id="${escapeHtml(bookId)}" data-timestamp="${escapeHtml(msg.timestamp || '')}" title="Add tags" style="display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; background: rgba(148, 163, 184, 0.2); border: 1px solid rgba(148, 163, 184, 0.3); border-radius: 4px; color: #cbd5e1; font-size: 0.9rem; transition: all 0.2s; flex-shrink: 0; cursor: pointer; margin: 0; padding: 0; line-height: 1;">
                             🏷️
                         </button>
                         <label class="custom-checkbox-btn" data-message-id="${escapeHtml(msg.id)}" data-book-id="${escapeHtml(bookId)}" title="Select for export" style="position: relative; display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; background: rgba(148, 163, 184, 0.2); border: 1px solid rgba(148, 163, 184, 0.3); border-radius: 4px; color: #cbd5e1; font-size: 0.9rem; cursor: pointer; margin: 0; padding: 0; flex-shrink: 0; transition: all 0.2s; line-height: 1;">
@@ -6022,7 +6023,7 @@
                             <button class="agent-btn" data-message-id="${escapeHtml(msg.id)}" data-book-id="${escapeHtml(bookId)}" title="🧿 Audit action & closure" style="display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; background: rgba(148, 163, 184, 0.2); border: 1px solid rgba(148, 163, 184, 0.3); border-radius: 4px; color: #cbd5e1; font-size: 0.875rem; transition: all 0.2s; flex-shrink: 0; cursor: pointer; margin: 0; padding: 0; line-height: 1;">
                                 🧿
                             </button>
-                            <button class="tag-add-btn" data-message-id="${escapeHtml(msg.id)}" data-book-id="${escapeHtml(bookId)}" title="Add tags" style="display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; background: rgba(148, 163, 184, 0.2); border: 1px solid rgba(148, 163, 184, 0.3); border-radius: 4px; color: #cbd5e1; font-size: 0.875rem; transition: all 0.2s; flex-shrink: 0; cursor: pointer; margin: 0; padding: 0; line-height: 1;">
+                            <button class="tag-add-btn" data-message-id="${escapeHtml(msg.id)}" data-book-id="${escapeHtml(bookId)}" data-timestamp="${escapeHtml(msg.timestamp || '')}" title="Add tags" style="display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; background: rgba(148, 163, 184, 0.2); border: 1px solid rgba(148, 163, 184, 0.3); border-radius: 4px; color: #cbd5e1; font-size: 0.875rem; transition: all 0.2s; flex-shrink: 0; cursor: pointer; margin: 0; padding: 0; line-height: 1;">
                                 🏷️
                             </button>
                             <label class="custom-checkbox-btn" data-message-id="${escapeHtml(msg.id)}" data-book-id="${escapeHtml(bookId)}" title="Select for export" style="position: relative; display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; background: rgba(148, 163, 184, 0.2); border: 1px solid rgba(148, 163, 184, 0.3); border-radius: 4px; color: #cbd5e1; font-size: 0.875rem; cursor: pointer; margin: 0; padding: 0; flex-shrink: 0; transition: all 0.2s; line-height: 1;">
@@ -8542,17 +8543,16 @@ document.addEventListener('DOMContentLoaded', function() {
 // Uses unified window.authFetch for automatic token refresh + retry
 
 // Save a drop (link metadata to Discord message) - APPENDS to existing tags
-async function saveDrop(bookId, messageId, metadataText, section) {
+async function saveDrop(bookId, messageId, metadataText, section, sentAt) {
     try {
         console.log('💾 Saving drop:', { bookId, messageId, metadataText });
         
+        const body = { book_id: bookId, discord_message_id: messageId, metadata_text: metadataText };
+        if (sentAt) body.sent_at = sentAt;
+        
         const response = await window.authFetch('/api/drops', {
             method: 'POST',
-            body: JSON.stringify({
-                book_id: bookId,
-                discord_message_id: messageId,
-                metadata_text: metadataText
-            })
+            body: JSON.stringify(body)
         });
         
         console.log('📡 Response status:', response.status, response.statusText);
@@ -8785,7 +8785,7 @@ function displayDrop(section, drop, extracted, fractalBookId) {
 }
 
 // Show tag input dialog (modal)
-function showTagInputDialog(messageId, bookId) {
+function showTagInputDialog(messageId, bookId, sentAt) {
     // Create modal overlay
     const modal = document.createElement('div');
     modal.className = 'tag-input-modal';
@@ -8815,6 +8815,7 @@ function showTagInputDialog(messageId, bookId) {
     saveBtn.dataset.action = 'save-tag-dialog';
     saveBtn.dataset.messageId = messageId;
     saveBtn.dataset.bookId = bookId;
+    saveBtn.dataset.sentAt = sentAt || '';
     saveBtn.textContent = 'Save';
     
     buttonsDiv.appendChild(cancelBtn);
@@ -8841,9 +8842,10 @@ function showTagInputDialog(messageId, bookId) {
         if (e.target.hasAttribute('data-action') && e.target.getAttribute('data-action') === 'save-tag-dialog') {
             const metadataText = input.value.trim();
             if (metadataText) {
+                const msgSentAt = e.target.dataset.sentAt || null;
                 const section = document.querySelector(`.message-drop-section[data-message-id="${messageId}"][data-book-id="${bookId}"]`);
                 if (section) {
-                    await saveDrop(bookId, messageId, metadataText, section);
+                    await saveDrop(bookId, messageId, metadataText, section, msgSentAt);
                 }
             }
             modal.remove();
@@ -8858,7 +8860,7 @@ function showTagInputDialog(messageId, bookId) {
             if (metadataText) {
                 const section = document.querySelector(`.message-drop-section[data-message-id="${messageId}"][data-book-id="${bookId}"]`);
                 if (section) {
-                    await saveDrop(bookId, messageId, metadataText, section);
+                    await saveDrop(bookId, messageId, metadataText, section, sentAt || null);
                 }
             }
             modal.remove();
@@ -8938,7 +8940,10 @@ function showBulkTagModal(bookId) {
                     const section = document.querySelector(`.message-drop-section[data-message-id="${messageId}"][data-book-id="${bookId}"]`);
                     if (section) {
                         try {
-                            await saveDrop(bookId, messageId, metadataText, section);
+                            const msgSentAt = document.querySelector(`[data-msg-id="${messageId}"]`)?.dataset?.timestamp
+                                          || document.querySelector(`tr[data-msg-id="${messageId}"]`)?.dataset?.timestamp
+                                          || null;
+                            await saveDrop(bookId, messageId, metadataText, section, msgSentAt);
                             successCount++;
                         } catch (error) {
                             console.error(`Failed to tag message ${messageId}:`, error);
@@ -8972,7 +8977,10 @@ function showBulkTagModal(bookId) {
                     const section = document.querySelector(`.message-drop-section[data-message-id="${messageId}"][data-book-id="${bookId}"]`);
                     if (section) {
                         try {
-                            await saveDrop(bookId, messageId, metadataText, section);
+                            const msgSentAt = document.querySelector(`[data-msg-id="${messageId}"]`)?.dataset?.timestamp
+                                          || document.querySelector(`tr[data-msg-id="${messageId}"]`)?.dataset?.timestamp
+                                          || null;
+                            await saveDrop(bookId, messageId, metadataText, section, msgSentAt);
                             successCount++;
                         } catch (error) {
                             console.error(`Failed to tag message ${messageId}:`, error);
@@ -9234,7 +9242,8 @@ document.addEventListener('click', function(e) {
         e.preventDefault();
         const messageId = target.getAttribute('data-message-id');
         const bookId = target.getAttribute('data-book-id');
-        showTagInputDialog(messageId, bookId);
+        const sentAt = target.getAttribute('data-timestamp') || null;
+        showTagInputDialog(messageId, bookId, sentAt);
         return;
     }
     
@@ -9309,9 +9318,12 @@ document.addEventListener('click', function(e) {
         const section = document.querySelector(`.message-drop-section[data-message-id="${messageId}"]`);
         const input = section?.querySelector('.drop-input');
         const metadataText = input?.value.trim();
+        const sentAt = document.querySelector(`[data-msg-id="${messageId}"]`)?.dataset?.timestamp
+                    || document.querySelector(`tr[data-msg-id="${messageId}"]`)?.dataset?.timestamp
+                    || null;
         
         if (metadataText && bookId) {
-            saveDrop(bookId, messageId, metadataText, section);
+            saveDrop(bookId, messageId, metadataText, section, sentAt);
         }
         return;
     }

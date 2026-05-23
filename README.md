@@ -158,12 +158,16 @@ Every inpipe message also builds a cryptographic provenance capsule: the message
 
 Agents, peer nodes, or forks all use the same HTTP bearer token pattern. Click "Edit Book" to generate, rotate, or revoke tokens from the nyanbook.io — token is unique per tenant x book.
 
-**Two endpoints, one loop:**
+**One token, two sides of the coin:**
+
+The same Bearer token covers both directions — read and write to the same book. No separate credentials.
 
 | Endpoint | Purpose |
 |---|---|
 | `GET /api/webhook/:fractalId/messages` | Pull conversation context (paginated, with `limit`, `after`, `before`) |
 | `POST /api/webhook/:fractalId` | Post a reply back into the ledger (queue-backed, crash-recoverable) |
+
+Both require `Authorization: Bearer <agent_token>`. A token issued for Book A cannot read or write Book B.
 
 **Four interaction models — you choose:**
 

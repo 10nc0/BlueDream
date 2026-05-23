@@ -72,13 +72,32 @@ function registerV1Routes(app, deps) {
         if (auth.error) return res.status(auth.error).json({ error: auth.message });
         const matchedLabel = auth.label;
 
-        const { message, mode, photos, documents } = req.body || {};
+        const { message, mode, photos, documents, byok } = req.body || {};
         if (!message || typeof message !== 'string' || message.trim().length === 0) {
             return res.status(400).json({ error: 'Missing or empty "message" field.' });
         }
 
         if (message.length > 4000) {
             return res.status(400).json({ error: 'Message too long. Max 4000 characters.' });
+        }
+
+        // BYOK Watchtower: optional caller-supplied model credentials.
+        // Their key drives S2 (reasoning); NyanBook's auditToken drives S3 (verify).
+        // base_url must be https — no local/private-network SSRF risk.
+        let byokToken = null, byokModel = null, byokUrl = null;
+        if (byok && typeof byok === 'object') {
+            if (!byok.api_key || typeof byok.api_key !== 'string' || !byok.api_key.trim()) {
+                return res.status(400).json({ error: 'byok.api_key must be a non-empty string.' });
+            }
+            if (!byok.model || typeof byok.model !== 'string' || !byok.model.trim()) {
+                return res.status(400).json({ error: 'byok.model must be a non-empty string.' });
+            }
+            if (byok.base_url && !/^https:\/\//i.test(byok.base_url.trim())) {
+                return res.status(400).json({ error: 'byok.base_url must start with https://.' });
+            }
+            byokToken = byok.api_key.trim();
+            byokModel = byok.model.trim();
+            byokUrl   = byok.base_url ? byok.base_url.trim() : null;
         }
 
         const photoList = [];
@@ -167,7 +186,9 @@ function registerV1Routes(app, deps) {
                 extractedContent,
                 history: [],
                 clientIp,
-                isVisionRequest: photoList.length > 0
+                isVisionRequest: photoList.length > 0,
+                // BYOK Watchtower — present only when caller supplied byok block
+                ...(byokToken ? { byokToken, byokModel, byokUrl } : {})
             };
 
             const pipelineResult = await orchestrator.execute(pipelineInput);
@@ -201,6 +222,16 @@ function registerV1Routes(app, deps) {
 
             if (photoList.length > 0) response.vision = true;
             if (docList.length > 0) response.documentsProcessed = docList.length;
+
+            // BYOK Watchtower: flag that caller's key was used for reasoning.
+            // When audit didn't fully approve, expose the raw draft so the agent
+            // can see exactly what NyanBook caught and corrected.
+            if (byokToken) {
+                response.byok_used = true;
+                if (response.badge !== 'verified') {
+                    response.draft = pipelineResult.draftAnswer || null;
+                }
+            }
 
             const psiEma = extractPsiEma(pipelineResult.preflight);
             if (psiEma) {
@@ -243,6 +274,168 @@ function registerV1Routes(app, deps) {
             maxMessageChars: 4000,
             maxBodyMB: 50,
             timestamp: new Date().toISOString()
+        });
+    });
+
+    app.get('/api/v1/nyan/guide', (req, res) => {
+        res.json({
+            name: 'Nyan AI API',
+            version: 'v1',
+            description: 'LLM-powered query API with built-in web search, audit verification, and optional BYOK (Bring Your Own Key) watchtower mode.',
+            base_url: `https://${process.env.APP_DOMAIN || req.hostname}`,
+
+            auth: {
+                type: 'Bearer token',
+                header: 'Authorization: Bearer <token>',
+                note: 'Token must match NYAN_OUTBOUND_API or NYAN_OUTBOUND_API_DEV configured on the server. No token required for /health or /guide.'
+            },
+
+            rate_limits: {
+                default: '60 requests/minute per IP',
+                psi_ema: '60 requests/minute per IP'
+            },
+
+            endpoints: [
+                {
+                    method: 'POST',
+                    path: '/api/v1/nyan',
+                    auth_required: true,
+                    description: 'Submit a query to the full AI pipeline. Runs preflight routing, optional web search, LLM reasoning, and a two-pass audit. Returns a single JSON response.',
+                    request: {
+                        content_type: 'application/json',
+                        max_body_mb: 50,
+                        fields: {
+                            message: { type: 'string', required: true, max_chars: 4000, description: 'Your query or instruction.' },
+                            photos: { type: 'array<base64_string|{name,data}>', required: false, max_count: 5, max_size_mb_each: 10, formats: ['jpeg', 'png', 'webp'], description: 'Images for vision analysis.' },
+                            documents: { type: 'array<{name,data,type}>', required: false, max_count: 5, max_size_mb_each: 20, formats: ['pdf', 'xlsx', 'docx', 'csv', 'txt'], description: 'Documents to parse and include in context.' },
+                            byok: {
+                                type: 'object', required: false,
+                                description: 'BYOK Watchtower — your model key handles S2 reasoning, NyanBook\'s key always handles S3 audit verification.',
+                                fields: {
+                                    api_key:  { type: 'string', required: true,  description: 'Your LLM provider API key.' },
+                                    model:    { type: 'string', required: true,  description: 'Model ID (e.g. "llama-3.3-70b-versatile").' },
+                                    base_url: { type: 'string', required: false, description: 'Provider base URL. Must start with https://. Defaults to Groq endpoint.' }
+                                }
+                            }
+                        }
+                    },
+                    response: {
+                        success: {
+                            success: true,
+                            response: 'string — final verified answer',
+                            mode: 'string — detected query mode (see modes below)',
+                            source: 'string — "llm" | "search" | "atomic:*"',
+                            badge: 'string — "verified" | "fixable" | "unverified" | "rejected"',
+                            confidence: 'number|null — audit confidence 0–1',
+                            processingMs: 'number',
+                            audit: { confidence: 'number|null', verdict: 'string', passCount: 'number', didSearchRetry: 'boolean' },
+                            byok_used: 'boolean — present only when byok block was supplied',
+                            draft: 'string|null — original answer before correction; present only when byok_used=true and badge≠verified',
+                            ticker: 'string — present for psi-ema / forex queries',
+                            psiEma: 'object — Psi-EMA analysis; present for psi-ema queries',
+                            vision: 'boolean — present when photos were submitted',
+                            documentsProcessed: 'number — present when documents were submitted'
+                        },
+                        error: { success: false, error: 'string', step: 'string|undefined' }
+                    },
+                    examples: [
+                        {
+                            label: 'General query',
+                            request: { message: 'What is the current inflation rate in Singapore?' },
+                            response_shape: { success: true, response: '...', mode: 'general', badge: 'verified' }
+                        },
+                        {
+                            label: 'Seed metric (property affordability)',
+                            request: { message: 'seed metric london singapore tokyo' },
+                            response_shape: { success: true, response: '...', mode: 'seed-metric', badge: 'verified' }
+                        },
+                        {
+                            label: 'BYOK Watchtower',
+                            request: {
+                                message: 'What is the seed metric for Singapore?',
+                                byok: { api_key: 'gsk_...', model: 'llama-3.3-70b-versatile', base_url: 'https://api.groq.com/openai/v1' }
+                            },
+                            response_shape: { success: true, response: '...', byok_used: true, badge: 'verified' }
+                        }
+                    ]
+                },
+                {
+                    method: 'POST',
+                    path: '/api/v1/nyan/psi-ema',
+                    auth_required: true,
+                    description: 'Pure Psi-EMA calculation — no LLM, no web search. Returns technical analysis (θ, z-score, R-ratio) for one or more stock tickers.',
+                    request: {
+                        fields: {
+                            ticker:  { type: 'string',          required: false, description: 'Single ticker (e.g. "AAPL").' },
+                            tickers: { type: 'array<string>',   required: false, max_count: 5, description: 'Multiple tickers. Use ticker OR tickers, not both.' }
+                        }
+                    },
+                    response: {
+                        success: { success: true, mode: 'psi-ema', ticker: 'string', currentPrice: 'number', psiEma: { daily: 'object', weekly: 'object|null' }, processingMs: 'number' }
+                    },
+                    examples: [
+                        { label: 'Single ticker', request: { ticker: 'AAPL' } },
+                        { label: 'Multiple tickers', request: { tickers: ['AAPL', 'MSFT', 'NVDA'] } }
+                    ]
+                },
+                {
+                    method: 'GET',
+                    path: '/api/v1/nyan/health',
+                    auth_required: false,
+                    description: 'Quick liveness check. Returns server status, supported modes, and endpoint list.'
+                },
+                {
+                    method: 'GET',
+                    path: '/api/v1/nyan/guide',
+                    auth_required: false,
+                    description: 'This document. Full API reference for agents and integrators.'
+                },
+                {
+                    method: 'GET',
+                    path: '/api/v1/nyan/diagnostics',
+                    auth_required: true,
+                    description: 'System diagnostics — DB health, LLM provider status, Discord bots, memory, uptime.'
+                }
+            ],
+
+            modes: {
+                general:      'Open-ended questions, news, science, history, current events. Triggers real-time web search when needed.',
+                'seed-metric': 'Property affordability index — price/sqm, income, years-to-own for one or more cities. Include city names in query.',
+                'psi-ema':    'Stock technical analysis (Psi-EMA θ/z/R). Include a ticker symbol in query or use the dedicated /psi-ema endpoint for raw data.',
+                forex:        'Currency conversion and exchange rate queries.',
+                legal:        'Legal analysis and contract interpretation. Activates legal reasoning guardrails.',
+                chemistry:    'Chemistry, pharmacology, and molecular analysis.',
+                'code-audit': 'Code review, security analysis, and debugging.'
+            },
+
+            badges: {
+                verified:   'Audit passed — answer confirmed against sources or logic.',
+                fixable:    'Audit found issues and applied corrections. Final answer is the corrected version.',
+                unverified: 'Audit could not confirm or deny — answer delivered as-is.',
+                rejected:   'Answer was rejected after max retries. Response may be a refusal or best-effort fallback.'
+            },
+
+            errors: {
+                400: 'Invalid request — missing required field, field too long, or bad byok block.',
+                401: 'Missing or invalid Bearer token.',
+                429: 'Rate limit exceeded (60 req/min). Retry after 60 seconds.',
+                500: 'Internal pipeline error — retry safe.',
+                503: 'Server busy (message queue full). Retry after a short delay.'
+            },
+
+            byok_watchtower: {
+                summary: 'Supply your own LLM key for the reasoning pass. NyanBook always runs the audit pass on its own key.',
+                flow: ['S2 Reasoning → your key + your model', 'S3 Audit → NyanBook key (always)', 'Response includes byok_used:true', 'If badge≠verified, response includes draft (your model\'s original answer before correction)'],
+                supported_providers: ['Groq (https://api.groq.com/openai/v1)', 'OpenRouter (https://openrouter.ai/api/v1)', 'OpenAI (https://api.openai.com/v1)', 'Any OpenAI-compatible endpoint over https://']
+            },
+
+            changelog: [
+                { version: 'v1.2', date: '2026-05', change: 'BYOK Watchtower — optional byok block on POST /api/v1/nyan' },
+                { version: 'v1.1', date: '2026-04', change: 'Psi-EMA dedicated endpoint, compound query support' },
+                { version: 'v1.0', date: '2026-01', change: 'Initial API release' }
+            ],
+
+            generated_at: new Date().toISOString()
         });
     });
 
