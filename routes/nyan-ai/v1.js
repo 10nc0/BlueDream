@@ -379,6 +379,166 @@ function registerV1Routes(app, deps) {
                     ]
                 },
                 {
+                    method: 'POST',
+                    path: '/api/webhook/:fractalId',
+                    auth_required: true,
+                    auth_note: 'Bearer token scoped to a specific book (agent_token from book settings). Token must match the book referenced in the URL.',
+                    description: 'Write a message into a specific book. Accepts text, an HTTPS media URL, or base64 documents/photos. All fields except text are optional. Enqueues durably; returns immediately.',
+                    request: {
+                        content_type: 'application/json',
+                        max_body_mb: 50,
+                        fields: {
+                            text:       { type: 'string', required: false, max_chars: 10000, description: 'Message body.' },
+                            username:   { type: 'string', required: false, max: 100, description: 'Display name for the sender. Defaults to "External".' },
+                            media_url:  { type: 'string', required: false, description: 'HTTPS URL of an existing hosted file. Cannot be a data: URI — use documents[] or photos[] for base64 instead.' },
+                            media_type: { type: 'string', required: false, description: 'MIME type of the media_url attachment (e.g. "application/pdf"). Optional — server derives from URL extension if omitted.' },
+                            photos:     { type: 'array<base64_string|{name,data}>', required: false, max_count: 5, max_size_mb_each: 10, description: 'Base64-encoded images. No external hosting needed.' },
+                            documents:  { type: 'array<{name,data,type}>', required: false, max_count: 5, max_size_mb_each: 20, formats: ['pdf', 'xlsx', 'docx', 'csv', 'txt'], description: 'Base64-encoded documents. Text is extracted and appended to the message body. No external hosting needed.' },
+                            phone:      { type: 'string', required: false, description: 'E.164 phone number (display only, not used for routing).' },
+                            email:      { type: 'string', required: false, description: 'Email address (display only).' }
+                        }
+                    },
+                    response: { success: true, message: 'Message accepted' },
+                    examples: [
+                        {
+                            label: 'Text only',
+                            request: { text: 'Session checkpoint — context saved.' }
+                        },
+                        {
+                            label: 'PDF document (base64, no external hosting needed)',
+                            request: {
+                                text: 'Attaching build report',
+                                documents: [{ name: 'report.pdf', data: '<base64>', type: 'pdf' }]
+                            }
+                        },
+                        {
+                            label: 'Photo snapshot',
+                            request: {
+                                text: 'Screenshot of current state',
+                                photos: [{ name: 'screenshot.png', data: '<base64>' }]
+                            }
+                        }
+                    ]
+                },
+                {
+                    method: 'POST',
+                    path: '/api/agent/message',
+                    auth_required: true,
+                    auth_note: 'Bearer token resolves the target book automatically — no fractal_id in URL. One token = one book.',
+                    description: 'Token-only write endpoint. Same payload contract as POST /api/webhook/:fractalId but the book is resolved from the token, not the URL. Preferred for agents that hold a single token.',
+                    request: { description: 'Identical to POST /api/webhook/:fractalId — see above.' },
+                    response: { success: true, message: 'Message accepted', book_id: 'string — resolved book fractal_id' }
+                },
+                {
+                    method: 'GET',
+                    path: '/api/webhook/:fractalId/messages',
+                    auth_required: true,
+                    auth_note: 'Same bearer token scoped to the book. Token must match the book in the URL.',
+                    description: 'Read messages from a book. Returns newest-first with pagination cursors.',
+                    request: {
+                        query_params: {
+                            limit:  { type: 'integer', default: 50, max: 100, description: 'Number of messages to return.' },
+                            after:  { type: 'ISO8601 timestamp', description: 'Return messages after this time (exclusive). Cannot combine with before.' },
+                            before: { type: 'ISO8601 timestamp', description: 'Return messages before this time (exclusive). Cannot combine with after.' }
+                        }
+                    },
+                    response: {
+                        book: 'string', book_id: 'string',
+                        messages: 'array<{id, sender, text, timestamp, has_media, media_ipfs_cid, media_ipfs_gateway_url, media_url}>',
+                        total: 'number', hasMore: 'boolean',
+                        cursor: { newest: 'ISO8601|null', oldest: 'ISO8601|null' }
+                    }
+                },
+                {
+                    method: 'GET',
+                    path: '/api/agent/messages',
+                    auth_required: true,
+                    auth_note: 'Bearer token resolves the book automatically.',
+                    description: 'Token-only read endpoint. Same response shape as GET /api/webhook/:fractalId/messages but the book is resolved from the token.',
+                    request: { description: 'Same query params as GET /api/webhook/:fractalId/messages.' }
+                },
+                {
+                    method: 'POST',
+                    path: '/api/agent/bootstrap',
+                    auth_required: false,
+                    auth_note: 'Each entry in books[] carries its own bearer token. No shared Authorization header needed.',
+                    description: 'Spore Protocol — multi-book cold-start bootstrap. Agent supplies up to 20 bearer tokens and receives a structured memory export per book in one round-trip. Designed for agent cold-start, scheduled re-sync, and context hand-offs between agent instances.',
+                    rate_limit: '20 requests/minute per IP (dedicated limiter, independent of other pipe endpoints)',
+                    request: {
+                        content_type: 'application/json',
+                        fields: {
+                            books: {
+                                type: 'array',
+                                required: true,
+                                max_items: 20,
+                                description: 'List of book fetch specs. Order is preserved in the response.',
+                                item_fields: {
+                                    token:  { type: 'string', required: true,  description: 'Agent bearer token for this book.' },
+                                    limit:  { type: 'integer', required: false, default: 50, max: 200, description: 'Max messages to return for this book.' },
+                                    since:  { type: 'ISO8601 timestamp', required: false, description: 'Return only messages after this time (exclusive cursor for pagination).' }
+                                }
+                            }
+                        }
+                    },
+                    response: {
+                        bootstrap_at: 'ISO8601 — server timestamp when the response was assembled',
+                        total_books:  'integer — number of books successfully resolved (excludes error slots)',
+                        books: 'array — one entry per input token, in request order. Valid book slots contain:',
+                        book_slot_valid: {
+                            token_index:  'integer — position in the request books[] array',
+                            fractal_id:   'string — unique book identifier',
+                            title:        'string|null — book display name',
+                            tags:         'string[] — tenant-assigned tags',
+                            stats: {
+                                message_count:   'integer',
+                                last_message_at: 'ISO8601|null'
+                            },
+                            messages: 'array<{ id, body, sender, sent_at, has_attachment, media_url }> — newest-first, up to limit'
+                        },
+                        book_slot_error: {
+                            token_index: 'integer',
+                            error:       '"invalid_token" | "query_failed"'
+                        }
+                    },
+                    errors: {
+                        400: 'books is not a non-empty array, too many entries (>20), invalid limit, or invalid since format.',
+                        401: 'No token in any books[] entry resolved to an active book.',
+                        429: 'Rate limit exceeded (20 bootstrap req/min per IP).'
+                    },
+                    examples: [
+                        {
+                            label: 'Cold-start re-hydration across two books',
+                            curl: [
+                                'curl -X POST https://YOUR_DOMAIN/api/agent/bootstrap \\',
+                                '  -H "Content-Type: application/json" \\',
+                                '  -d \'{"books":[',
+                                '    {"token":"<token_A>","limit":50},',
+                                '    {"token":"<token_B>","limit":20,"since":"2026-01-01T00:00:00.000Z"}',
+                                '  ]}\''
+                            ].join('\n'),
+                            response_shape: {
+                                bootstrap_at: '2026-05-24T09:00:00.000Z',
+                                total_books: 2,
+                                books: [
+                                    { token_index: 0, fractal_id: 'book_t1_...', title: 'Alpha Book', tags: ['vehicle'], stats: { message_count: 42, last_message_at: '...' }, messages: ['...'] },
+                                    { token_index: 1, fractal_id: 'book_t2_...', title: 'Beta Book',  tags: [],          stats: { message_count: 7,  last_message_at: null }, messages: [] }
+                                ]
+                            }
+                        },
+                        {
+                            label: 'Mixed valid + invalid tokens — invalid slot does not fail others',
+                            response_shape: {
+                                bootstrap_at: '2026-05-24T09:00:01.000Z',
+                                total_books: 1,
+                                books: [
+                                    { token_index: 0, error: 'invalid_token' },
+                                    { token_index: 1, fractal_id: 'book_t2_...', title: 'My Book', tags: [], stats: { message_count: 3, last_message_at: '...' }, messages: ['...'] }
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
                     method: 'GET',
                     path: '/api/v1/nyan/health',
                     auth_required: false,
@@ -430,6 +590,7 @@ function registerV1Routes(app, deps) {
             },
 
             changelog: [
+                { version: 'v1.3', date: '2026-05', change: 'Spore Protocol — POST /api/agent/bootstrap for multi-book cold-start re-hydration' },
                 { version: 'v1.2', date: '2026-05', change: 'BYOK Watchtower — optional byok block on POST /api/v1/nyan' },
                 { version: 'v1.1', date: '2026-04', change: 'Psi-EMA dedicated endpoint, compound query support' },
                 { version: 'v1.0', date: '2026-01', change: 'Initial API release' }

@@ -2,70 +2,16 @@ const logger = require('../../lib/logger');
 const { AUDIO_MIME_EXT_MAP } = require('../../utils/file-types');
 const { fetchUrl, extractUrls } = require('../../lib/url-fetcher');
 
-function normalizePhotoList(photos, photo) {
-    const photoList = [];
-    if (photos && Array.isArray(photos)) {
-        photos.forEach((p, idx) => {
-            if (typeof p === 'string') {
-                photoList.push({ name: `photo-${idx}`, data: p, type: 'photo' });
-            } else if (p && p.data) {
-                photoList.push(p);
-            }
-        });
-    }
-    if (photo) {
-        photoList.push({ name: 'image', data: photo, type: 'image' });
-    }
-    return photoList;
-}
-
-function normalizeDocList(documents, document, documentName) {
-    const docList = [];
-    if (documents && documents.length > 0) {
-        docList.push(...documents.map(d => ({ name: d.name, data: d.data, type: d.type })));
-    }
-    if (document) {
-        docList.push({ name: documentName || 'document', data: document, type: 'document' });
-    }
-    return docList;
-}
-
-async function extractZipAttachments(zipData) {
-    const extracted = { photos: [], audios: [], documents: [] };
-    if (!zipData) return extracted;
-    try {
-        const JSZip = require('jszip');
-        const zipBuffer = Buffer.from(zipData, 'base64');
-        const zip = await JSZip.loadAsync(zipBuffer);
-        const manifestFile = zip.file('manifest.json');
-        if (manifestFile) {
-            const manifestContent = await manifestFile.async('string');
-            const manifest = JSON.parse(manifestContent);
-            for (const entry of manifest) {
-                const file = zip.file(entry.filename || entry.path);
-                if (file) {
-                    const data = await file.async('base64');
-                    const itemName = entry.originalName || entry.name || 'file';
-                    const itemCat  = entry.type || entry.category || '';
-                    const item = { name: itemName, data, type: itemCat };
-                    if (itemCat === 'photo') extracted.photos.push(item);
-                    else if (itemCat === 'audio') extracted.audios.push(item);
-                    else if (itemCat === 'document') extracted.documents.push(item);
-                }
-            }
-        }
-    } catch (zipError) {
-        logger.error({ err: zipError }, '❌ ZIP extraction error');
-    }
-    return extracted;
-}
-
-function collectAudioList(audios, audio) {
-    const audioList = [];
-    if (audios && Array.isArray(audios)) audioList.push(...audios);
-    if (audio) audioList.push({ name: 'voice-recording', data: audio, type: 'audio' });
-    return audioList;
-}
+// ── List normalisation helpers ────────────────────────────────────────────────
+// Canonical definitions live in lib/attachment-packet.js.
+// Re-exported here so all existing callers (routes/pipe.js, nyan-ai handlers,
+// tests) continue to import from this path without any changes.
+const {
+    normalizePhotoList,
+    normalizeDocList,
+    extractZipAttachments,
+    collectAudioList,
+} = require('../../lib/attachment-packet');
 
 async function transcribeAudioList(audioItems, clientIp, opts = {}) {
     if (audioItems.length === 0) return [];

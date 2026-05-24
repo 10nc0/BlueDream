@@ -1,6 +1,8 @@
 // Bidirectional message pipe — handles both inbound channels (Twilio/LINE/Telegram/email
 // webhooks, agent write POST) and the outbound agent read GET. All inbound paths enqueue
 // to core.message_queue before ack; the read path queries PostgreSQL (tenant messages table).
+const { AttachmentIngestion } = require('../utils/attachment-ingestion');
+const { normalizeDocList, normalizePhotoList } = require('./nyan-ai/media');
 const { TwilioChannel } = require('../lib/channels/twilio');
 const { LineChannel } = require('../lib/channels/line');
 const { EmailChannel } = require('../lib/channels/email');
@@ -8,7 +10,13 @@ const { TelegramChannel } = require('../lib/channels/telegram');
 const { VALID_SCHEMA_PATTERN, DISCORD_SNOWFLAKE_RE, ISO8601_STRICT_RE } = require('../lib/validators');
 const format = require('pg-format');
 const rateLimit = require('express-rate-limit');
-const { z } = require('zod');
+const {
+    webhookPayloadSchema,
+    MAX_PHOTO_BYTES,
+    MAX_DOC_BYTES,
+    deriveMimeFromDoc,
+    deriveMimeFromPhoto,
+} = require('../lib/agent-pipe-schema');
 
 const {
     MAX_QUEUE_SIZE,
@@ -23,6 +31,7 @@ const {
     cleanupIdempotencyCache,
     sendChannelResponse
 } = require('../lib/packet-queue');
+const { runBootstrap } = require('../lib/spore-bootstrap');
 
 function registerPipeRoutes(app, deps) {
     const { pool, bots, helpers, constants, logger } = deps;
@@ -348,22 +357,61 @@ function registerPipeRoutes(app, deps) {
     });
 
     const HTTPS_ONLY = (val) => val == null || /^https?:\/\//i.test(val);
-    const webhookPayloadSchema = z.object({
-        text: z.string().max(10000, 'Message too long').optional().default(''),
-        username: z.string().max(100, 'Username too long').optional().default('External'),
-        avatar_url: z.string().url('Invalid avatar URL').refine(HTTPS_ONLY, 'Only HTTP/HTTPS URLs allowed').optional().nullable(),
-        media_url: z.string().url('Invalid media URL').refine(HTTPS_ONLY, 'Only HTTP/HTTPS URLs allowed').optional().nullable(),
-        // Optional MIME type for the attachment (e.g. 'image/jpeg',
-        // 'application/pdf'). When supplied, it's persisted on the message
-        // row and feeds the monthly email's media-type breakdown. Capped
-        // at 255 chars (longer than any legitimate registered MIME type)
-        // and validated to look MIME-shaped (type/subtype with optional
-        // params). Bridges that don't know the MIME can omit it — the
-        // server falls back to URL-extension derivation.
-        media_type: z.string().max(255, 'media_type too long').regex(/^[a-zA-Z0-9!#$&^_.+-]+\/[a-zA-Z0-9!#$&^_.+-]+(;.*)?$/, 'Invalid MIME type').optional().nullable(),
-        phone: z.string().regex(/^\+?[1-9]\d{1,14}$/, 'Invalid phone format').optional().nullable(),
-        email: z.string().email('Invalid email format').optional().nullable()
-    });
+    // webhookPayloadSchema is imported from lib/agent-pipe-schema.js — the
+    // single source of truth shared with the unit test suite so schema changes
+    // are always validated by tests automatically.
+
+    // Shared attachment parser for both agent pipe endpoints.
+    // Extracts text from base64 documents/photos, appends to body, derives media_type.
+    // Non-fatal: parse failures are logged and skipped, not surfaced as 500s.
+    async function parseAgentAttachments({ photos, documents, text, clientIp }) {
+        const photoList = normalizePhotoList(photos || [], null);
+        const docList   = normalizeDocList(documents || [], null, null);
+
+        // Per-entry size guards (base64 length → approximate byte size).
+        // Constants shared with the test suite via lib/agent-pipe-schema.js.
+        for (const p of photoList) {
+            const b64 = typeof p === 'string' ? p : p.data;
+            if (b64 && Math.ceil(b64.length * 3 / 4) > MAX_PHOTO_BYTES) {
+                const name = p.name || 'photo';
+                throw Object.assign(new Error(`Photo "${name}" exceeds 10 MB limit.`), { status: 413 });
+            }
+        }
+        for (const d of docList) {
+            if (d.data && Math.ceil(d.data.length * 3 / 4) > MAX_DOC_BYTES) {
+                throw Object.assign(new Error(`Document "${d.name}" exceeds 20 MB limit.`), { status: 413 });
+            }
+        }
+
+        let body = text || '';
+        const hasMedia = !!(photoList.length || docList.length);
+        let derivedMediaType = null;
+
+        if (docList.length > 0) {
+            // Derive MIME from the primary document (type token or filename ext).
+            // deriveMimeFromDoc returns null for unknown formats → falls back to
+            // 'application/octet-stream' so the monthly email breakdown always
+            // has a non-null bucket rather than silently going into "other".
+            derivedMediaType = deriveMimeFromDoc(docList[0]) || 'application/octet-stream';
+            try {
+                const ingested = await AttachmentIngestion.ingest(docList, clientIp);
+                if (ingested.extractedText) {
+                    body = body
+                        ? `${body}\n\n[Attached Documents]\n${ingested.extractedText}`
+                        : `[Attached Documents]\n${ingested.extractedText}`;
+                }
+            } catch (err) {
+                logger.warn({ err: err.message }, 'Agent pipe: document ingestion failed (non-fatal)');
+            }
+        }
+
+        if (photoList.length > 0 && !derivedMediaType) {
+            // Derive MIME from the primary photo entry (name/type → fallback image/jpeg).
+            derivedMediaType = deriveMimeFromPhoto(photoList[0]);
+        }
+
+        return { body, hasMedia, derivedMediaType };
+    }
 
     app.post('/api/webhook/:fractalId', webhookLimiter, async (req, res) => {
         try {
@@ -406,26 +454,34 @@ function registerPipeRoutes(app, deps) {
                     details: payloadResult.error.issues.map(i => i.message)
                 });
             }
-            const { text, username, avatar_url, media_url, media_type, phone, email } = payloadResult.data;
+            const { text, username, avatar_url, media_url, media_type, phone, email, photos, documents } = payloadResult.data;
+
+            let attachments;
+            try {
+                attachments = await parseAgentAttachments({ photos, documents, text, clientIp: req.ip || '127.0.0.1' });
+            } catch (attachErr) {
+                return res.status(attachErr.status || 400).json({ error: attachErr.message });
+            }
 
             if (await totalQueueDepth() >= MAX_QUEUE_SIZE) {
                 logger.warn({ queueSize: getCachedDepth() }, 'Queue full — rejecting webhook message');
                 return res.status(503).json({ error: 'Server busy, please retry' });
             }
 
+            const effectiveMediaType = media_type || (media_url ? null : attachments.derivedMediaType) || null;
             const senderName = username || phone || email || 'External';
             await enqueueItem({
                 msg: {
                     fractalId: fractalIdParam,
                     tenantSchema,
-                    body: text || '',
+                    body: attachments.body,
                     senderName,
                     avatar_url: avatar_url || null,
                     media_url: media_url || null,
-                    media_type: media_type || null,
+                    media_type: effectiveMediaType,
                     phone: phone || null,
                     email: email || null,
-                    hasMedia: !!media_url
+                    hasMedia: !!media_url || attachments.hasMedia
                 },
                 rawPayload: payloadResult.data,
                 channel: 'webhook',
@@ -433,7 +489,8 @@ function registerPipeRoutes(app, deps) {
                 queuedAt: Date.now()
             });
 
-            logger.info({ sender: senderName, bookId: fractalIdParam, queueDepth: getCachedDepth() }, 'Webhook: message queued');
+            const attachLog = [photos?.length && `${photos.length} photo(s)`, documents?.length && `${documents.length} doc(s)`].filter(Boolean).join(', ');
+            logger.info({ sender: senderName, bookId: fractalIdParam, queueDepth: getCachedDepth(), attachments: attachLog || null }, 'Webhook: message queued');
             res.json({ success: true, message: 'Message accepted' });
         } catch (error) {
             logger.error({ err: error }, 'Webhook: error queuing message');
@@ -677,26 +734,34 @@ function registerPipeRoutes(app, deps) {
                     details: payloadResult.error.issues.map(i => i.message)
                 });
             }
-            const { text, username, avatar_url, media_url, media_type, phone, email } = payloadResult.data;
+            const { text, username, avatar_url, media_url, media_type, phone, email, photos, documents } = payloadResult.data;
+
+            let attachments;
+            try {
+                attachments = await parseAgentAttachments({ photos, documents, text, clientIp: req.ip || '127.0.0.1' });
+            } catch (attachErr) {
+                return res.status(attachErr.status || 400).json({ error: attachErr.message });
+            }
 
             if (await totalQueueDepth() >= MAX_QUEUE_SIZE) {
                 logger.warn({ ip: req.ip }, 'Agent message: queue full');
                 return res.status(503).json({ error: 'Server busy, please retry' });
             }
 
+            const effectiveMediaType = media_type || (media_url ? null : attachments.derivedMediaType) || null;
             const senderName = username || phone || email || 'Agent';
             await enqueueItem({
                 msg: {
                     fractalId: fractalIdParam,
                     tenantSchema,
-                    body: text || '',
+                    body: attachments.body,
                     senderName,
                     avatar_url: avatar_url || null,
                     media_url: media_url || null,
-                    media_type: media_type || null,
+                    media_type: effectiveMediaType,
                     phone: phone || null,
                     email: email || null,
-                    hasMedia: !!media_url
+                    hasMedia: !!media_url || attachments.hasMedia
                 },
                 rawPayload: payloadResult.data,
                 channel: 'webhook',
@@ -704,7 +769,8 @@ function registerPipeRoutes(app, deps) {
                 queuedAt: Date.now()
             });
 
-            logger.info({ sender: senderName, bookId: fractalIdParam, queueDepth: getCachedDepth() }, 'Agent message: queued via token routing');
+            const attachLog = [photos?.length && `${photos.length} photo(s)`, documents?.length && `${documents.length} doc(s)`].filter(Boolean).join(', ');
+            logger.info({ sender: senderName, bookId: fractalIdParam, queueDepth: getCachedDepth(), attachments: attachLog || null }, 'Agent message: queued via token routing');
             res.json({ success: true, message: 'Message accepted', book_id: fractalIdParam });
         } catch (error) {
             logger.error({ err: error }, 'Agent message: error queuing');
@@ -712,6 +778,44 @@ function registerPipeRoutes(app, deps) {
         }
     });
     registeredRoutes.push('POST /api/agent/message');
+
+    // ─── SPORE PROTOCOL — multi-book cold-start bootstrap ────────────────────
+    // POST /api/agent/bootstrap: agent supplies up to 20 bearer tokens and
+    // receives a structured memory export per book (recent messages, tags,
+    // stats, metadata) in a single round-trip.  Invalid tokens get an error
+    // slot without failing the whole request.
+    // Rate: 20 req/min per IP (separate from webhookLimiter so burst traffic
+    // on individual-book pipes does not eat into the bootstrap budget).
+    const sporeBootstrapLimiter = rateLimit({
+        windowMs: 60 * 1000,
+        max: 20,
+        validate: { xForwardedForHeader: false },
+        handler: (req, res) => {
+            logger.warn({ ip: req.ip }, 'Spore bootstrap rate limit exceeded');
+            res.status(429).json({ error: 'Too many requests — max 20 bootstrap calls/minute.' });
+        }
+    });
+
+    app.post('/api/agent/bootstrap', sporeBootstrapLimiter, async (req, res) => {
+        try {
+            const result = await runBootstrap(
+                (req.body || {}).books,
+                pool,
+                { logger }
+            );
+
+            if (!result.ok) {
+                return res.status(result.status).json({ error: result.error });
+            }
+
+            const { bootstrap_at, total_books, books } = result;
+            return res.json({ bootstrap_at, total_books, books });
+        } catch (err) {
+            logger.error({ err }, 'Spore bootstrap: unexpected error');
+            return res.status(500).json({ error: 'Internal server error' });
+        }
+    });
+    registeredRoutes.push('POST /api/agent/bootstrap');
 
     logger.info('📥 Pipe routes registered: %s', registeredRoutes.join(', '));
 
