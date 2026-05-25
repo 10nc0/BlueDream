@@ -21,6 +21,33 @@ let isProcessing = false;
 //      bfcache or transitions inside an SPA shell.
 let activeAbortController = null;
 const _origSendBtnText = (typeof document !== 'undefined' && document.getElementById('sendBtn')?.textContent) || 'Send';
+
+// ── Streaming orb clock (mirrors dashboard CAT_BREATHE_CLOCK) ─────────────
+// Rotation = f(time), NOT f(CSS animation state). RAF writes --radiant-deg
+// and --radiant-progress onto the button; CSS animations handle breathing.
+let _orbRafId   = null;
+let _orbStart   = 0;
+const _ORB_CYCLE = 8000; // ms per full rotation (matches dashboard SLOW)
+
+function _orbTick(btn) {
+    const elapsed  = performance.now() - _orbStart;
+    const progress = (elapsed % _ORB_CYCLE) / _ORB_CYCLE;
+    const deg      = progress * 360;
+    btn.style.setProperty('--radiant-deg',      `${deg}deg`);
+    btn.style.setProperty('--radiant-progress', progress);
+    _orbRafId = requestAnimationFrame(() => _orbTick(btn));
+}
+
+function startOrbClock(btn) {
+    stopOrbClock();
+    _orbStart = performance.now();
+    _orbRafId = requestAnimationFrame(() => _orbTick(btn));
+}
+
+function stopOrbClock() {
+    if (_orbRafId !== null) { cancelAnimationFrame(_orbRafId); _orbRafId = null; }
+}
+// ─────────────────────────────────────────────────────────────────────────────
 let conversationHistory = [];
 let cachedFileHashes = [];  // Store file hashes for follow-up queries (session-scoped)
 let mediaRecorder = null;
@@ -1390,8 +1417,9 @@ async function sendMessage(_retryPayload = null) {
     // the cat-loader interval.
     activeAbortController = new AbortController();
     sendBtn.disabled = false;          // re-enable so Stop is clickable
-    sendBtn.textContent = 'Stop';
+    sendBtn.innerHTML = `<span class="s-aura"></span><span class="s-core"><span class="s-symbol">☯️</span></span>`;
     sendBtn.classList.add('streaming');
+    startOrbClock(sendBtn);
 
     try {
         const res = await fetch('/api/playground/stream', {
@@ -1510,6 +1538,7 @@ async function sendMessage(_retryPayload = null) {
             addMessage('assistant', errorMsg);
         }
     } finally {
+        stopOrbClock();
         activeAbortController = null;
         sendBtn.classList.remove('streaming');
         sendBtn.textContent = _origSendBtnText;

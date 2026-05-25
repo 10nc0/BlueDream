@@ -720,6 +720,97 @@
             opacity: 0.5;
             cursor: not-allowed;
         }
+
+        /* ── Streaming / Stop state — singularity-style (button 00) ── */
+        .send-btn.streaming {
+            background: transparent !important;
+            border: none !important;
+            border-radius: 50% !important;
+            overflow: visible;
+            animation: none !important;
+            box-shadow: none !important;
+            position: relative;
+            width: 48px !important;
+            height: 48px !important;
+            align-self: center !important;
+        }
+        .send-btn.streaming:hover:not(:disabled) {
+            transform: scale(1.08);
+            box-shadow: none !important;
+        }
+        /* Aura — RAF-driven rotation via --radiant-deg (same as dashboard) */
+        .send-btn.streaming .s-aura {
+            position: absolute;
+            inset: -10px;
+            border-radius: 50%;
+            background: conic-gradient(
+                from var(--radiant-deg, 0deg),
+                #ec4899, #a855f7, #22d3ee, #10b981, #f59e0b, #ef4444, #ec4899
+            );
+            filter: blur(10px);
+            opacity: 0.65;
+            /* CSS animation = breathing scale only; rotation = RAF clock */
+            animation: s-aura-pulse 3s ease-in-out infinite;
+            pointer-events: none;
+            z-index: -3;
+        }
+        /* Core — frosted glass disc with breathing scale */
+        .send-btn.streaming .s-core {
+            position: absolute;
+            inset: 0;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg,
+                rgba(255,255,255,0.95) 0%,
+                rgba(255,255,255,0.85) 50%,
+                rgba(255,255,255,0.95) 100%);
+            backdrop-filter: blur(20px) saturate(180%);
+            -webkit-backdrop-filter: blur(20px) saturate(180%);
+            box-shadow:
+                0 8px 32px rgba(0,0,0,0.12),
+                0 2px 8px rgba(0,0,0,0.08),
+                inset 0 1px 0 rgba(255,255,255,0.8);
+            animation: s-core-breathe 3s ease-in-out infinite;
+            z-index: -2;
+        }
+        /* Rainbow border ring — position driven by --radiant-progress (RAF) */
+        .send-btn.streaming .s-core::after {
+            content: '';
+            position: absolute;
+            inset: -3px;
+            border-radius: 50%;
+            border: 3px solid transparent;
+            background: linear-gradient(45deg, #22d3ee, #a855f7, #ec4899, #f59e0b, #22d3ee) border-box;
+            background-size: 200% 200%;
+            -webkit-mask: linear-gradient(#fff 0 0) padding-box, linear-gradient(#fff 0 0);
+            -webkit-mask-composite: xor;
+            mask-composite: exclude;
+            background-position: calc(var(--radiant-progress, 0) * 200%) 50%;
+            z-index: -1;
+        }
+        /* ☯️ symbol — centered, spins via RAF-matched CSS anim for smoothness */
+        .send-btn.streaming .s-symbol {
+            font-size: 1.8rem;
+            position: relative;
+            z-index: 1;
+            line-height: 1;
+            user-select: none;
+            /* counter-rotate: symbol appears to stand still while core breathes */
+            animation: s-symbol-spin 8s linear infinite;
+        }
+        @keyframes s-aura-pulse {
+            0%, 100% { transform: scale(1);    opacity: 0.60; }
+            50%       { transform: scale(1.15); opacity: 0.80; }
+        }
+        @keyframes s-core-breathe {
+            0%, 100% { transform: scale(1);    }
+            50%       { transform: scale(1.08); }
+        }
+        @keyframes s-symbol-spin {
+            to { transform: rotate(360deg); }
+        }
         
         .hidden-input { display: none; }
         
