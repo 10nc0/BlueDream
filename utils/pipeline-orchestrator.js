@@ -4,7 +4,7 @@
  * 8-STAGE STATE MACHINE (S-1 to S6):
  * ┌──────────────────────────────────────────────────────────────────────────┐
  * │ S-1:  Context Extraction │ φ-8 message window, entity extraction        │
- * │ S-1.5 Query Digest       │ intent C|R, subject, context, lens, sessions │
+ * │ S-1.5 Grammar Bridge     │ intent C|R, subject, context, lens, sessions │
  * │ S0:   Preflight          │ Mode detection, routing, data fetch           │
  * │ S1:   Context Build      │ Inject system prompts based on mode           │
  * │ S2:   Reasoning          │ LLM call (O(tokens), ~1500 tokens)            │
@@ -45,7 +45,7 @@ const { detectPathogens, generateClinicalReport, generatePhysicalAuditDisclaimer
 const { DataPackage, globalPackageStore, STAGE_IDS } = require('./data-package');
 const { globalCheckpointStore, buildResumableSnapshot, applySnapshot } = require('./pipeline-checkpoint');
 const { getLLMBackend, getAuditBackend, AI_MODELS } = require('../config/constants');
-const { digestQuery } = require('./query-digest');
+const { bridgeQuery } = require('./grammar-bridge');
 const { CITY_EXPAND, COUNTRY_TO_CITY, CITY_TO_COUNTRY, FRED_MSA_CODES, COUNTRY_ISO2, KNOWN_CITIES_REGEX, ISO2_TO_CURRENCY } = require('./geo-data');
 const { fetchFredPerSqm, fetchFredPerSqmForYear } = require('../lib/tools/fred-series');
 const { fetchWorldBankGni, fetchWorldBankGniLcu } = require('../lib/tools/world-bank');
@@ -536,20 +536,20 @@ class PipelineOrchestrator {
       const contextAwareQuery = mergeContextForTickerDetection(normalizedInput.query, state.contextResult);
 
       // ========================================
-      // STAGE -1.5: Query Digest (intent, subject, context, lens, session lens)
+      // STAGE -1.5: Grammar Bridge (intent, subject, context, lens, session lens)
       // Runs after S-1 so it has the normalised query; before S0 so routing can use it
       // ========================================
       if (!resumeFromStage) {
         state.transition(PIPELINE_STEPS.DIGEST);
         try {
           const groqToken = process.env.PLAYGROUND_AI_KEY || process.env.PLAYGROUND_GROQ_TOKEN || process.env.GROQ_API_KEY;
-          state.digest = await digestQuery(normalizedInput.query, state.sessionLens, groqToken);
+          state.digest = await bridgeQuery(normalizedInput.query, state.sessionLens, groqToken);
           // Persist updated session lens so multi-question loops compound within the turn
           if (state.digest.sessionLens) {
             state.sessionLens = state.digest.sessionLens;
           }
-        } catch (digestErr) {
-          logger.warn({ err: digestErr.message }, '⚠️ S-1.5 digest failed — pipeline continues without digest');
+        } catch (bridgeErr) {
+          logger.warn({ err: bridgeErr.message }, '⚠️ S-1.5 grammar bridge failed — pipeline continues without bridge');
           state.digest = null;
         }
       }
@@ -763,10 +763,32 @@ class PipelineOrchestrator {
     // Seed-metric: searches now done in stepSeedMetricToolCall (walk the dog)
     
     // ========================================
-    // REAL-TIME CASCADE: DDG → Brave for sports, news, weather, etc.
-    // Triggered by preflight.routingFlags.needsRealtimeSearch
+    // PLAYGROUND PULL-FIRST DISCIPLINE (task #226):
+    // On the playground surface, `mode === 'general'` queries skip the
+    // deterministic realtime pre-fetch entirely — the LLM gets the query +
+    // tool manifest first and decides. The regex still runs as a
+    // *speculative cache warm-up* (non-blocking, never injected) so the
+    // pull path benefits from latency without seeing pre-pushed evidence.
+    // Dashboard surface and non-general modes keep today's behaviour.
     // ========================================
-    if (state.preflight.routingFlags?.needsRealtimeSearch && query) {
+    const _isPlayground = input.surface === 'playground';
+    const _playgroundPullFirst = _isPlayground && state.preflight.mode === 'general'
+      && process.env.NYAN_LLM_TOOL_FALLBACK !== 'false';
+    if (_playgroundPullFirst && state.preflight.routingFlags?.needsRealtimeSearch && query) {
+      // Speculative cache warm-up — non-blocking. Pre-populates post-hint
+      // cache keyed by `{tool-name, normalized-args}` so if the LLM picks
+      // duckduckgo/exa with the same query, the result is already warm.
+      try {
+        const postHintCache = require('../lib/tools/post-hint-cache');
+        const { getTool: _getTool } = require('../lib/tools/registry');
+        const _warmQuery = (await this.extractCoreQuestion(query, input.conversationHistory || input.history || [], getUrlAnchors(tenantId))) || query;
+        const _ddg = _getTool('duckduckgo');
+        const _exa = _getTool('exa');
+        if (_ddg) postHintCache.warm('duckduckgo', { query: _warmQuery }, () => _ddg.execute(_warmQuery));
+        if (_exa) postHintCache.warm('exa', { query: _warmQuery }, () => _exa.execute(_warmQuery));
+      } catch (_warmErr) { /* warm-up is best-effort */ }
+      logger.debug(`🪝 Playground pull-first: skipping deterministic realtime cascade, warmed cache for "${query.slice(0, 60)}"`);
+    } else if (state.preflight.routingFlags?.needsRealtimeSearch && query) {
       logger.debug(`🌐 Real-time cascade: DDG → Brave for general query`);
 
       if (input.onStageChange) {
@@ -837,16 +859,30 @@ SYNTHESIS INSTRUCTIONS:
     // let it pick. Dark-launched behind NYAN_LLM_TOOL_FALLBACK=true.
     // Mechanism shared with stepSeedMetricToolCall via llm-tool-runner.
     // ========================================
+    // Pull-first gate: playground defaults the fallback ON (env=false force-off).
+    // Other surfaces keep the original opt-in (env=true). Window also widens for
+    // playground — no length floor, since the LLM is now the *first* picker, not
+    // the last-resort one.
+    const _fallbackEnabled = _isPlayground
+      ? (process.env.NYAN_LLM_TOOL_FALLBACK !== 'false')
+      : (process.env.NYAN_LLM_TOOL_FALLBACK === 'true');
+    const _minQueryLen = _isPlayground ? 2 : 8;
     if (
-      process.env.NYAN_LLM_TOOL_FALLBACK === 'true' &&
+      _fallbackEnabled &&
       state.preflight.mode === 'general' &&
-      !state.didSearch &&  // realtime cascade above already grounded this query
+      !state.didSearch &&  // realtime cascade above already grounded this query (non-playground only)
       !state.preflight.routingFlags?.usesForex &&
-      query && query.trim().length > 8
+      query && query.trim().length > _minQueryLen
     ) {
-      // Tools whose execute() is multi-positional — incompatible with the
-      // arity adapter in llm-tool-runner. Excluded from LLM-visible manifest.
-      // The deterministic preflight already covers their use cases.
+      // Tools whose execute() takes multiple positional args — incompatible
+      // with the arity adapter in llm-tool-runner. Documented per tool:
+      //   - brave-search   : execute(query, clientIp, opts) — needs caller IP for
+      //                      capacity throttling; deterministic preflight owns it.
+      //   - search-cascade : execute({query, strategy, clientIp}) — multi-provider
+      //                      orchestration, IP-bound, owned by preflight.
+      //   - search-kernel  : execute({query, tier, clientIp}) — same as above.
+      //   - pdf-analyzer   : execute(buffer, filename) — binary payload, not LLM-shaped.
+      // duckduckgo + exa already cover the open-web pull need.
       const POSITIONAL_MULTI_ARG = new Set([
         'brave-search', 'search-cascade', 'search-kernel', 'pdf-analyzer'
       ]);
@@ -856,6 +892,8 @@ SYNTHESIS INSTRUCTIONS:
         .map(toToolDef);
 
       if (exposedTools.length > 0) {
+        const _pullStart = Date.now();
+        const postHintCache = require('../lib/tools/post-hint-cache');
         try {
           logger.debug({ toolCount: exposedTools.length, query: query.slice(0, 80) }, '🪝 LLM tool fallback: invoking');
           const llm = await callWithTools({
@@ -879,8 +917,33 @@ SYNTHESIS INSTRUCTIONS:
               '🪝 LLM tool fallback: tools invoked'
             );
             const results = [];
+            let _cacheHits = 0;
             for (const tc of llm.toolCalls.slice(0, 4)) {
-              results.push(await runToolCall(tc, getTool));
+              // Post-hint cache lookup: keyed by {tool-name, normalized-args}.
+              // The LLM never sees this — pure latency optimisation.
+              const _fnName = (tc.function?.name || '').replace(/_/g, '-');
+              let _args = {};
+              try { _args = JSON.parse(tc.function?.arguments || '{}'); } catch (_) { _args = {}; }
+              const _cached = postHintCache.get(_fnName, _args);
+              if (_cached !== undefined) {
+                _cacheHits++;
+                results.push({ name: _fnName, args: _args, result: _cached, cached: true });
+              } else {
+                const _r = await runToolCall(tc, getTool);
+                if (!_r.error && _r.result !== null && _r.result !== undefined) {
+                  postHintCache.set(_r.name, _r.args, _r.result);
+                }
+                results.push(_r);
+              }
+            }
+            if (_isPlayground) {
+              logger.info({
+                tools_offered: exposedTools.length,
+                llm_picked: results.map(r => r.name),
+                cache_hits: _cacheHits,
+                push_overrode: false,
+                total_latency_ms: Date.now() - _pullStart
+              }, '🪝 Playground pull-first');
             }
             const evidence = results.map(r =>
               r.error
@@ -898,6 +961,15 @@ SYNTHESIS: Use these tool results as the primary evidence. Cite values explicitl
             });
           } else {
             logger.debug('🪝 LLM tool fallback: LLM declined to call any tool');
+            if (_isPlayground) {
+              logger.info({
+                tools_offered: exposedTools.length,
+                llm_picked: [],
+                cache_hits: 0,
+                push_overrode: false,
+                total_latency_ms: Date.now() - _pullStart
+              }, '🪝 Playground pull-first');
+            }
           }
         } catch (err) {
           logger.warn({ err: err.message }, '🪝 LLM tool fallback: failed (non-fatal, continuing)');

@@ -229,4 +229,51 @@ async function groqWithRetry(axiosConfig, maxRetries = 3, serviceType = 'text') 
     );
 }
 
-module.exports = { resolveAIToken, resolveOllamaModel, groqWithRetry };
+// Kimi-first cascade: OpenRouter(Kimi K2) → Groq Llama → Ollama.
+// Designed for latency-insensitive tasks where model quality > raw speed
+// (e.g. dashboard book crawling, structured fact retrieval from message archives).
+// When OPENROUTER_API_KEY is absent, degrades transparently to groqWithRetry.
+async function kimiFirst(axiosConfig, maxRetries = 3, serviceType = 'text') {
+    const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
+
+    // No OR key — skip Kimi tier entirely, use standard Groq cascade
+    if (!OPENROUTER_API_KEY) {
+        return groqWithRetry(axiosConfig, maxRetries, serviceType);
+    }
+
+    let lastError = null;
+
+    // ── Tier 1: Kimi K2 via OpenRouter ───────────────────────────────────────
+    try {
+        const kimiData = { ...axiosConfig.data, model: 'moonshotai/kimi-k2' };
+        const kimiConfig = {
+            ...axiosConfig.config,
+            headers: {
+                ...(axiosConfig.config?.headers || {}),
+                Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+                'HTTP-Referer': BRAND.openrouterReferer,
+                'X-Title': BRAND.openrouterTitle,
+            },
+        };
+        const response = await axios.post(OPENROUTER_API_URL, kimiData, kimiConfig);
+        if (response.data?.usage) usageTracker.recordUsage(serviceType, response.data.usage);
+        logger.info({ model: 'moonshotai/kimi-k2' }, '🌙 Kimi K2 (primary) succeeded');
+        return response;
+    } catch (kimiError) {
+        if (!_isEligibleForFallback(kimiError)) throw kimiError;
+        logger.warn(
+            { status: kimiError.response?.status },
+            '⚠️ Kimi K2 (primary) failed — cascading to Groq Llama'
+        );
+        lastError = kimiError;
+    }
+
+    // ── Tier 2+: Groq Llama → OpenRouter → Ollama (standard cascade) ─────────
+    try {
+        return await groqWithRetry(axiosConfig, maxRetries, serviceType);
+    } catch (err) {
+        throw lastError || err;
+    }
+}
+
+module.exports = { resolveAIToken, resolveOllamaModel, groqWithRetry, kimiFirst };

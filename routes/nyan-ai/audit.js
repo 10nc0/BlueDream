@@ -1,7 +1,7 @@
 const axios = require('axios');
 const rateLimit = require('express-rate-limit');
 const logger = require('../../lib/logger');
-const { resolveAIToken, groqWithRetry } = require('../../utils/groq-client');
+const { resolveAIToken, groqWithRetry, kimiFirst } = require('../../utils/groq-client');
 const { AI_MODELS, getLLMBackend, AUDIT } = require('../../config/constants');
 const { buildAuditContext } = require('../../utils/audit-context');
 const { runDashboardAuditPipeline } = require('../../utils/dashboard-audit-pipeline');
@@ -116,7 +116,7 @@ Analyze the data and answer the user's question. Count carefully when asked abou
                 contextPrompt = query;
             }
 
-            const response = await groqWithRetry({
+            const response = await kimiFirst({
                 url: _llm.url,
                 data: {
                     model: _llm.model,
@@ -145,7 +145,7 @@ Analyze the data and answer the user's question. Count carefully when asked abou
             let pipelineVerified = null;
             if (bookContext && bookContext.totalMessages > 0) {
                 const retryFn = async (retryPrompt, options) => {
-                    const retryResp = await groqWithRetry({
+                    const retryResp = await kimiFirst({
                         url: _llm.url,
                         data: {
                             model: _llm.model,

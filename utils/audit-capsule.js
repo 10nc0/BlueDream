@@ -19,6 +19,7 @@
 const logger = require('../lib/logger');
 const { parseQueryScope, messageMatchesScope } = require('./query-scope');
 const { PLATE_REGEX, PLATE_SHAPE_FRAGMENT } = require('../lib/entity-shapes');
+const { extractClaims: extractCrossSourceClaims, parseCurrencyValue } = require('./claim-extractor');
 const {
     buildCorrectionPatterns,
     COUNT_UNITS_FULL_FRAG,
@@ -87,6 +88,18 @@ class AuditCapsule {
         this.tallyByEntity = new Map();
         this.entityToMessages = new Map();
         
+        // ── Task #228: cross-source verifier state ──────────────────────────
+        // toolResults is the array of {name, args, result, error} records the
+        // pipeline-orchestrator (or playground tool-runner) captured for THIS
+        // turn.  When empty/absent, the cross-source verifier is a strict
+        // no-op — every flow that hydrated() before #228 keeps its exact
+        // prior behavior.
+        this.toolResults = [];
+        // toolClaims is populated by extractClaimsFromResponse() using the
+        // anchored regex extractor in utils/claim-extractor.js.  Each entry:
+        //   { kind, value, raw, sourceCited, position }
+        this.toolClaims = [];
+        
         this.pipelineLog = [];
         this.verified = null;
         this.corrected = false;
@@ -97,13 +110,17 @@ class AuditCapsule {
         this._destroyed = false;
     }
     
-    hydrate({ contextMessages = [], aggregates = {}, richAggregates = null, query = '', now, tz }) {
+    hydrate({ contextMessages = [], aggregates = {}, richAggregates = null, query = '', now, tz, toolResults = [] }) {
         if (this._destroyed) return this;
         
         this.contextMessages = contextMessages;
         this.aggregates = aggregates;
         this.richAggregates = richAggregates || {};
         this.hasAggregates = Object.keys(aggregates).length > 0;
+        // Cross-source verifier (Task #228) input.  Accept any iterable of
+        // {name, args, result, error}; coerce non-arrays to [] so older
+        // callers that pass nothing don't accidentally activate the verifier.
+        this.toolResults = Array.isArray(toolResults) ? toolResults : [];
         
         this.query = query || '';
         // Pass { now, tz } so relative-time phrases (kemarin, bulan lalu, last
@@ -293,8 +310,188 @@ class AuditCapsule {
             }
         }
         
-        this.log(`Extracted ${this.claimsExtracted.length} claims from response`);
+        // Cross-source claim extraction (Task #228): pull every numeric claim
+        // with optional source attribution. Stored separately from
+        // claimsExtracted because their lifecycle is different — these are
+        // only verified when toolResults is non-empty, and they can't be
+        // deterministically patched.
+        this.toolClaims = extractCrossSourceClaims(responseText);
+        
+        this.log(`Extracted ${this.claimsExtracted.length} entity claims, ${this.toolClaims.length} tool/source claims from response`);
         return this.claimsExtracted;
+    }
+    
+    /**
+     * Cross-source verification (Task #228).
+     *
+     * For each numeric claim that the LLM emitted, check whether the
+     * claimed value actually appears in the tool result the LLM cited
+     * (or, when nothing was cited, in any tool result it was given).
+     *
+     * Mismatches become corrections with shape:
+     *   { kind: 'tool_claim', claim, citedSource, searchedSources,
+     *     nearestMatch, reason: 'tool_claim_unverified' }
+     *
+     * These are pushed into `this.corrections` alongside the existing
+     * scope-tally corrections so the retry/patch path sees them in one
+     * uniform array. The retry-hint builder differentiates by `kind`,
+     * and `applyCorrections` skips tool-claim entries because they
+     * carry no template-patchable count — they fall through to
+     * `unverifiable` if the retry didn't fix them.
+     *
+     * Strict no-op when toolResults is empty.
+     */
+    _verifyToolClaims() {
+        if (!this.toolResults || this.toolResults.length === 0) return [];
+        if (!this.toolClaims || this.toolClaims.length === 0) return [];
+        
+        // Build a lookup table of stringified results per canonical tool name.
+        // A single turn may call the same tool with multiple args; we
+        // concatenate so the verifier sees the union.
+        const byTool = new Map();
+        for (const tr of this.toolResults) {
+            if (!tr || tr.error) continue;
+            const name = tr.name || 'unknown';
+            const body = typeof tr.result === 'string'
+                ? tr.result
+                : (() => { try { return JSON.stringify(tr.result); } catch { return ''; } })();
+            if (!body) continue;
+            byTool.set(name, (byTool.get(name) || '') + '\n' + body);
+        }
+        
+        const mismatches = [];
+        for (const claim of this.toolClaims) {
+            // Resolve which tool body to search.
+            //   - If the claim cites a specific source AND that source is
+            //     present in toolResults: search that body only (catches
+            //     "source swap" — the number exists, just in a different tool).
+            //   - If the claim cites a source that is NOT in toolResults:
+            //     this is itself an unverified citation — do NOT silently
+            //     fall back to all tools, otherwise we'd miss "fabricated
+            //     attribution" cases.
+            //   - If the claim is uncited: search every tool body.
+            let targets;
+            if (claim.sourceCited) {
+                if (!byTool.has(claim.sourceCited)) {
+                    mismatches.push({
+                        kind: 'tool_claim',
+                        claim: {
+                            kind: claim.kind,
+                            value: claim.value,
+                            raw: claim.raw,
+                            position: claim.position
+                        },
+                        citedSource: claim.sourceCited,
+                        searchedSources: [],
+                        nearestMatch: null,
+                        reason: 'cited_source_absent_from_tools'
+                    });
+                    continue;
+                }
+                targets = [{ name: claim.sourceCited, body: byTool.get(claim.sourceCited) }];
+            } else {
+                targets = Array.from(byTool.entries()).map(([name, body]) => ({ name, body }));
+            }
+            
+            if (targets.length === 0) continue;
+            
+            const { match, nearest, searchedNames } = this._findClaimInTools(claim, targets);
+            if (match) continue;
+            
+            mismatches.push({
+                kind: 'tool_claim',
+                claim: {
+                    kind: claim.kind,
+                    value: claim.value,
+                    raw: claim.raw,
+                    position: claim.position
+                },
+                citedSource: claim.sourceCited,
+                searchedSources: searchedNames,
+                nearestMatch: nearest,
+                reason: 'tool_claim_unverified'
+            });
+        }
+        
+        return mismatches;
+    }
+    
+    /**
+     * Search a list of tool bodies for the numeric value of a claim, within
+     * the per-kind tolerance. Returns:
+     *   { match: bool, nearest: number|null, searchedNames: string[] }
+     *
+     * Tolerances (per task spec):
+     *   percent   ±0.5 percentage points (exact value compare)
+     *   currency  ±1% of magnitude
+     *   count     exact
+     *   year      exact
+     *   range     both bounds verified independently as percent/currency
+     *             (whichever the trailing unit signals); approximated as
+     *             ±1% to share the currency code path.
+     */
+    _findClaimInTools(claim, targets) {
+        const searchedNames = targets.map(t => t.name);
+        const NUM_RE = /-?\d{1,3}(?:[.,]\d{3})*(?:[.,]\d+)?|-?\d+(?:[.,]\d+)?/g;
+        
+        const toleranceCheck = (claimVal, candidate) => {
+            switch (claim.kind) {
+                case 'percent':
+                    // ±0.5 percentage points
+                    return Math.abs(candidate - claimVal) <= 0.5;
+                case 'currency':
+                    // ±1% of magnitude (min absolute 0.5 so tiny values don't
+                    // require sub-cent precision in the tool body)
+                    return Math.abs(candidate - claimVal) <= Math.max(0.5, Math.abs(claimVal) * 0.01);
+                case 'count':
+                case 'year':
+                    return candidate === claimVal;
+                case 'range':
+                    // Range is two bounds; caller handles each side separately.
+                    return false;
+                default:
+                    return candidate === claimVal;
+            }
+        };
+        
+        // Range claims: verify both bounds; both must match (within currency-style
+        // tolerance) for the claim to count as verified.
+        if (claim.kind === 'range' && Array.isArray(claim.value)) {
+            const [lo, hi] = claim.value;
+            const loVerify = this._findClaimInTools({ ...claim, kind: 'currency', value: lo }, targets);
+            const hiVerify = this._findClaimInTools({ ...claim, kind: 'currency', value: hi }, targets);
+            return {
+                match: loVerify.match && hiVerify.match,
+                nearest: loVerify.match ? hiVerify.nearest : loVerify.nearest,
+                searchedNames
+            };
+        }
+        
+        const claimVal = claim.value;
+        let nearest = null;
+        let nearestDelta = Infinity;
+        
+        for (const { body } of targets) {
+            NUM_RE.lastIndex = 0;
+            let m;
+            while ((m = NUM_RE.exec(body)) !== null) {
+                // Use the SAME locale-aware parser the extractor uses, so
+                // a tool body containing "Rp 5.000.000" (Indonesian
+                // dot-grouping) matches a claim of 5000000 — not 5.
+                const n = parseCurrencyValue(m[0]);
+                if (n === null || !isFinite(n)) continue;
+                if (toleranceCheck(claimVal, n)) {
+                    return { match: true, nearest: n, searchedNames };
+                }
+                const delta = Math.abs(n - claimVal);
+                if (delta < nearestDelta) {
+                    nearestDelta = delta;
+                    nearest = n;
+                }
+            }
+        }
+        
+        return { match: false, nearest, searchedNames };
     }
     
     verify() {
@@ -303,16 +500,6 @@ class AuditCapsule {
         const mismatches = [];
         const unverifiable = [];
         
-        if (this.contextMessages.length === 0 && !this.hasAggregates) {
-            this.verified = null;
-            this.needsHumanReview = this.claimsExtracted.length > 0;
-            this.unverifiable = this.claimsExtracted.map(c => ({
-                ...c,
-                reason: 'No context available to verify'
-            }));
-            this.log(`Verification skipped: no context, ${this.claimsExtracted.length} claims unverifiable`);
-            return this;
-        }
         
         for (const claim of this.claimsExtracted) {
             const broadCount = this.tallyByEntity.get(claim.entity) || 0;
@@ -356,24 +543,61 @@ class AuditCapsule {
             }
         }
         
+        // Tag the legacy entity/count corrections so downstream consumers
+        // (retry hints, applyCorrections, observability) can distinguish them
+        // from the new tool-claim corrections added below.
+        for (const m of mismatches) {
+            if (!m.kind) m.kind = 'scope_tally';
+        }
+        
+        // ── Cross-source verifier (Task #228) ────────────────────────────────
+        // Runs AFTER scope-tally verification so its corrections stack into
+        // the same array.  No-op when toolResults is empty.
+        const toolClaimMismatches = this._verifyToolClaims();
+        for (const m of toolClaimMismatches) mismatches.push(m);
+        
         this.unverifiable = unverifiable;
         this.corrections = mismatches;
         this.verified = mismatches.length === 0 && unverifiable.length === 0;
-        this.needsHumanReview = unverifiable.length > 0;
+        // Tool-claim mismatches are non-patchable (the LLM cited a number
+        // that does not exist in the tool body it claimed) — they must
+        // surface as needs-human-review even before applyCorrections has
+        // had a chance to move them into `unverifiable`.
+        this.needsHumanReview = unverifiable.length > 0 || toolClaimMismatches.length > 0;
         
-        this.log(`Verified: ${this.claimsExtracted.length} claims, ${mismatches.length} mismatches, ${unverifiable.length} unverifiable`);
+        this.log(`Verified: ${this.claimsExtracted.length} entity claims, ${this.toolClaims.length} tool/source claims; ${mismatches.length} mismatches (${toolClaimMismatches.length} tool-claim), ${unverifiable.length} unverifiable`);
         return this;
     }
     
     getRetryHints() {
         if (this._destroyed) return [];
         
-        return this.corrections.map(m => ({
-            entity: m.entity,
-            claimed: m.claimedCount,
-            actual: m.actual,
-            hint: `${m.entity} appears ${m.actual} times in the provided context, not ${m.claimedCount}`
-        }));
+        return this.corrections.map(m => {
+            if (m.kind === 'tool_claim') {
+                // Tool-claim hints describe the source mismatch, not an
+                // entity/count correction.  Shape kept superset-compatible
+                // with the scope-tally shape so callers don't need to branch.
+                const where = m.citedSource
+                    ? `the ${m.citedSource} result you cited`
+                    : `any tool result you were given`;
+                const near = m.nearestMatch !== null && m.nearestMatch !== undefined
+                    ? ` Nearest value present: ${m.nearestMatch}.`
+                    : '';
+                return {
+                    kind: 'tool_claim',
+                    claim: m.claim,
+                    citedSource: m.citedSource,
+                    hint: `The value ${m.claim.raw} (${m.claim.kind}) does not appear in ${where}.${near} Either correct the number to match the source, or remove the unsupported claim.`
+                };
+            }
+            return {
+                kind: 'scope_tally',
+                entity: m.entity,
+                claimed: m.claimedCount,
+                actual: m.actual,
+                hint: `${m.entity} appears ${m.actual} times in the provided context, not ${m.claimedCount}`
+            };
+        });
     }
     
     applyCorrections(responseText) {
@@ -382,7 +606,29 @@ class AuditCapsule {
         let correctedText = responseText;
         const appliedCorrections = [];
         
-        const correctableMismatches = this.corrections.filter(m => m.actual > 0);
+        // Tool-claim mismatches can't be patched deterministically — there is
+        // no entity/template to rewrite, only an unsupported number that the
+        // LLM emitted.  Push them straight to `unverifiable` so the dashboard
+        // gets a human-review surface and the response text is left honest.
+        const toolClaimMismatches = this.corrections.filter(m => m.kind === 'tool_claim');
+        for (const tcm of toolClaimMismatches) {
+            this.unverifiable.push({
+                kind: 'tool_claim',
+                claim: tcm.claim,
+                citedSource: tcm.citedSource,
+                searchedSources: tcm.searchedSources,
+                nearestMatch: tcm.nearestMatch,
+                reason: 'tool_claim_unverified'
+            });
+        }
+        if (toolClaimMismatches.length > 0) {
+            this.needsHumanReview = true;
+            this.log(`toolClaimUnverified: ${toolClaimMismatches.length} numeric claim(s) absent from cited tool result`);
+        }
+        
+        const correctableMismatches = this.corrections.filter(
+            m => m.kind !== 'tool_claim' && m.actual > 0
+        );
         
         for (const mismatch of correctableMismatches) {
             const entityPattern = mismatch.entity.replace(/\s+/g, '\\s*');
@@ -439,6 +685,9 @@ class AuditCapsule {
     }
     
     getStatus() {
+        const toolClaimCount = this.toolClaims.length;
+        const toolClaimMismatches = this.corrections.filter(c => c.kind === 'tool_claim').length
+            + this.unverifiable.filter(u => u.kind === 'tool_claim').length;
         return {
             requestId: this.requestId,
             engine: this.engine,
@@ -448,6 +697,9 @@ class AuditCapsule {
             unverifiable: this.unverifiable,
             needsHumanReview: this.needsHumanReview,
             claimCount: this.claimsExtracted.length,
+            toolClaimCount,
+            toolClaimMismatches,
+            toolResultsCount: this.toolResults.length,
             contextSize: this.contextMessages.length,
             hasAggregates: this.hasAggregates,
             scopeApplied: this.scopeApplied,
@@ -492,7 +744,10 @@ function createCapsule(requestId, engine) {
     const capsule = new AuditCapsule(requestId, engine);
     capsuleRegistry.set(requestId, capsule);
     
-    setTimeout(() => {
+    // .unref() so the auto-destroy timer never keeps the Node event loop
+    // alive on its own — tests and short-lived scripts can exit cleanly
+    // after their last pipeline call without waiting CAPSULE_TTL.
+    const t = setTimeout(() => {
         if (capsuleRegistry.has(requestId)) {
             const orphan = capsuleRegistry.get(requestId);
             if (!orphan.isDestroyed()) {
@@ -502,6 +757,7 @@ function createCapsule(requestId, engine) {
             capsuleRegistry.delete(requestId);
         }
     }, CAPSULE_TTL);
+    if (typeof t.unref === 'function') t.unref();
     
     return capsule;
 }

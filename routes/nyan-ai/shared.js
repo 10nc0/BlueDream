@@ -152,7 +152,8 @@ async function executeCompoundQuery(compoundParts, opts) {
             sessionLens: carriedSessionLens,
             isVisionRequest: !!(part.includePhotos && photoList?.length > 0),
             ...(sseStage && { streaming: true, onStageChange: sseStage }),
-            ...(contextAttachments && (part.includePhotos || part.includeDocuments) && { contextAttachments })
+            ...(contextAttachments && (part.includePhotos || part.includeDocuments) && { contextAttachments }),
+            ...(opts.surface && { surface: opts.surface })
         };
 
         const subResult = await orchestrator.execute(subInput);

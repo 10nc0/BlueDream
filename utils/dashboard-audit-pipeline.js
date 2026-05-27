@@ -14,20 +14,33 @@
 
 const { AI_MODELS } = require('../config/constants');
 const { createCapsule, destroyCapsule } = require('./audit-capsule');
+const logger = require('../lib/logger');
 
 // ==================== S2: Retry ====================
 
 function buildRetryHints(mismatches) {
-  const hints = mismatches.map(m => 
-    `- ${m.entity}: You claimed ${m.claimed}, but only ${m.actual} instance(s) shown in your response`
-  ).join('\n');
+  // Mismatches may be a mix of scope-tally shape ({entity, claimed, actual})
+  // and tool-claim shape ({kind:'tool_claim', claim, citedSource,
+  // nearestMatch}).  Render each kind in its own bullet so the retry prompt
+  // tells the LLM precisely what went wrong on each line.
+  const hints = mismatches.map(m => {
+    if (m.kind === 'tool_claim') {
+      const where = m.citedSource
+        ? `the ${m.citedSource} result you cited`
+        : `any of the tool results you were given`;
+      const near = (m.nearestMatch !== null && m.nearestMatch !== undefined)
+        ? ` Nearest value present: ${m.nearestMatch}.`
+        : '';
+      return `- Unsupported number "${m.claim?.raw ?? m.claim?.value}" (${m.claim?.kind}): not found in ${where}.${near}`;
+    }
+    return `- ${m.entity}: You claimed ${m.claimed}, but only ${m.actual} instance(s) shown in your response`;
+  }).join('\n');
   
   return `
-CORRECTION REQUIRED - COUNT MISMATCH DETECTED:
+CORRECTION REQUIRED - VERIFICATION MISMATCH DETECTED:
 ${hints}
 
-Please revise your response to ensure the counts match the actual instances you list.
-If you list 4 instances, say "4 kali", not "7 kali".
+Please revise your response so every numeric claim matches what the source data actually shows. For tool-result citations, only quote numbers that literally appear in the cited tool result. If a number cannot be verified, remove it rather than guessing.
 `;
 }
 
@@ -64,6 +77,7 @@ async function runDashboardAuditPipeline({
   initialResponse,
   contextMessages = [],
   entityAggregates = {},
+  toolResults = [],
   llmCallFn = null,
   engine = 'unknown',
   maxRetries = 1,
@@ -91,7 +105,8 @@ async function runDashboardAuditPipeline({
     richAggregates: entityAggregates,
     query,
     now,
-    tz
+    tz,
+    toolResults
   });
   
   pipelineLog.push(`S0: Received ${engine} response (${initialResponse.length} chars)`);
@@ -104,6 +119,22 @@ async function runDashboardAuditPipeline({
   capsule.extractClaimsFromResponse(initialResponse);
   capsule.verify();
   
+  // ── Cross-source verifier observability (Task #228) ───────────────────────
+  // Single log line per query so prod can grep & dashboard easily.
+  // claims_extracted counts numeric claims pulled from the response;
+  // divergent counts those that failed the tool-result cross-check;
+  // verified  = claims_extracted - divergent.
+  // retried   = whether the existing S2 retry path will fire below.
+  {
+    const claimsExtracted = capsule.toolClaims.length;
+    const divergent = capsule.corrections.filter(c => c.kind === 'tool_claim').length;
+    const verified = Math.max(0, claimsExtracted - divergent);
+    const willRetry = !!(llmCallFn && maxRetries > 0 && capsule.corrections.length > 0);
+    logger.info(
+      `🔍 Verifier: claims_extracted=${claimsExtracted}, verified=${verified}, divergent=${divergent}, retried=${willRetry}, tool_results=${toolResults.length}, engine=${engine}`
+    );
+  }
+  
   const scopeViolations = capsule.corrections.filter(c => c.scopeFilterViolation).length;
   if (scopeViolations > 0) {
     pipelineLog.push(`S1: Verify - ${scopeViolations} scope_filter_violation(s) — verifier's independent scope disagreed with the LLM's working set`);
@@ -114,19 +145,26 @@ async function runDashboardAuditPipeline({
   
   if (!capsuleStatus.contextSize && !capsuleStatus.hasAggregates) {
     const hasClaims = capsuleStatus.claimCount > 0;
-    pipelineLog.push(`S3: Deliver - No context available, ${hasClaims ? 'claims exist but cannot verify' : 'no claims detected'}`);
+    // Tool-claim mismatches (Task #228) are independent of book context —
+    // they survive the no-context branch and must surface here even when
+    // entity-count verification is impossible.
+    const toolMismatches = (capsule.corrections || []).filter(c => c.kind === 'tool_claim');
+    const hasToolMismatch = toolMismatches.length > 0;
+    pipelineLog.push(`S3: Deliver - No context available, ${hasClaims ? 'entity claims unverifiable' : 'no entity claims'}${hasToolMismatch ? `, ${toolMismatches.length} tool-claim mismatch(es) surfaced` : ''}`);
     destroyCapsule(capsuleId);
     return {
       text: initialResponse,
       corrected: false,
-      corrections: [],
+      corrections: toolMismatches,
       unverifiable: hasClaims ? capsule.claimsExtracted : [],
-      needsHumanReview: hasClaims,
+      needsHumanReview: hasClaims || hasToolMismatch,
       noContext: true,
-      verified: null,
+      verified: hasToolMismatch ? false : null,
       confidence: {
-        score: hasClaims ? 50 : 100,
-        rationale: hasClaims ? 'Claims detected but no context available to verify counts' : 'No verifiable claims detected in response'
+        score: hasToolMismatch ? 20 : (hasClaims ? 50 : 100),
+        rationale: hasToolMismatch
+          ? `Tool-claim mismatch detected (${toolMismatches.length}) — number not found in cited source`
+          : (hasClaims ? 'Claims detected but no context available to verify counts' : 'No verifiable claims detected in response')
       },
       pipelineLog,
       latencyMs: Date.now() - startTime
@@ -176,7 +214,9 @@ async function runDashboardAuditPipeline({
     const retryResponse = await retryWithHints(
       query,
       initialResponse,
-      capsule.corrections.map(c => ({ entity: c.entity, claimed: c.claimedCount, actual: c.actual })),
+      capsule.corrections.map(c => c.kind === 'tool_claim'
+        ? { kind: 'tool_claim', claim: c.claim, citedSource: c.citedSource, nearestMatch: c.nearestMatch }
+        : { kind: 'scope_tally', entity: c.entity, claimed: c.claimedCount, actual: c.actual }),
       llmCallFn,
       { engine }
     );
@@ -189,7 +229,8 @@ async function runDashboardAuditPipeline({
         richAggregates: entityAggregates,
         query,
         now,
-        tz
+        tz,
+        toolResults
       });
       retryCapsule.extractClaimsFromResponse(retryResponse);
       retryCapsule.verify();

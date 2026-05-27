@@ -138,7 +138,8 @@ function registerPlaygroundRoutes(app, deps) {
                 history: history || [],
                 clientIp,
                 isVisionRequest: photoList.length > 0,
-                contextAttachments
+                contextAttachments,
+                surface: 'playground'
             };
 
             const pipelineResult = await orchestrator.execute(pipelineInput);
@@ -249,7 +250,8 @@ function registerPlaygroundRoutes(app, deps) {
                 sseStage({ type: 'status', message: `Analyzing ${compoundParts.length} parts...` });
 
                 const compound = await executeCompoundQuery(compoundParts, {
-                    extractedContent, photoList, docList, history, clientIp, contextAttachments, sseStage, isClientDisconnected
+                    extractedContent, photoList, docList, history, clientIp, contextAttachments, sseStage, isClientDisconnected,
+                    surface: 'playground'
                 });
 
                 if (isClientDisconnected()) return;
@@ -280,7 +282,8 @@ function registerPlaygroundRoutes(app, deps) {
                     isVisionRequest: photoList.length > 0,
                     contextAttachments,
                     streaming: true,
-                    onStageChange: sseStage
+                    onStageChange: sseStage,
+                    surface: 'playground'
                 };
 
                 const pipelineResult = await orchestrator.execute(pipelineInput);
