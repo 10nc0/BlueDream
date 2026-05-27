@@ -20,6 +20,7 @@ const logger = require('../lib/logger');
 const axios = require('axios');
 const { buildAuditPrompt, buildCorrectivePrompt } = require('../prompts/audit-protocol');
 const { getAuditBackend, AI_MODELS } = require('../config/constants');
+const { BRAND } = require('../config/brand');
 
 
 async function runAuditPass(groqToken, draftAnswer, originalQuery, userContext, extensions, timeout) {
@@ -85,20 +86,25 @@ Perform the dialectical audit and output JSON only.`;
       )
     };
 
+    const isOpenRouter = auditBackend.url.includes('openrouter.ai');
+    const _auditLabel = isReasoner ? 'DeepSeek R1' : isOpenRouter ? 'Kimi K2' : 'Groq Llama';
+    const auditHeaders = {
+      'Authorization': `Bearer ${groqToken}`,
+      'Content-Type': 'application/json',
+      ...(isOpenRouter ? {
+        'HTTP-Referer': BRAND.openrouterReferer,
+        'X-Title': BRAND.openrouterTitle
+      } : {})
+    };
+
     const _auditStart = Date.now();
     const response = await axios.post(
       auditBackend.url,
       requestBody,
-      {
-        headers: {
-          'Authorization': `Bearer ${groqToken}`,
-          'Content-Type': 'application/json'
-        },
-        timeout: timeout || auditBackend.timeouts.audit
-      }
+      { headers: auditHeaders, timeout: timeout || auditBackend.timeouts.audit }
     );
     const _auditElapsed = ((Date.now() - _auditStart) / 1000).toFixed(1);
-    logger.debug(`🧠 ${isReasoner ? 'DeepSeek R1' : 'Groq Llama'} audit responded in ${_auditElapsed}s`);
+    logger.debug(`🧠 ${_auditLabel} audit responded in ${_auditElapsed}s`);
 
     let rawContent = response.data.choices?.[0]?.message?.content || '{}';
 
@@ -177,6 +183,15 @@ async function runCorrectivePass(groqToken, draftAnswer, originalQuery, issues, 
 
   const correctiveBackend = getAuditBackend();
   const isCorrectiveReasoner = correctiveBackend.model.includes('reasoner');
+  const isCorrectiveOpenRouter = correctiveBackend.url.includes('openrouter.ai');
+  const correctiveHeaders = {
+    'Authorization': `Bearer ${groqToken}`,
+    'Content-Type': 'application/json',
+    ...(isCorrectiveOpenRouter ? {
+      'HTTP-Referer': BRAND.openrouterReferer,
+      'X-Title': BRAND.openrouterTitle
+    } : {})
+  };
   const response = await axios.post(
     correctiveBackend.url,
     {
@@ -188,13 +203,7 @@ async function runCorrectivePass(groqToken, draftAnswer, originalQuery, issues, 
       temperature: isCorrectiveReasoner ? AI_MODELS.TEMPERATURE_DEEPSEEK : AI_MODELS.TEMPERATURE_REASONING,
       max_tokens: maxTokens
     },
-    {
-      headers: {
-        'Authorization': `Bearer ${groqToken}`,
-        'Content-Type': 'application/json'
-      },
-      timeout
-    }
+    { headers: correctiveHeaders, timeout }
   );
 
   return response.data.choices?.[0]?.message?.content || draftAnswer;

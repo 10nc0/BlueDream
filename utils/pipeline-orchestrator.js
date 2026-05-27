@@ -2657,7 +2657,8 @@ Output ONLY the corrected table and summary lines:`;
     
     // Notify the stream about who is auditing (humane disclosure while client waits)
     if (input.onStageChange) {
-      input.onStageChange({ type: 'thinking', stage: `Auditing with Llama...` });
+      const _auditBackendLabel = getAuditBackend().model.includes('kimi') ? 'Kimi K2' : 'Llama';
+      input.onStageChange({ type: 'thinking', stage: `Auditing with ${_auditBackendLabel}...` });
     }
 
     try {
@@ -2680,7 +2681,7 @@ Output ONLY the corrected table and summary lines:`;
         },
         this.llmTimeouts.audit
       );
-      const _auditLabel = 'Llama';
+      const _auditLabel = getAuditBackend().model.includes('kimi') ? 'Kimi K2' : 'Llama';
       const _confStr = state.auditResult.confidence !== null && state.auditResult.confidence !== undefined
         ? `${state.auditResult.confidence}%` : 'unverified';
       logger.debug(`🔍 Audit [${_auditLabel}]: ${state.auditResult.verdict} (${_confStr})`);

@@ -152,6 +152,17 @@ const LLM_BACKENDS = {
       audit:      60000,   // S3 two-pass audit
       extract:    10000    // not used by auditor
     }
+  },
+  kimi: {
+    url: 'https://openrouter.ai/api/v1/chat/completions',
+    model: 'moonshotai/kimi-k2',
+    // Kimi K2: strong multilingual reasoning, large context, via OpenRouter
+    timeouts: {
+      reasoning:  60000,
+      toolCall:   90000,
+      audit:      45000,   // S3 audit — latency-insensitive, accuracy over speed
+      extract:    15000
+    }
   }
 };
 
@@ -164,9 +175,11 @@ function getFastLLMBackend() {
 }
 
 function getAuditBackend() {
-  // DeepSeek R1 times out on the free tier (reasoning chain > 60s timeout).
-  // Wired back to Groq Llama until a paid DeepSeek tier is available.
-  // To re-enable DeepSeek: return process.env.DEEPSEEK_API ? LLM_BACKENDS.auditor : LLM_BACKENDS.drafter;
+  // Kimi K2 (via OpenRouter) is preferred for S3 audit when the key is present:
+  // better multilingual reasoning + larger context than Llama 3.3 70B, and the
+  // audit stage is latency-insensitive (user sees "Auditing…" spinner, not raw stream).
+  // Falls back to Groq Llama when OPENROUTER_API_KEY is not configured.
+  if (process.env.OPENROUTER_API_KEY) return LLM_BACKENDS.kimi;
   return LLM_BACKENDS.drafter;
 }
 

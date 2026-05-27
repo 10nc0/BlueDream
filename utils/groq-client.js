@@ -6,10 +6,11 @@ const { BRAND } = require('../config/brand');
 
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
-// Maps Groq model names → OpenRouter model IDs
+// Maps Groq model names → OpenRouter model IDs for the Groq-down failover path.
+// Primary model maps to Kimi K2 — better multilingual reasoning than the Llama equivalent.
 // @ref: https://openrouter.ai/models
 const GROQ_TO_OPENROUTER = {
-    'llama-3.3-70b-versatile':                   'meta-llama/llama-3.3-70b-instruct',
+    'llama-3.3-70b-versatile':                   'moonshotai/kimi-k2',
     'llama-3.1-70b-versatile':                   'meta-llama/llama-3.1-70b-instruct',
     'llama3-70b-8192':                            'meta-llama/llama-3-70b-instruct',
     'llama3-8b-8192':                             'meta-llama/llama-3-8b-instruct',

@@ -109,7 +109,9 @@ async function extractCoreQuestion(message, conversationHistory = [], urlAnchors
 
 const orchestrator = createPipelineOrchestrator({
     groqToken: resolveAIToken('playground'),
-    auditToken: resolveAIToken('playground'),
+    // S3 audit: Kimi K2 via OpenRouter when key is present (better multilingual accuracy,
+    // latency-insensitive path). Falls back to the Groq playground token.
+    auditToken: process.env.OPENROUTER_API_KEY || resolveAIToken('audit') || resolveAIToken('playground'),
     groqVisionToken: resolveAIToken('vision'),
     searchKernel,
     // Deprecated — kept for one-release backward compat; kernel takes precedence
