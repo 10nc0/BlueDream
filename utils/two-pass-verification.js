@@ -75,19 +75,25 @@ Perform the dialectical audit and output JSON only.`;
   try {
     const auditBackend = getAuditBackend();
     const isReasoner = auditBackend.model.includes('reasoner');
+    const isOpenRouter = auditBackend.url.includes('openrouter.ai');
+    const _auditLabel = isReasoner ? 'DeepSeek R1' : isOpenRouter ? 'Kimi K2' : 'Groq Llama';
 
+    // OpenRouter (Kimi K2) does NOT support response_format — sending it
+    // causes an HTTP 400 Bad Request. Kimi follows JSON instructions from
+    // the system prompt, so we extract the JSON block from its text output.
+    // Groq does support response_format, so keep it for Llama.
     const requestBody = {
       model: auditBackend.model,
       messages: auditMessages,
       max_tokens: 800,
       ...(isReasoner
         ? { temperature: AI_MODELS.TEMPERATURE_DEEPSEEK }
-        : { temperature: AI_MODELS.TEMPERATURE_PRECISE, response_format: { type: 'json_object' } }
+        : isOpenRouter
+          ? { temperature: AI_MODELS.TEMPERATURE_PRECISE }
+          : { temperature: AI_MODELS.TEMPERATURE_PRECISE, response_format: { type: 'json_object' } }
       )
     };
 
-    const isOpenRouter = auditBackend.url.includes('openrouter.ai');
-    const _auditLabel = isReasoner ? 'DeepSeek R1' : isOpenRouter ? 'Kimi K2' : 'Groq Llama';
     const auditHeaders = {
       'Authorization': `Bearer ${groqToken}`,
       'Content-Type': 'application/json',
@@ -97,18 +103,59 @@ Perform the dialectical audit and output JSON only.`;
       } : {})
     };
 
-    const _auditStart = Date.now();
-    const response = await axios.post(
-      auditBackend.url,
-      requestBody,
-      { headers: auditHeaders, timeout: timeout || auditBackend.timeouts.audit }
-    );
-    const _auditElapsed = ((Date.now() - _auditStart) / 1000).toFixed(1);
-    logger.debug(`🧠 ${_auditLabel} audit responded in ${_auditElapsed}s`);
+    // Inner helper — make the actual audit HTTP call
+    const _doAuditCall = async (url, body, headers, timeoutMs) => {
+      const t0 = Date.now();
+      const resp = await axios.post(url, body, { headers, timeout: timeoutMs });
+      logger.debug(`🧠 ${_auditLabel} audit responded in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
+      return resp;
+    };
+
+    let response;
+    try {
+      response = await _doAuditCall(
+        auditBackend.url, requestBody, auditHeaders,
+        timeout || auditBackend.timeouts.audit
+      );
+    } catch (primaryErr) {
+      // Fallback: if the primary backend (Kimi/OpenRouter) failed for any
+      // non-timeout reason, retry once on Groq Llama so the audit still runs.
+      // Timeouts propagate as-is (user already waiting long enough).
+      const isTimeout = primaryErr.code === 'ECONNABORTED'
+        || primaryErr.message?.includes('timeout')
+        || primaryErr.code === 'ECONNRESET';
+      if (isTimeout) throw primaryErr;   // let outer catch handle it
+
+      const { GROQ_API_KEY, PLAYGROUND_AI_KEY, PLAYGROUND_GROQ_TOKEN } = process.env;
+      const fallbackToken = GROQ_API_KEY || PLAYGROUND_AI_KEY || PLAYGROUND_GROQ_TOKEN;
+      const { getLLMBackend } = require('../config/constants');
+      const fallbackBackend = getLLMBackend();   // Groq Llama drafter config
+
+      if (!fallbackToken || fallbackBackend.url === auditBackend.url) throw primaryErr;
+
+      logger.warn(`⚠️ Audit primary (${_auditLabel}) failed [${primaryErr.message}] — retrying on Groq Llama`);
+      const fallbackBody = {
+        model: fallbackBackend.model,
+        messages: auditMessages,
+        max_tokens: 800,
+        temperature: AI_MODELS.TEMPERATURE_PRECISE,
+        response_format: { type: 'json_object' }
+      };
+      const fallbackHeaders = {
+        'Authorization': `Bearer ${fallbackToken}`,
+        'Content-Type': 'application/json'
+      };
+      response = await _doAuditCall(
+        fallbackBackend.url, fallbackBody, fallbackHeaders,
+        timeout || fallbackBackend.timeouts.audit
+      );
+    }
 
     let rawContent = response.data.choices?.[0]?.message?.content || '{}';
 
-    if (isReasoner) {
+    // For non-JSON-mode providers (reasoner, OpenRouter/Kimi) extract the
+    // JSON block from the text — they may wrap it in markdown fences.
+    if (isReasoner || isOpenRouter) {
       const jsonMatch = rawContent.match(/```json\s*([\s\S]*?)```/) ||
                         rawContent.match(/(\{[\s\S]*\})/);
       rawContent = jsonMatch ? jsonMatch[1].trim() : rawContent;

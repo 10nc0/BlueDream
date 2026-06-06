@@ -148,6 +148,8 @@ Every inpipe message is assigned a `message_fractal_id` (derived from content + 
 
 Set `PINATA_JWT` and every inpipe message is automatically pinned to IPFS on arrival. The ledger is complete without IPFS. IPFS makes it sovereign.
 
+The message record is permanent. To keep the media files themselves, point an outpipe at storage you own.
+
 Every inpipe message also builds a cryptographic provenance capsule: the message body, an HMAC sender proof (phone proven, not revealed), a SHA256 content hash, and per-attachment metadata. The version field (`v`) is a public interface — structural changes bump the version, old CIDs remain permanently valid.
 
 > *Deleting a Postgres row does not delete the IPFS pin. The name is erased. The weight of the heart remains on the scale.*

@@ -43,9 +43,27 @@ async function loadBookExportData({ client, thothBot, tenantSchema, book_id, sel
             const threadId = outputCreds?.output_01?.thread_id;
             if (threadId) {
                 const channel = await thothBot.client.channels.fetch(threadId);
-                const fetchedMessages = await channel.messages.fetch({ limit: 100 });
 
-                const allMessages = fetchedMessages.map(m => {
+                // Paginate past Discord's 100-message per-call ceiling.
+                // Use `before` cursor (oldest snowflake seen so far) until a
+                // batch comes back with fewer than 100 entries — that's the end.
+                const PAGE_SIZE = 100;
+                const collected = new Map(); // id → message, deduplicates across pages
+                let before = undefined;
+
+                while (true) {
+                    const opts = { limit: PAGE_SIZE };
+                    if (before) opts.before = before;
+                    const batch = await channel.messages.fetch(opts);
+                    if (batch.size === 0) break;
+                    batch.forEach(m => collected.set(m.id, m));
+                    // Discord returns newest-first; the oldest in this batch is the
+                    // smallest snowflake — use it as the cursor for the next page.
+                    before = batch.last()?.id;
+                    if (batch.size < PAGE_SIZE) break;
+                }
+
+                const mapMessage = m => {
                     const embed = m.embeds[0];
                     const fields = embed?.fields || [];
                     const getField = (name) => fields.find(f => f.name === name)?.value;
@@ -63,6 +81,8 @@ async function loadBookExportData({ client, thothBot, tenantSchema, book_id, sel
                         time: formatTimestamp(m.createdAt),
                         text: embed?.description || '',
                         media,
+                        // mediaField present but zero Discord attachments → source/unresolved
+                        _sourceUnresolved: !!(mediaField && m.attachments.size === 0),
                         attachments: m.attachments.size > 0 ? m.attachments.map(a => ({
                             url: a.url,
                             filename: a.name,
@@ -70,7 +90,9 @@ async function loadBookExportData({ client, thothBot, tenantSchema, book_id, sel
                         })) : undefined,
                         _timestamp: m.createdAt.toISOString()
                     };
-                });
+                };
+
+                const allMessages = [...collected.values()].map(mapMessage);
 
                 if (selectedMessageIds && selectedMessageIds.length > 0) {
                     const selectedSet = new Set(selectedMessageIds);
@@ -180,6 +202,9 @@ function register(app, deps) {
             archive.append(messagesJson, { name: 'messages.json' });
 
             let attachmentStats = { total: 0, downloaded: 0, failed: 0 };
+            // Structured gap list — populated by fetch failures and source/unresolved rows.
+            // Each entry: { message_id, timestamp, filename, url, reason, stub_path|null }
+            const failedAttachments = [];
 
             const CDN_BASE_DELAY_MS = 300;
             const sleep = (ms) => new Promise(r => setTimeout(r, ms));
@@ -219,7 +244,43 @@ function register(app, deps) {
                             await sleep(delayMs);
                         } catch (err) {
                             attachmentStats.failed++;
-                            logger.warn({ filename: attachment.filename, err }, 'Failed to download attachment');
+                            const httpStatus = err?.response?.status || null;
+                            const reason = httpStatus
+                                ? `fetch failed — HTTP ${httpStatus}`
+                                : `fetch failed — ${err.code || err.message || 'network error'}`;
+
+                            logger.warn({ filename: attachment.filename, httpStatus, reason }, 'Failed to download attachment — writing .missing stub');
+
+                            // Write a named .missing stub so the gap is visible in the ZIP.
+                            // Include a sanitized filename stem to guarantee uniqueness when
+                            // a single message has multiple failed attachments.
+                            const safeStem = (attachment.filename || 'attachment')
+                                .replace(/\.[^.]+$/, '')          // strip extension
+                                .replace(/[^a-z0-9_\-]/gi, '_')   // fs-safe
+                                .slice(0, 40);
+                            const stubName = `${formattedTime} - ${msg.id} - ${safeStem}.missing`;
+                            const stubPath = `attachments/${stubName}`;
+                            const stubContent = JSON.stringify({
+                                reason,
+                                url: attachment.url,
+                                http_status: httpStatus,
+                                filename: attachment.filename,
+                                message_id: msg.id,
+                                timestamp: msg._timestamp,
+                                sender: msg.phone || null
+                            });
+                            fileHashes.push({ path: stubPath, sha256: sha256(stubContent), size: Buffer.byteLength(stubContent) });
+                            archive.append(stubContent, { name: stubPath });
+
+                            failedAttachments.push({
+                                message_id: msg.id,
+                                timestamp: msg._timestamp,
+                                filename: attachment.filename,
+                                url: attachment.url,
+                                reason,
+                                stub_path: stubPath
+                            });
+
                             const errRetryHeader = err?.response?.headers?.['retry-after'] || err?.response?.headers?.['x-ratelimit-reset-after'];
                             const errDelayMs = errRetryHeader
                                 ? Math.max(parseFloat(errRetryHeader) * 1000, CDN_BASE_DELAY_MS)
@@ -227,6 +288,20 @@ function register(app, deps) {
                             await sleep(errDelayMs);
                         }
                     }
+                }
+
+                // source/unresolved: embed has a Media field but Twilio never fetched
+                // the bytes at ingest time — no Discord attachment exists. No stub file
+                // (there is nothing to write), but the gap is named in the manifest.
+                if (msg._sourceUnresolved) {
+                    failedAttachments.push({
+                        message_id: msg.id,
+                        timestamp: msg._timestamp,
+                        filename: null,
+                        url: null,
+                        reason: 'source/unresolved — bytes were never fetched at ingest time',
+                        stub_path: null
+                    });
                 }
             }
 
@@ -242,16 +317,31 @@ This archive contains:
   - ${enrichedMessages.filter(m => m.metadata).length} messages with metadata
 
 - attachments/: Media files renamed for chronological sorting
-  - ${attachmentStats.downloaded} files downloaded
-  - ${attachmentStats.failed} files failed to download
+  - ${attachmentStats.downloaded} files downloaded successfully
+  - ${attachmentStats.failed} files failed to download (see .missing stubs below)
   - Total attempted: ${attachmentStats.total}
 
 - manifest.json: Cryptographic integrity manifest
   - SHA256 hashes for all files
   - Export provenance and timestamp
+  - failed_attachments: structured list of every gap (message ID, reason, stub path)
 
 Naming Convention:
 YYYY_MM_DD - HH_MM_SS - UTC - {message_id}.{extension}
+
+## Missing files
+When a media file could not be retrieved, a .missing stub is written in its place
+inside attachments/ with the same timestamp prefix. The stub is a JSON file that
+records the reason, the original URL, the HTTP status (if any), and the message ID.
+
+Reasons a file may be missing:
+  - fetch failed — HTTP 403/404: the Discord CDN URL expired or was revoked.
+  - fetch failed — network error: transient connectivity issue at export time.
+  - source/unresolved: the platform could not download the file from the source
+    (e.g. WhatsApp) at the time the message was received. No bytes exist anywhere.
+
+All gaps are also listed in manifest.json under "failed_attachments" so you can
+audit completeness without unpacking the archive.
 
 ## Verification
 To verify file integrity, compare SHA256 hashes in manifest.json:
@@ -262,7 +352,7 @@ To verify file integrity, compare SHA256 hashes in manifest.json:
             archive.append(readme, { name: 'README.txt' });
 
             const manifest = {
-                version: '1.0',
+                version: '1.1',
                 format: BRAND.exportFormatTag,
                 provenance: {
                     source: process.env.REPLIT_DEV_DOMAIN || process.env.REPL_SLUG || BRAND.exportSourceFallback,
@@ -275,8 +365,12 @@ To verify file integrity, compare SHA256 hashes in manifest.json:
                     total_messages: messages.length,
                     total_drops: dropsRows.length,
                     attachments_downloaded: attachmentStats.downloaded,
-                    attachments_failed: attachmentStats.failed
+                    // Derived from failedAttachments so this count always equals
+                    // failed_attachments.length — includes both fetch errors and
+                    // source/unresolved gaps (which don't bump attachmentStats.failed).
+                    attachments_failed: failedAttachments.length
                 },
+                failed_attachments: failedAttachments,
                 files: fileHashes,
                 integrity: {
                     algorithm: 'SHA256',

@@ -47,19 +47,25 @@ function parse(fractalId) {
         return null;
     }
     
-    // Match both regular and dev-prefixed IDs
-    // Examples: bridge_t1_abc123, book_t1_abc123, or dev_book_t1_abc123
-    const match = fractalId.match(/^(?:(dev)_)?(bridge|book|msg)_t(\d+)_([a-f0-9]+)$/);
+    // Match both regular and dev-prefixed IDs, with optional _b{N}_ breathe segment.
+    // Examples:
+    //   bridge_t1_abc123           (legacy book/bridge — no breathe segment)
+    //   book_t1_abc123             (legacy book — no breathe segment)
+    //   msg_t3_b1847_a4f9c2e81d03  (message with breathe stamp)
+    //   msg_t3_b0_a4f9c2e81d03     (message, breathe stamp 0 / legacy default)
+    //   dev_book_t1_abc123         (dev-prefixed)
+    const match = fractalId.match(/^(?:(dev)_)?(bridge|book|msg)_t(\d+)(?:_b(\d+))?_([a-f0-9]+)$/);
     if (!match) {
         return null;
     }
     
     return {
         isDevBridge: match[1] === 'dev',  // Legacy compatibility
-        envPrefix: match[1],  // 'dev' or undefined
+        envPrefix: match[1],              // 'dev' or undefined
         type: match[2],
         tenantId: parseInt(match[3]),
-        hash: match[4]
+        breatheCount: match[4] !== undefined ? parseInt(match[4]) : null,
+        hash: match[5]
     };
 }
 
@@ -95,22 +101,30 @@ function verify(fractalId, type, tenantId, dbId, createdByAdminId = null) {
 }
 
 /**
- * Generate a deterministic fractal ID for a message record
- * Derived from content fingerprint — no DB ID needed
- * Format: msg_t{tenantId}_{hash}
+ * Generate a deterministic fractal ID for a message record.
+ * Derived from content fingerprint — no DB ID needed (retries are idempotent).
+ *
+ * Format (with breathe stamp):  msg_t{tenantId}_b{N}_{hash}
+ * Format (legacy / breathe=0):  msg_t{tenantId}_b0_{hash}
+ *
+ * The hash covers bookFractalId + timestamp + contentHash only — NOT breatheCount.
+ * This preserves content-addressability so retried messages produce the same ID.
+ * breatheCount appears as a readable segment (_b{N}_) for tamper-detection:
+ * cross-check N against the phi breathe log to verify the arrival time window.
  *
  * @param {string} bookFractalId - Parent book's fractal ID
- * @param {number} tenantId - Tenant ID
- * @param {string} timestamp - ISO timestamp of the message
- * @param {string} contentHash - SHA256 of message body
+ * @param {number} tenantId      - Tenant ID
+ * @param {string} timestamp     - ISO timestamp of the message
+ * @param {string} contentHash   - SHA256 of message body
+ * @param {number} breatheCount  - Current phi breathe count (default 0)
  * @returns {string} Stable, unique message fractal ID
  */
-function generateMsg(bookFractalId, tenantId, timestamp, contentHash) {
+function generateMsg(bookFractalId, tenantId, timestamp, contentHash, breatheCount = 0) {
     const hash = crypto.createHmac('sha256', SALT)
         .update(`${bookFractalId}:${timestamp}:${contentHash}`)
         .digest('hex')
         .slice(0, 12);
-    return `msg_t${tenantId}_${hash}`;
+    return `msg_t${tenantId}_b${breatheCount}_${hash}`;
 }
 
 module.exports = {

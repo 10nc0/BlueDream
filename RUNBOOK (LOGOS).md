@@ -501,11 +501,14 @@ lib/tools/ (10 tools):
 
 ```
 lib/outpipes/
-├── router.js   — Dispatches all outpipes in parallel; legacy webhook fallback
-├── discord.js  — Discord webhook delivery
-├── email.js    — Email via Resend
-└── webhook.js  — HTTPS JSON POST with optional HMAC-SHA256 signature
+├── router.js     — Dispatches all outpipes; fetches media bytes once before the loop
+├── fetch-bytes.js — Shared byte-fetch util (2xx + non-HTML guard, 10 s timeout)
+├── discord.js    — Discord webhook delivery (CDN URL, no byte push needed)
+├── email.js      — Email via Resend (attaches bytes inline when available)
+└── webhook.js    — multipart/form-data POST with raw bytes + metadata; HMAC-SHA256 optional
 ```
+
+> **Media sovereignty note:** BlueDream forwards raw bytes to webhook and email outpipes at delivery time — the subscriber receives a sovereign copy independent of Discord CDN. The message record (hashes, fractal IDs) is permanent. To keep the media files themselves beyond Discord CDN's lifetime, point an outpipe at storage you own.
 
 ### `lib/fetch-cache.js`
 
