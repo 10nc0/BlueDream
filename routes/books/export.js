@@ -129,6 +129,20 @@ async function loadBookExportData({ client, thothBot, tenantSchema, book_id, sel
         logger.warn({ err: err.message }, 'CID lookup failed (non-fatal)');
     }
 
+    // Authoritative message count from the DB ledger — used in the manifest to
+    // reconcile against what the Discord thread returned. A gap means some messages
+    // were never delivered to Discord (bot outage, thread deletion, etc.).
+    let ledgerMessageCount = null;
+    try {
+        const countResult = await client.query(
+            `SELECT COUNT(*)::int AS n FROM ${resolvedSchema}.anatta_messages WHERE book_fractal_id = $1`,
+            [book_id]
+        );
+        ledgerMessageCount = countResult.rows[0]?.n ?? null;
+    } catch (err) {
+        logger.warn({ err: err.message }, 'Ledger count query failed (non-fatal)');
+    }
+
     const enrichedMessages = messages.map(msg => {
         const { _timestamp, ...cleanMsg } = msg;
         return { ...cleanMsg, metadata: dropsMap.get(msg.id) || null };
@@ -141,7 +155,8 @@ async function loadBookExportData({ client, thothBot, tenantSchema, book_id, sel
         dropsRows: dropsResult.rows,
         dropsMap,
         enrichedMessages,
-        anattaCidByMsgId
+        anattaCidByMsgId,
+        ledgerMessageCount
     };
 }
 
@@ -168,7 +183,7 @@ function register(app, deps) {
             if (loaded.notFound) {
                 return res.status(404).json({ error: 'Book not found in your tenant' });
             }
-            const { book, messages, dropsRows, enrichedMessages, tenantSchema: resolvedSchema } = loaded;
+            const { book, messages, dropsRows, enrichedMessages, tenantSchema: resolvedSchema, ledgerMessageCount } = loaded;
 
             const exportTimestamp = new Date().toISOString();
 
@@ -369,6 +384,19 @@ To verify file integrity, compare SHA256 hashes in manifest.json:
                     // failed_attachments.length — includes both fetch errors and
                     // source/unresolved gaps (which don't bump attachmentStats.failed).
                     attachments_failed: failedAttachments.length
+                },
+                // Reconcile the Discord thread export against the authoritative
+                // anatta_messages row count. A non-zero gap means some messages
+                // exist in the DB but were not returned by the Discord thread
+                // (e.g. bot outage, thread partial deletion, pre-activation messages).
+                // null means the ledger query was unavailable (non-fatal).
+                ledger: {
+                    messages_in_db: ledgerMessageCount,
+                    messages_exported: messages.length,
+                    gap: ledgerMessageCount !== null ? ledgerMessageCount - messages.length : null,
+                    note: (ledgerMessageCount !== null && ledgerMessageCount !== messages.length)
+                        ? 'Gap: some DB rows were not present in the Discord thread. May reflect bot outage, pre-activation messages, or thread edits.'
+                        : null
                 },
                 failed_attachments: failedAttachments,
                 files: fileHashes,

@@ -1,0 +1,11 @@
+{
+  "gitignore": true,
+  "noSymlinks": true,
+  "ignore": [
+    "**/node_modules/**",
+    "**/public/vendor/**",
+    "**/.git/**",
+    "**/package-lock.json",
+    "**/pnpm-lock.yaml"
+  ]
+}
