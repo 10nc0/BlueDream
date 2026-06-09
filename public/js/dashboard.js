@@ -21,7 +21,6 @@
         let allMessages = _S.getAllMessages();
         let currentUser = _S.getCurrentUser();
         let bookSearchContext = _S.getBookSearchContext();
-        let botTags = _S.getBotTags();
         let botWebhooks = _S.getBotWebhooks();
         let users = _S.getUsers();
         let sessions = _S.getSessions();
@@ -38,14 +37,13 @@
         function setCurrentUser(user) { currentUser = user; _S.setCurrentUser(user); }
         function setMessageCache(cache) { messageCache = cache; _S.setMessageCache(cache); }
         function setAllMessages(msgs) { allMessages = msgs; _S.setAllMessages(msgs); }
-        function setBotTags(tags) { botTags = tags; _S.setBotTags(tags); }
         function setBotWebhooks(webhooks) { botWebhooks = webhooks; _S.setBotWebhooks(webhooks); }
         function setUsers(u) { users = u; _S.setUsers(u); }
         function setSessions(s) { sessions = s; _S.setSessions(s); }
         function setEditingBookId(id) { editingBookId = id; _S.setEditingBookId(id); }
         function setSelectedBookId(id) { selectedBookId = id; _S.setSelectedBookId(id); }
 
-        // drops tag cache: bookId → { discord_message_id → string[] }
+        // drops tag cache: bookId → { source_id → string[] }
         // populated by hydrateDropsForBook; used by applyLensFilter for #tag searches
         const dropsTagCache = {};
 
@@ -565,6 +563,13 @@
             auditBtn.setAttribute('aria-label', 'View audit log');
             auditBtn.textContent = '🧿';
             layer01.appendChild(auditBtn);
+
+            const accountMobileBtn = document.createElement('button');
+            accountMobileBtn.className = 'thumb-btn';
+            accountMobileBtn.dataset.action = 'account';
+            accountMobileBtn.setAttribute('aria-label', 'Account settings');
+            accountMobileBtn.textContent = '⚙️';
+            layer01.appendChild(accountMobileBtn);
             
             const searchBtn = document.createElement('button');
             searchBtn.className = 'thumb-btn desktop-only';
@@ -950,8 +955,6 @@
                 const data = await res.json();
 
                 if (res.status === 503 && data.code === 'warming_up') {
-                    const userInfo = document.getElementById('userInfo');
-                    if (userInfo) userInfo.textContent = '🐱 warming up...';
                     let overlay = document.getElementById('nyanWarmupOverlay');
                     if (!overlay) {
                         overlay = document.createElement('div');
@@ -979,32 +982,6 @@
                 }
                 
                 setCurrentUser(data.user);
-                const userInfo = document.getElementById('userInfo');
-                const roleColors = {
-                    'dev': '#ffffff',
-                    'admin': '#10b981',
-                    'user': '#60a5fa',
-                    'read-only': '#f59e0b',
-                    'write-only': '#3b82f6'
-                };
-                
-                function renderUserInfo(isGenesis = false) {
-                    const span = document.createElement('span');
-                    span.style.cssText = `color: ${roleColors[currentUser.role] || '#94a3b8'}; display: flex; flex-direction: column; align-items: flex-end; line-height: 1.4;`;
-                    
-                    const emailSpan = document.createElement('span');
-                    emailSpan.textContent = `● ${currentUser.email || currentUser.phone}`;
-                    span.appendChild(emailSpan);
-                    
-                    const roleSpan = document.createElement('span');
-                    roleSpan.style.cssText = 'font-size: 0.85em; opacity: 0.9;';
-                    roleSpan.textContent = isGenesis ? `(${currentUser.role}) 🌟 Genesis` : `(${currentUser.role})`;
-                    span.appendChild(roleSpan);
-                    
-                    userInfo.replaceChildren(span);
-                }
-                
-                renderUserInfo(false);
                 
                 const devTab = document.getElementById('devPanelBtn');
                 const usersTabBtn = document.getElementById('usersTabBtn');
@@ -1016,7 +993,7 @@
                     if (usersTabBtn) usersTabBtn.style.display = 'block';
                     
                     if (isGenesisAdmin) {
-                        renderUserInfo(true);
+                        // genesis flag shown in account settings, not in header
                     }
                 } else if (currentUser.role === 'admin') {
                     if (usersTabBtn) usersTabBtn.style.display = 'block';
@@ -1069,52 +1046,6 @@
             }, 100);
         }
         
-        // Tag Management Functions for Bubble UI
-        function addTagOnEnter(event) {
-            if (event.key === 'Enter') {
-                event.preventDefault();
-                const input = document.getElementById('botTagsInput');
-                const tag = input.value.trim();
-                
-                if (tag && !botTags.includes(tag)) {
-                    botTags.push(tag);
-                    renderTags();
-                    input.value = '';
-                }
-            }
-        }
-
-        function removeTag(tag) {
-            setBotTags(botTags.filter(t => t !== tag));
-            renderTags();
-        }
-
-        function renderTags() {
-            const container = document.getElementById('tagContainer');
-            const input = document.getElementById('botTagsInput');
-            
-            while (container.firstChild) {
-                container.removeChild(container.firstChild);
-            }
-            
-            botTags.forEach(tag => {
-                const bubble = document.createElement('div');
-                bubble.className = 'tag-bubble';
-                bubble.appendChild(document.createTextNode(tag));
-                
-                const removeBtn = document.createElement('button');
-                removeBtn.type = 'button';
-                removeBtn.className = 'tag-remove';
-                removeBtn.dataset.tag = tag;
-                removeBtn.textContent = '×';
-                bubble.appendChild(removeBtn);
-                
-                container.appendChild(bubble);
-            });
-            
-            container.appendChild(input);
-        }
-
         // Webhook Management Functions for 1-to-Many Output
         function addWebhookInput() {
             const webhookId = Date.now();
@@ -1644,12 +1575,13 @@
             const searchBox = document.getElementById('searchBox');
             const searchTerm = searchBox ? searchBox.value.trim() : '';
             const hasSearchMatch = searchTerm && (book._matchType === 'message' || book._matchType === 'metadata');
+            const isPitaMatch = !!(book._matchSources && book._matchSources.includes('pita'));
             const isSelected = book.fractal_id === selectedFractalId;
             
             const item = document.createElement('div');
             item.className = `book-list-item ${isSelected ? 'selected' : ''}`;
             item.dataset.fractalId = book.fractal_id;
-            item.style.cssText = `display: flex; justify-content: space-between; align-items: center; padding: 0.625rem 0.875rem; cursor: pointer; background: ${isSelected ? 'rgba(88, 101, 242, 0.12)' : 'transparent'}; border-bottom: 1px solid rgba(148, 163, 184, 0.08); transition: background 0.12s ease; user-select: none;`;
+            item.style.cssText = `display: flex; justify-content: space-between; align-items: center; padding: 0.625rem 0.875rem; cursor: pointer; background: ${isSelected ? 'rgba(88, 101, 242, 0.12)' : isPitaMatch ? 'rgba(236, 72, 153, 0.04)' : 'transparent'}; border-bottom: 1px solid rgba(148, 163, 184, 0.08); transition: background 0.12s ease; user-select: none;`;
 
             // Drag handle (≡) — left side, touch-safe
             const handle = document.createElement('span');
@@ -1658,13 +1590,19 @@
             handle.textContent = '⠿';
             item.appendChild(handle);
             
-            if (hasSearchMatch) {
+            if (isPitaMatch || hasSearchMatch) {
                 const matchIndicator = document.createElement('div');
                 matchIndicator.style.cssText = 'flex-shrink: 0; width: 1.25rem; display: flex; align-items: center; justify-content: center; margin-right: 0.5rem;';
-                const checkmark = document.createElement('span');
-                checkmark.style.cssText = 'color: #22c55e; font-weight: 700; font-size: 0.875rem;';
-                checkmark.textContent = '✓';
-                matchIndicator.appendChild(checkmark);
+                const badge = document.createElement('span');
+                if (isPitaMatch) {
+                    badge.style.cssText = 'font-size: 0.875rem; line-height: 1;';
+                    badge.textContent = '🎀';
+                    badge.title = 'PITA tag found in this book\'s drops';
+                } else {
+                    badge.style.cssText = 'color: #22c55e; font-weight: 700; font-size: 0.875rem;';
+                    badge.textContent = '✓';
+                }
+                matchIndicator.appendChild(badge);
                 item.appendChild(matchIndicator);
             }
             
@@ -1781,7 +1719,7 @@
             
             const selectedBook = filteredBooks.find(b => b.fractal_id === fractalId);
             _persistSelectedBook(fractalId, selectedBook?.name);
-            if (selectedBook && selectedBook._matchType === 'message' && selectedBook._searchQuery) {
+            if (selectedBook && (selectedBook._matchType === 'message' || selectedBook._matchType === 'pita') && selectedBook._searchQuery) {
                 bookSearchContext = {
                     query: selectedBook._searchQuery,
                     bookId: fractalId
@@ -2336,8 +2274,8 @@
                 const coldDrops = await fetchDrops(bookId);
                 dropsTagCache[bookId] = {};
                 coldDrops.forEach(drop => {
-                    if (drop.discord_message_id && drop.extracted_tags?.length) {
-                        dropsTagCache[bookId][String(drop.discord_message_id)] = drop.extracted_tags;
+                    if (drop.source_id && drop.extracted_tags?.length) {
+                        dropsTagCache[bookId][String(drop.source_id)] = drop.extracted_tags;
                     }
                 });
             }
@@ -2352,7 +2290,7 @@
                     const response = await window.authFetch(`/api/drops/search/${bookId}?q=${encodeURIComponent(searchText)}`);
                     if (response.ok) {
                         const drops = await response.json();
-                        drops.forEach(drop => dropsMatches.add(drop.discord_message_id));
+                        drops.forEach(drop => dropsMatches.add(drop.source_id));
                         console.log(`🔍 Found ${drops.length} drops matching "${searchText}"`);
                         
                         // Highlight drop matches in rendered DOM
@@ -3770,8 +3708,6 @@
             const status = currentBook.status || 'unknown';
             const statusColor = status === 'active' ? '#10b981' : status === 'inactive' ? '#94a3b8' : '#ef4444';
             const platform = currentBook.input_platform || 'Unknown';
-            const tags = currentBook.tags || [];
-            
             // Helper to create a form group
             const createFormGroup = (labelText, valueContent, extraStyles = '') => {
                 const group = document.createElement('div');
@@ -3825,26 +3761,6 @@
             const rawContact = (currentBook.contact_info || '').replace(/^join\s+\S+\s+/i, '').trim();
             if (rawContact) {
                 container.appendChild(createFormGroup('Address', rawContact));
-            }
-            
-            // Tags (if any)
-            if (tags.length > 0) {
-                const tagsGroup = document.createElement('div');
-                tagsGroup.className = 'form-group';
-                const tagsLabel = document.createElement('label');
-                tagsLabel.className = 'form-label';
-                tagsLabel.textContent = 'Tags';
-                tagsGroup.appendChild(tagsLabel);
-                const tagsValueDiv = document.createElement('div');
-                tagsValueDiv.style.cssText = 'padding: 0.75rem; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 8px; display: flex; flex-wrap: wrap; gap: 0.5rem;';
-                tags.forEach(tag => {
-                    const tagSpan = document.createElement('span');
-                    tagSpan.style.cssText = 'padding: 0.25rem 0.75rem; background: rgba(168, 85, 247, 0.2); border: 1px solid rgba(168, 85, 247, 0.3); border-radius: 12px; color: #c084fc; font-size: 0.875rem;';
-                    tagSpan.textContent = tag;
-                    tagsValueDiv.appendChild(tagSpan);
-                });
-                tagsGroup.appendChild(tagsValueDiv);
-                container.appendChild(tagsGroup);
             }
             
             document.getElementById('bookInfoContent').replaceChildren(container);
@@ -4201,6 +4117,9 @@
         // Track server-side search state to avoid duplicate requests
         let serverSearchPending = false;
         let lastServerSearchTerm = '';
+        // Track PITA mesh search state
+        let pitaSearchPending = false;
+        let lastPitaSearchTerm = '';
         
         async function filterBots() {
             const searchTerm = document.getElementById('searchBox').value;
@@ -4243,14 +4162,6 @@
                     const isTagSearch = searchTerm.startsWith('#');
                     const tagQuery = isTagSearch ? searchTerm.slice(1).toLowerCase() : null;
                     
-                    // SOURCE 1: Tag match (for hashtag searches)
-                    if (isTagSearch && book.tags && Array.isArray(book.tags)) {
-                        const matchesTag = book.tags.some(tag => 
-                            tag.toLowerCase().includes(tagQuery)
-                        );
-                        if (matchesTag) matchSources.push('tag');
-                    }
-                    
                     // SOURCE 2: Book metadata (name, platform, status, etc.)
                     const bookMetadata = [
                         book.bridge_name || book.name || '',        // Book title
@@ -4259,7 +4170,6 @@
                         book.contact_info || '',                      // Contact info
                         book.status || '',                            // Status
                         book.created_at ? new Date(book.created_at).toLocaleString() : '', // Creation date
-                        ...(book.tags || []).map(t => '#' + t)        // Tags (with # prefix)
                     ].join(' ').toLowerCase();
                     
                     if (window.searchState.performSearch(searchTerm, bookMetadata)) {
@@ -4370,9 +4280,51 @@
                 }
             }
             
+            // PITA MESH: Cross-book drop tag discovery via Tag Mesh endpoint
+            // Runs for any #-prefixed search regardless of other match sources
+            if (searchTerm && searchTerm.startsWith('#') && searchTerm.length > 1 && !pitaSearchPending && lastPitaSearchTerm !== searchTerm) {
+                pitaSearchPending = true;
+                lastPitaSearchTerm = searchTerm;
+                const tagValue = searchTerm.slice(1);
+                try {
+                    const resp = await window.authFetch(`/api/mesh/tag/${encodeURIComponent(tagValue)}?limit=200`);
+                    if (resp.ok) {
+                        const data = await resp.json();
+                        const pitaResults = data.results || [];
+                        if (pitaResults.length > 0) {
+                            const existingBooks = new Map(filteredBooks.map(b => [b.fractal_id, b]));
+                            const pitaFractalIds = new Set(pitaResults.map(r => r.book_fractal_id));
+                            for (const fractalId of pitaFractalIds) {
+                                const existing = existingBooks.get(fractalId);
+                                if (existing) {
+                                    if (!existing._matchSources) existing._matchSources = [];
+                                    if (!existing._matchSources.includes('pita')) existing._matchSources.push('pita');
+                                    existing._matchType = 'pita';
+                                    existing._searchQuery = searchTerm;
+                                } else {
+                                    const orig = books.find(b => b.fractal_id === fractalId);
+                                    if (orig) {
+                                        const copy = { ...orig, _matchType: 'pita', _matchSources: ['pita'], _searchQuery: searchTerm };
+                                        filteredBooks.push(copy);
+                                        existingBooks.set(fractalId, copy);
+                                    }
+                                }
+                            }
+                            renderBooks();
+                            if (isMobile()) renderThumbsZone();
+                        }
+                    }
+                } catch (err) {
+                    console.warn('⚠️ PITA mesh search failed:', err);
+                } finally {
+                    pitaSearchPending = false;
+                }
+            }
+
             // Reset server search state if search term cleared
             if (!searchTerm) {
                 lastServerSearchTerm = '';
+                lastPitaSearchTerm = '';
                 // Clear match indicators from all books
                 books.forEach(b => {
                     delete b._matchType;
@@ -4698,9 +4650,7 @@
             setEditingBookId(null);
             document.getElementById('modalTitle').textContent = 'Create New Book';
             document.getElementById('botForm').reset();
-            setBotTags([]);
             setBotWebhooks([]);
-            renderTags();
             renderWebhooks();
             const _mesSec = document.getElementById('monthlyEmailSection');
             if (_mesSec) _mesSec.style.display = 'none';
@@ -4718,8 +4668,6 @@
             setEditingBookId(fractalId);
             document.getElementById('modalTitle').textContent = 'Edit Book';
             document.getElementById('botName').value = book.name || '';
-            setBotTags(book.tags || []);
-
             // Show book code (read-only, edit mode only)
             const bookCodeSection = document.getElementById('bookCodeSection');
             const bookCodeDisplay = document.getElementById('bookCodeDisplay');
@@ -4741,7 +4689,6 @@
                 });
             }
             
-            renderTags();
             renderWebhooks();
 
             // Show outpipes section when editing
@@ -4970,7 +4917,6 @@
             document.getElementById('botModal').classList.remove('active');
             document.getElementById('botName').value = '';
             setEditingBookId(null);
-            setBotTags([]);
             setBotWebhooks([]);
             userOutpipes = [];
 
@@ -5020,9 +4966,7 @@
             setEditingBookId(null);
             document.getElementById('modalTitle').textContent = 'Create New Book';
             document.getElementById('botForm').reset();
-            setBotTags([]);
             setBotWebhooks([]);
-            renderTags();
             renderWebhooks();
             document.getElementById('botModal').classList.add('active');
         }
@@ -5033,9 +4977,7 @@
             setEditingBookId(null);
             document.getElementById('modalTitle').textContent = 'Create New Book';
             document.getElementById('botForm').reset();
-            setBotTags([]);
             setBotWebhooks([]);
-            renderTags();
             renderWebhooks();
             document.getElementById('botModal').classList.add('active');
             
@@ -5120,7 +5062,6 @@
                 name: bookName || 'New Book',
                 inputCredentials: {},
                 outputCredentials: outputCredentials,
-                tags: botTags,
                 status: 'active',
                 ...(editingBookId && monthlyEmailCheckbox ? { monthly_email_backup: monthlyEmailCheckbox.checked } : {})
             };
@@ -7143,7 +7084,20 @@
                 const tabContent = document.getElementById(`${tabName}Tab`);
                 if (tabContent) {
                     tabContent.classList.add('active');
-                    tabContent.style.display = 'block';
+                    // booksTab uses flex layout; accountTab needs height:100%; everything else is block
+                    if (tabName === 'books') {
+                        tabContent.style.display = 'flex';
+                    } else {
+                        tabContent.style.display = 'block';
+                    }
+                    if (tabName === 'account') {
+                        // Use calc() directly — height:100% can fail when parent uses calc()
+                        tabContent.style.height = 'calc(100vh - var(--header-height))';
+                        tabContent.style.overflow = 'hidden'; // children handle their own scroll
+                        // Explicit background — mobile Safari breaks background-attachment:fixed
+                        // when overflow:hidden creates a new stacking context, leaving area white
+                        tabContent.style.background = 'linear-gradient(135deg,#0f172a 0%,#1e1b4b 50%,#0f172a 100%)';
+                    }
                     
                     // SWITCHEROO: Reset to user view (output_0n) for regular tabs
                     currentViewSource = 'user';
@@ -7166,12 +7120,25 @@
                         loadSessions();
                     } else if (tabName === 'analytics') {
                         loadAnalyticsDashboard();
+                    } else if (tabName === 'account') {
+                        const _acctEl = document.getElementById('accountTab');
+                        if (window.AccountModule) {
+                            if (_acctEl && !_acctEl.dataset.accountInit) {
+                                window.AccountModule.init();
+                            } else {
+                                window.AccountModule.refresh();
+                            }
+                        } else {
+                            console.error('[NB] AccountModule not defined — account.js may not have loaded');
+                            if (_acctEl) _acctEl.innerHTML = '<div style="color:#94a3b8;padding:3rem 2rem;text-align:center;font-size:.9rem">⚙️ Settings loading…<br><span style="font-size:.75rem;color:#475569">If this persists, hard-refresh the page.</span></div>';
+                        }
                     }
                 } else {
                     console.error(`Tab content not found for: ${tabName}Tab`);
                 }
             }
         }
+        window.switchTab = switchTab;
         
         // Load Users tab (tenant user management for all roles including dev)
         async function loadAdminCards() {
@@ -8015,13 +7982,20 @@ document.addEventListener('DOMContentLoaded', function() {
         const auditBtn = e.target.closest('.audit-type-btn');
         const logoutBtn = e.target.closest('.logout-btn');
         const aiBtn = e.target.closest('#aiPlaygroundBtn');
-        
+        const settingsBtn = e.target.closest('#settingsBtn');
+
         // AI Playground button
         if (aiBtn) {
             window.location.href = '/AI';
             return;
         }
-        
+
+        // Settings button → dedicated /settings page (same pattern as AI → /AI)
+        if (settingsBtn) {
+            window.location.href = '/settings';
+            return;
+        }
+
         // Logout button (desktop header & mobile)
         if (logoutBtn) {
             logout();
@@ -8046,6 +8020,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 return;
             }
             
+            // Account settings shortcut (mobile header-minimized mode)
+            if (action === 'account') {
+                window.location.href = '/settings';
+                return;
+            }
+
             // Custom actions (toggle-book, book-actions, fan, next)
             if (action === 'toggle-book' && bookId) {
                 selectBook(bookId);
@@ -8355,10 +8335,6 @@ document.addEventListener('DOMContentLoaded', function() {
     const analyticsTimeRange = document.getElementById('analyticsTimeRange');
     if (analyticsTimeRange) analyticsTimeRange.addEventListener('change', loadAnalyticsDashboard);
     
-    // Tag input
-    const botTagsInput = document.getElementById('botTagsInput');
-    if (botTagsInput) botTagsInput.addEventListener('keypress', addTagOnEnter);
-    
     // Wizard buttons
     const skipQuickStartBtn = document.querySelector('[onclick*="skipQuickStart"]');
     if (skipQuickStartBtn) {
@@ -8547,7 +8523,7 @@ async function saveDrop(bookId, messageId, metadataText, section, sentAt) {
     try {
         console.log('💾 Saving drop:', { bookId, messageId, metadataText });
         
-        const body = { book_id: bookId, discord_message_id: messageId, metadata_text: metadataText };
+        const body = { book_id: bookId, source_id: messageId, metadata_text: metadataText };
         if (sentAt) body.sent_at = sentAt;
         
         const response = await window.authFetch('/api/drops', {
@@ -8586,7 +8562,7 @@ async function removeTag(bookId, messageId, tag) {
             method: 'DELETE',
             body: JSON.stringify({
                 book_id: bookId,
-                discord_message_id: messageId,
+                source_id: messageId,
                 tag: tag
             })
         });
@@ -8622,7 +8598,7 @@ async function removeDate(bookId, messageId, date) {
             method: 'DELETE',
             body: JSON.stringify({
                 book_id: bookId,
-                discord_message_id: messageId,
+                source_id: messageId,
                 date: date
             })
         });
@@ -8690,7 +8666,7 @@ function displayDrop(section, drop, extracted, fractalBookId) {
             deleteSpan.className = 'drop-tag-delete';
             deleteSpan.dataset.action = 'remove-tag';
             deleteSpan.dataset.tag = tag;
-            deleteSpan.dataset.messageId = drop.discord_message_id;
+            deleteSpan.dataset.messageId = drop.source_id;
             deleteSpan.dataset.bookId = bookFractalId;
             deleteSpan.textContent = '×';
             tagSpan.appendChild(deleteSpan);
@@ -8710,7 +8686,7 @@ function displayDrop(section, drop, extracted, fractalBookId) {
             deleteSpan.className = 'drop-date-delete';
             deleteSpan.dataset.action = 'remove-date';
             deleteSpan.dataset.date = date;
-            deleteSpan.dataset.messageId = drop.discord_message_id;
+            deleteSpan.dataset.messageId = drop.source_id;
             deleteSpan.dataset.bookId = bookFractalId;
             deleteSpan.textContent = '×';
             dateSpan.appendChild(deleteSpan);
@@ -8726,7 +8702,7 @@ function displayDrop(section, drop, extracted, fractalBookId) {
         // Events history toggle (lazy-loads on first click)
         const historyToggle = document.createElement('span');
         historyToggle.className = 'drop-history-toggle';
-        historyToggle.dataset.messageId = drop.discord_message_id;
+        historyToggle.dataset.messageId = drop.source_id;
         historyToggle.dataset.bookId = bookFractalId;
         historyToggle.dataset.loaded = 'false';
         historyToggle.textContent = 'history ▾';
@@ -8745,7 +8721,7 @@ function displayDrop(section, drop, extracted, fractalBookId) {
                     historyPanel.textContent = '…';
                     try {
                         const r = await window.authFetch(
-                            `/api/drops/${encodeURIComponent(bookFractalId)}/${encodeURIComponent(drop.discord_message_id)}/events`
+                            `/api/drops/${encodeURIComponent(bookFractalId)}/${encodeURIComponent(drop.source_id)}/events`
                         );
                         const data = await r.json();
                         const events = data.events || [];
@@ -9008,13 +8984,13 @@ async function hydrateDropsForBook(bookId) {
     // Populate drops tag cache so applyLensFilter can use tags for #tag searches
     if (!dropsTagCache[bookId]) dropsTagCache[bookId] = {};
     drops.forEach(drop => {
-        if (drop.discord_message_id && drop.extracted_tags?.length) {
-            dropsTagCache[bookId][String(drop.discord_message_id)] = drop.extracted_tags;
+        if (drop.source_id && drop.extracted_tags?.length) {
+            dropsTagCache[bookId][String(drop.source_id)] = drop.extracted_tags;
         }
     });
     
     drops.forEach(drop => {
-        const section = document.querySelector(`.message-drop-section[data-message-id="${drop.discord_message_id}"][data-book-id="${bookId}"]`);
+        const section = document.querySelector(`.message-drop-section[data-message-id="${drop.source_id}"][data-book-id="${bookId}"]`);
         if (section) {
             displayDrop(section, drop, null, bookId);
         }

@@ -64,6 +64,7 @@ const { createAuthMiddleware, registerAuthRoutes } = require('./routes/auth');
 const { registerBooksRoutes } = require('./routes/books');
 const { registerPipeRoutes } = require('./routes/pipe');
 const { registerNyanAIRoutes, capacityManager, usageTracker } = require('./routes/nyan-ai');
+const { register: registerAccountRoutes } = require('./routes/account');
 const { healQueue } = require('./lib/heal-queue');
 const phiBreathe = require('./lib/phi-breathe');
 const { runMonthlyEmail } = require('./lib/monthly-email');
@@ -460,6 +461,126 @@ app.get('/AI', (req, res) => {
     res.sendFile(__dirname + '/public/playground.html');
 });
 
+// Serve Account Settings page (auth-gated via client-side check in settings.html)
+app.get('/settings', (req, res) => {
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.sendFile(__dirname + '/public/settings.html');
+});
+
+// ─── GET /api/v1/nyan/guide — machine-readable API discovery for agents ──────
+// No auth required. Returns a compact JSON spec covering all agent-facing
+// endpoints. Low token cost — agents read this instead of crawling the repo.
+app.get('/api/v1/nyan/guide', (req, res) => {
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.json({
+        api: 'NyanBook~',
+        version: '1',
+        stability: 'stable — fields are additive-only; no field will be removed or renamed without a new version path',
+        guide_url: 'GET /api/v1/nyan/guide',
+        auth: {
+            agent_bearer: 'Per-book agent token. Pass as: Authorization: Bearer <token>. Token is the sole routing key — no book ID needed in write/read URLs.',
+            user_bearer: 'User-level bearer token. GET-only. Works on /api/mesh/* and all requireAuth GET routes. Generate via POST /api/me/token (password required). Scoped to your own tenant — cross-book reads within your account, without a session.',
+            session: 'Browser cookie JWT. Not suitable for automation.'
+        },
+        endpoints: [
+            {
+                id: 'agent_write',
+                method: 'POST',
+                path: '/api/agent/message',
+                auth: 'bearer',
+                description: 'Ingest a message into the book bound to the token.',
+                request_body: {
+                    text: 'string (max 10 000 chars) — message body',
+                    username: 'string (max 100) — sender display name, default "External"',
+                    avatar_url: 'string URL | null',
+                    media_url: 'string URL | null — remote media attachment',
+                    media_type: 'string | null — e.g. "image/jpeg"',
+                    phone: 'string E.164 | null — e.g. "+15551234567"',
+                    email: 'string | null',
+                    photos: 'array[{name?,data:base64}] max 5 — inline image attachments',
+                    documents: 'array[{name,data:base64,type?}] max 5 — inline document attachments'
+                },
+                response: { success: true, message: 'Message accepted', book_id: 'bk_...' },
+                errors: { 400: 'Invalid payload', 401: 'Bad/missing token', 503: 'Queue full — retry' }
+            },
+            {
+                id: 'agent_read',
+                method: 'GET',
+                path: '/api/agent/messages',
+                auth: 'bearer',
+                description: 'Read messages from the book bound to the token. Newest-first.',
+                query_params: {
+                    limit: 'integer 1–100, default 50',
+                    after: 'ISO 8601 timestamp — return messages newer than this',
+                    before: 'ISO 8601 timestamp — return messages older than this'
+                },
+                response: {
+                    book: 'book name',
+                    book_id: 'bk_...',
+                    messages: '[{ id, message_fractal_id, sender, text, timestamp, has_media, media_ipfs_cid, media_ipfs_gateway_url, media_url }]',
+                    total: 'count in this page',
+                    hasMore: 'boolean',
+                    cursor: { newest: 'ISO 8601 | null', oldest: 'ISO 8601 | null' }
+                },
+                errors: { 401: 'Bad/missing token', 404: 'Book not found' }
+            },
+            {
+                id: 'agent_read_legacy',
+                method: 'GET',
+                path: '/api/webhook/:fractalId/messages',
+                auth: 'bearer + fractalId in URL',
+                description: 'Legacy read path — identical response to /api/agent/messages. Token must match the fractalId. Prefer /api/agent/messages (token-only).',
+                query_params: { limit: 'integer 1–100, default 50', after: 'ISO 8601', before: 'ISO 8601' }
+            },
+            {
+                id: 'agent_bootstrap',
+                method: 'POST',
+                path: '/api/agent/bootstrap',
+                auth: 'none (tokens in body)',
+                description: 'Cold-start memory load for multi-book agents. Pass up to 20 bearer tokens; receive a structured export (recent messages, tags, stats, metadata) per book in one round-trip.',
+                request_body: {
+                    books: 'array[{ token: string, limit?: integer }] max 20'
+                },
+                response: {
+                    bootstrap_at: 'ISO 8601',
+                    total_books: 'integer',
+                    books: '[{ book_id, book_name, status, messages: [...], tags: [...], stats: {...} } | { token_hint, error }]'
+                },
+                rate_limit: '20 req/min per IP',
+                errors: { 400: 'Missing/invalid books array', 429: 'Rate limit' }
+            },
+            {
+                id: 'user_token_generate',
+                method: 'POST',
+                path: '/api/me/token',
+                auth: 'session or JWT (requires current password in body)',
+                description: 'Generate a user-level bearer token. GET-only cross-tenant credential. Revokes any prior token for this user.',
+                request_body: { currentPassword: 'string — required for verification' },
+                response: { success: true, token: '<64-char hex — save this, shown once>' },
+                errors: { 400: 'Missing password', 401: 'Wrong password', 429: 'Rate limited' }
+            },
+            {
+                id: 'mesh_tag_query',
+                method: 'GET',
+                path: '/api/mesh/tag/:tagValue',
+                auth: 'user_bearer or session',
+                description: 'Cross-book tag search (PITA-AOP). Returns all drops in the tenant carrying the given tag, paginated newest-first.',
+                query_params: { limit: 'integer 1–200, default 50', before_cursor: 'opaque string from next_cursor' },
+                response: {
+                    results: '[{ payload_id, book_fractal_id, book_name, sent_at, metadata_text, extracted_tags }]',
+                    next_cursor: 'string | null'
+                },
+                errors: { 400: 'Bad tag/cursor', 401: 'No session' }
+            }
+        ],
+        payload_id_note: 'payload_id = "pi_" + SHA-256(internal_source_id).hex[:32]. Stable across renames/migrations. Never expose source_id.',
+        cursor_note: 'Read cursors are ISO 8601 timestamps (after/before). Mesh cursors are opaque base64url — do not construct manually.',
+        changelog: [
+            { version: '1', date: '2026-06-09', note: 'Initial stable declaration. All existing /api/* routes declared v1. Guide endpoint added at /api/v1/nyan/guide.' }
+        ]
+    });
+});
+
 // Model info — used by playground welcome text and sources footer
 app.get('/api/playground/model-info', (req, res) => {
     const backend = CONSTANTS.getLLMBackend();
@@ -497,12 +618,15 @@ app.get('/dev', (req, res) => {
 
 // Root redirects to AI Playground (public landing page)
 app.get('/', (req, res) => {
-    // Health check support: return 200 for HEAD requests (used by deployment health checks)
-    if (req.method === 'HEAD') {
+    // Cloud Run / load-balancer health probes — return 200 immediately.
+    // GoogleHC uses GET /, not HEAD, and does NOT follow redirects.
+    // Any non-200 (including a 302) is treated as a failed probe.
+    const ua = req.headers['user-agent'] || '';
+    if (req.method === 'HEAD' || ua.startsWith('GoogleHC') || ua.startsWith('kube-probe')) {
         return res.status(200).end();
     }
-    
-    // Redirect to AI Playground as the public landing page
+
+    // Redirect humans to the AI Playground landing page
     res.redirect('/AI');
 });
 
@@ -741,32 +865,42 @@ app.listen(PORT, '0.0.0.0', async () => {
             capacityManager.initReputationTable(),
             initUsageTable()
         ]);
-        await Promise.all([
-            capacityManager.hydrateAllCircuitBreakers(),
-            usageTracker.loadTodayUsageFromDb()
-        ]);
+        // hydrateAllCircuitBreakers + loadTodayUsageFromDb are NOT awaited here —
+        // they are fired as background tasks after the boot gate clears (see below).
     };
 
     await Promise.all([initBots(), initDb()]);
 
-    // One-shot backfill: sync pre-existing tenant agent tokens into
-    // core.book_registry so POST /api/agent/message works for tokens
-    // generated before migration 009. Idempotent; safe on every boot.
-    try {
-        const { backfillAgentTokens } = require('./lib/backfill-agent-tokens');
-        await backfillAgentTokens(pool, logger);
-    } catch (err) {
-        logger.warn({ err }, 'Agent token backfill module failed to load — skipping (non-fatal)');
-    }
+    // Background hydration — neither job is required before serving requests.
+    // Circuit breakers default to inactive and self-correct on first abuse event.
+    // Usage buckets start at 0 and self-correct on the next write.
+    Promise.all([
+        capacityManager.hydrateAllCircuitBreakers(),
+        usageTracker.loadTodayUsageFromDb()
+    ]).catch(err => logger.warn({ err: err.message }, 'Background hydration error (non-fatal)'));
 
-    // One-shot normalize: rewrite legacy-flat output_credentials.thread_id
-    // into canonical nested output_01 shape. Idempotent; safe on every boot.
-    try {
-        const { normalizeOutputCredentials } = require('./lib/normalize-output-credentials');
-        await normalizeOutputCredentials(pool);
-    } catch (err) {
-        logger.warn({ err: err.message, stack: err.stack }, 'Output credentials normalizer failed — skipping (non-fatal)');
-    }
+    // One-shot migration shims — parallelized and not awaited.
+    // Each self-retires (writes a core.boot_flags row) after completing with
+    // zero work, so subsequent boots skip them entirely (O(1) flag check).
+    // If the flag is absent (fresh DB / restored checkpoint) they run normally.
+    Promise.all([
+        (async () => {
+            try {
+                const { backfillAgentTokens } = require('./lib/backfill-agent-tokens');
+                await backfillAgentTokens(pool, logger);
+            } catch (err) {
+                logger.warn({ err }, 'Agent token backfill failed (non-fatal)');
+            }
+        })(),
+        (async () => {
+            try {
+                const { normalizeOutputCredentials } = require('./lib/normalize-output-credentials');
+                await normalizeOutputCredentials(pool);
+            } catch (err) {
+                logger.warn({ err: err.message }, 'Output credentials normalizer failed (non-fatal)');
+            }
+        })()
+    ]).catch(() => {});
 
     // Register all bots in the NyanMesh node registry (in-memory, snapshotted to DB at 86-breath).
     // Initial status reflects actual bot readiness (may be 'offline' if token missing).
@@ -866,6 +1000,9 @@ app.listen(PORT, '0.0.0.0', async () => {
     const authResult = registerAuthRoutes(app, deps);
     setDepsMiddleware(authResult.requireAuth, authResult.requireRole);
     registeredSatellites.push({ name: 'auth', endpoints: authResult.endpoints });
+
+    const accountResult = registerAccountRoutes(app, deps);
+    registeredSatellites.push({ name: 'account', endpoints: accountResult.endpoints });
 
     const booksResult = registerBooksRoutes(app, deps);
     registeredSatellites.push({ name: 'books', endpoints: booksResult.endpoints });

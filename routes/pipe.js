@@ -32,6 +32,7 @@ const {
     sendChannelResponse
 } = require('../lib/packet-queue');
 const { runBootstrap } = require('../lib/spore-bootstrap');
+const { register: registerGenericInpipe } = require('./inpipe/generic');
 
 function registerPipeRoutes(app, deps) {
     const { pool, bots, helpers, constants, logger } = deps;
@@ -816,6 +817,9 @@ function registerPipeRoutes(app, deps) {
         }
     });
     registeredRoutes.push('POST /api/agent/bootstrap');
+
+    registerGenericInpipe(app, { pool, logger });
+    registeredRoutes.push('POST /api/inpipe/generic');
 
     logger.info('📥 Pipe routes registered: %s', registeredRoutes.join(', '));
 

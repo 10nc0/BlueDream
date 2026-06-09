@@ -222,18 +222,14 @@ body::before {
   gap: 0.3125rem;
 }
 
-#userInfo {
-  font-size: var(--text-sm);
-  text-align: right;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  padding: 0.375rem 0.75rem;
-  background: rgba(30, 41, 59, 0.5);
-  border-radius: var(--radius-md);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  max-width: 200px;
+/* Settings button — sovereign between AI and Logout */
+#settingsBtn:hover {
+  opacity: 0.88;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.35);
 }
+
+/* Desktop: label always visible. Mobile: button hidden — ⚙️ thumbs zone is the gateway. */
 
 .animated-character {
   position: relative;
@@ -309,13 +305,7 @@ body::before {
   font-weight: 600;
 }
 
-#userInfo {
-  font-size: var(--text-sm);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 200px;
-}
+/* (userInfo removed — see #settingsBtn) */
 
 .logout-btn {
   background: linear-gradient(135deg, var(--color-red-500) 0%, var(--color-red-600) 100%);
@@ -582,32 +572,19 @@ body::before {
     max-width: 100%;
   }
 
+  /* Degradation step 2: hide title block + datetime on mobile */
   #headerTitle {
-    opacity: 1 !important;
-    visibility: visible !important;
-    width: auto !important;
-    overflow: visible !important;
-    flex-shrink: 1;
+    display: none;
   }
 
-  #headerTitle > div:last-child {
+  #dateTimeDefault,
+  #dateTimeCompact {
     display: none !important;
   }
 
-  .mobile-break {
-    display: inline !important;
-  }
-
-  #headerTitle > div:first-child {
-    white-space: normal !important;
-    font-size: 0.95rem !important;
-    line-height: 1.15 !important;
-  }
-
-  #dateTimeDefault {
-    opacity: 0;
-    visibility: hidden;
-    display: none;
+  /* Settings: hidden on mobile — ⚙️ in thumbs zone is the mobile gateway */
+  #settingsBtn {
+    display: none !important;
   }
 
   /* Prevent Android Chrome auto-zoom on input focus (triggers when font-size < 16px) */
@@ -638,6 +615,11 @@ body::before {
     padding: 0.75rem 1.5rem;
   }
 
+  /* Degradation step 1a: subtitle shrinks at tablet before hiding */
+  .header-subtitle {
+    font-size: 0.72rem;
+  }
+
   .status-indicators-vertical {
     gap: 0.5rem;
   }
@@ -661,6 +643,13 @@ body::before {
   }
 }
 
+/* Degradation step 1b: subtitle finally hides at narrow tablet */
+@media (min-width: 600px) and (max-width: 749px) {
+  .header-subtitle {
+    display: none;
+  }
+}
+
 /* Desktop (Mac): ≥1024px viewport */
 @media (min-width: 1024px) {
   .book-sidebar {
@@ -675,12 +664,51 @@ body::before {
     gap: 0.5rem;
   }
 
-  #userInfo {
-    max-width: var(--content-max-width);
-  }
-
   .tagline {
     max-width: 500px;
+  }
+}
+
+/* ===================================================================
+   ASPECT-RATIO RESPONSIVE — graceful hiding sequence
+   Priority (widest → narrowest / tallest → shortest):
+   1. Landscape-narrow phone (rotated) — collapse header to slim bar
+   2. Tablet portrait — drop subtitle when height < width × 1.33
+   3. Ultra-wide — more breathing room for userInfo
+   =================================================================== */
+
+/* Landscape phone: rotated, <500px tall — slim header */
+@media (max-height: 500px) and (orientation: landscape) {
+  .header {
+    padding: 0.2rem 1rem;
+    height: 44px !important;
+  }
+  .animated-character {
+    display: none !important;
+  }
+  .header-subtitle {
+    display: none !important;
+  }
+}
+
+/* Degradation step 3: very small screens — hide cat too */
+@media (max-width: 399px) {
+  #catContainer {
+    display: none;
+  }
+}
+
+/* Tablet portrait — hide long subtitle when aspect is narrow */
+@media (max-width: 1023px) and (max-aspect-ratio: 3/4) {
+  .header-subtitle {
+    display: none;
+  }
+}
+
+/* Ultra-wide screens: settings label stays full width */
+@media (min-width: 1400px) {
+  #settingsBtn {
+    min-width: 100px;
   }
 }
 
@@ -3677,15 +3705,6 @@ body.desktop-mode .thumbs-zone {
     overflow-x: hidden;
     -webkit-overflow-scrolling: touch;
     overscroll-behavior: contain;
-}
-
-/* Global Breathing Animation for Date/Time */
-/* φ-asymmetric timing: 61.8% inhale (accumulation), 38.2% exhale (release) */
-/* Total duration: 5s (12Hz-ish pulse adjusted for smooth loop) */
-@keyframes breathe-datetime {
-    0% { opacity: 1; }
-    61.8% { opacity: 0.4; }
-    100% { opacity: 1; }
 }
 
 /* ===== RESPONSIVE HEADER SQUEEZE: Smooth Progressive Element Hiding =====

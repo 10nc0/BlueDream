@@ -427,7 +427,7 @@ function register(app, deps) {
             const userRole = req.tenantContext?.userRole || 'read-only';
             const tenantId = req.tenantContext?.tenantId;
             const isGenesisAdmin = req.tenantContext?.isGenesisAdmin || false;
-            const { name, inputPlatform, userOutputUrl, contactInfo, tags, outputCredentials: userOutputCredentials } = { ...req.body, ...req.validated };
+            const { name, inputPlatform, userOutputUrl, contactInfo, outputCredentials: userOutputCredentials } = { ...req.body, ...req.validated };
 
             if (!tenantId) {
                 return res.status(400).json({ error: 'Tenant context required' });
@@ -471,9 +471,9 @@ function register(app, deps) {
             logger.info({ name, inputPlatform, contactInfo }, 'Book creation request');
 
             const result = await client.query(
-                `INSERT INTO ${tenantSchema}.books (name, input_platform, output_platform, input_credentials, output_credentials, output_01_url, output_0n_url, contact_info, tags, status, archived, created_by_admin_id)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *`,
-                [name, inputPlatform, 'discord', {}, outputCredentials, output01Url, output0nUrl, finalContactInfo, tags || [], 'inactive', false, createdByAdminId]
+                `INSERT INTO ${tenantSchema}.books (name, input_platform, output_platform, input_credentials, output_credentials, output_01_url, output_0n_url, contact_info, status, archived, created_by_admin_id)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
+                [name, inputPlatform, 'discord', {}, outputCredentials, output01Url, output0nUrl, finalContactInfo, 'inactive', false, createdByAdminId]
             );
 
             const book = result.rows[0];
@@ -587,7 +587,7 @@ function register(app, deps) {
             const tenantSchema = req.tenantContext.tenantSchema;
             const userId = req.userId;
             const { id } = req.params;
-            const { name, inputPlatform, outputPlatform, inputCredentials, outputCredentials, contactInfo, tags, status, userOutputUrl, password, monthly_email_backup } = req.body;
+            const { name, inputPlatform, outputPlatform, inputCredentials, outputCredentials, contactInfo, status, userOutputUrl, password, monthly_email_backup } = req.body;
 
             if (userOutputUrl && userOutputUrl === NYANBOOK_LEDGER_WEBHOOK) {
                 return res.status(400).json({
@@ -648,7 +648,6 @@ function register(app, deps) {
                 values.push(JSON.stringify({ webhooks: outputCredentials.webhooks || [] }));
             }
             if (contactInfo !== undefined) { updates.push(`contact_info = $${paramCount++}`); values.push(contactInfo || null); }
-            if (tags !== undefined) { updates.push(`tags = $${paramCount++}`); values.push(tags || []); }
             if (status !== undefined) { updates.push(`status = $${paramCount++}`); values.push(status); }
             if (userOutputUrl !== undefined) { updates.push(`output_0n_url = $${paramCount++}`); values.push(userOutputUrl); }
             if (monthly_email_backup !== undefined) { updates.push(`monthly_email_backup = $${paramCount++}`); values.push(!!monthly_email_backup); }

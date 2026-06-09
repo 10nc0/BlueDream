@@ -1,0 +1,1 @@
+- [Mesh cursor sealing](mesh-cursor-sealing.md) — cursor uses AES-256-GCM (SESSION_SECRET), tiebreaker is drops.id (SERIAL PK) not source_id

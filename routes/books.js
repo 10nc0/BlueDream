@@ -4,6 +4,7 @@ const { register: registerDrops } = require('./books/drops');
 const { register: registerExport } = require('./books/export');
 const { register: registerShares } = require('./books/shares');
 const { register: registerAgent } = require('./books/agent');
+const { register: registerMesh } = require('./books/mesh');
 
 function registerBooksRoutes(app, deps) {
     if (!deps.middleware?.requireAuth) {
@@ -17,8 +18,9 @@ function registerBooksRoutes(app, deps) {
     registerExport(app, deps);
     registerShares(app, deps);
     registerAgent(app, deps);
+    registerMesh(app, deps);
 
-    return { endpoints: 33 };
+    return { endpoints: 34 };
 }
 
 module.exports = { registerBooksRoutes };

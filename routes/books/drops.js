@@ -1,4 +1,4 @@
-const MetadataExtractor = require('../../lib/metadata-extractor');
+const { writeDrop } = require('../../lib/drop-writer');
 const { validate, schemas, BOOK_ID_PATTERN } = require('../../lib/validators');
 const { detectLanguage, getFtsConfig } = require('../../utils/language-detector');
 const phiBreathe = require('../../lib/phi-breathe');
@@ -8,12 +8,10 @@ function register(app, deps) {
     const { requireAuth } = middleware;
     const { setTenantContext } = tenantMiddleware || {};
 
-    const metadataExtractor = new MetadataExtractor();
-
     app.post('/api/drops', requireAuth, setTenantContext, validate(schemas.createDrop), async (req, res, next) => {
         try {
             const tenantSchema = req.tenantContext?.tenantSchema || req.tenantSchema;
-            const { book_id, discord_message_id, metadata_text } = req.validated;
+            const { book_id, source_id, metadata_text, sent_at } = req.validated;
             const client = req.dbClient || pool;
 
             const bookResult = await client.query(
@@ -26,50 +24,24 @@ function register(app, deps) {
             }
 
             const internalBookId = bookResult.rows[0].id;
-
-            const existingDrop = await client.query(
-                `SELECT * FROM ${tenantSchema}.drops WHERE book_id = $1 AND discord_message_id = $2`,
-                [internalBookId, discord_message_id]
-            );
-
-            let dropResult;
-            let extracted;
-
-            const stamp = phiBreathe.phiBreatheCount;
-
-            const { sent_at } = req.validated;
-            // Validate sent_at is a real date if provided (schema already does ISO check,
-            // but guard here too so a bad value never reaches the DB parameter).
+            // sent_at is pre-validated by schema (ISO datetime); guard against
+            // out-of-range dates before passing to the DB.
             const sentAtValue = (sent_at && !isNaN(new Date(sent_at).getTime()))
                 ? new Date(sent_at).toISOString()
                 : null;
 
-            if (existingDrop.rows.length > 0) {
-                const combinedText = existingDrop.rows[0].metadata_text + ' ' + metadata_text;
-                extracted = metadataExtractor.extract(combinedText);
+            const { drop, extracted } = await writeDrop({
+                pool: client,
+                tenantSchema,
+                bookInternalId: internalBookId,
+                sourceId: source_id,
+                metadataText: metadata_text,
+                tags: [],
+                sentAt: sentAtValue,
+                phiStamp: phiBreathe.phiBreatheCount
+            });
 
-                dropResult = await client.query(`
-                    UPDATE ${tenantSchema}.drops
-                    SET metadata_text = $1,
-                        extracted_tags = $2::text[],
-                        extracted_dates = $3::text[],
-                        phi_breathe_stamp = $4,
-                        sent_at = COALESCE($7, sent_at),
-                        updated_at = NOW()
-                    WHERE book_id = $5 AND discord_message_id = $6
-                    RETURNING *
-                `, [combinedText, extracted.tags, extracted.dates, stamp, internalBookId, discord_message_id, sentAtValue]);
-            } else {
-                extracted = metadataExtractor.extract(metadata_text);
-
-                dropResult = await client.query(`
-                    INSERT INTO ${tenantSchema}.drops (book_id, discord_message_id, metadata_text, extracted_tags, extracted_dates, phi_breathe_stamp, sent_at)
-                    VALUES ($1, $2, $3, $4::text[], $5::text[], $6, $7)
-                    RETURNING *
-                `, [internalBookId, discord_message_id, metadata_text, extracted.tags, extracted.dates, stamp, sentAtValue]);
-            }
-
-            res.json({ success: true, drop: dropResult.rows[0], extracted });
+            res.json({ success: true, drop, extracted });
         } catch (error) {
             logger.error({ err: error }, 'Error creating drop');
             next(error);
@@ -106,7 +78,7 @@ function register(app, deps) {
     app.delete('/api/drops/tag', requireAuth, setTenantContext, validate(schemas.deleteDropTag), async (req, res, next) => {
         try {
             const tenantSchema = req.tenantContext?.tenantSchema || req.tenantSchema;
-            const { book_id, discord_message_id, tag } = req.validated;
+            const { book_id, source_id, tag } = req.validated;
             const client = req.dbClient || pool;
 
             const bookResult = await client.query(
@@ -125,18 +97,18 @@ function register(app, deps) {
 
             await client.query(`
                 INSERT INTO ${tenantSchema}.drop_events
-                    (book_id, discord_message_id, event_type, event_data, performed_by)
+                    (book_id, source_id, event_type, event_data, performed_by)
                 VALUES ($1, $2, 'tag_removed', $3::jsonb, $4)
-            `, [internalBookId, discord_message_id, JSON.stringify({ tag, phi_breathe_stamp: stamp }), performedBy]);
+            `, [internalBookId, source_id, JSON.stringify({ tag, phi_breathe_stamp: stamp }), performedBy]);
 
             const dropResult = await client.query(`
                 UPDATE ${tenantSchema}.drops
                 SET extracted_tags = array_remove(extracted_tags, $1),
                     metadata_text = TRIM(REGEXP_REPLACE(REGEXP_REPLACE(metadata_text, '(^|\\s)#?' || $2 || '(\\s|$)', ' ', 'gi'), '\\s+', ' ', 'g')),
                     updated_at = NOW()
-                WHERE book_id = $3 AND discord_message_id = $4
+                WHERE book_id = $3 AND source_id = $4
                 RETURNING *
-            `, [tag, escapedTag, internalBookId, discord_message_id]);
+            `, [tag, escapedTag, internalBookId, source_id]);
 
             if (dropResult.rows.length === 0) {
                 return res.status(404).json({ error: 'Drop not found' });
@@ -152,7 +124,7 @@ function register(app, deps) {
     app.delete('/api/drops/date', requireAuth, setTenantContext, validate(schemas.deleteDropDate), async (req, res) => {
         try {
             const tenantSchema = req.tenantContext?.tenantSchema || req.tenantSchema;
-            const { book_id, discord_message_id, date } = req.validated;
+            const { book_id, source_id, date } = req.validated;
             const client = req.dbClient || pool;
 
             const bookResult = await client.query(
@@ -171,18 +143,18 @@ function register(app, deps) {
 
             await client.query(`
                 INSERT INTO ${tenantSchema}.drop_events
-                    (book_id, discord_message_id, event_type, event_data, performed_by)
+                    (book_id, source_id, event_type, event_data, performed_by)
                 VALUES ($1, $2, 'date_removed', $3::jsonb, $4)
-            `, [internalBookId, discord_message_id, JSON.stringify({ date, phi_breathe_stamp: stamp }), performedBy]);
+            `, [internalBookId, source_id, JSON.stringify({ date, phi_breathe_stamp: stamp }), performedBy]);
 
             const dropResult = await client.query(`
                 UPDATE ${tenantSchema}.drops
                 SET extracted_dates = array_remove(extracted_dates, $1),
                     metadata_text = TRIM(REGEXP_REPLACE(REGEXP_REPLACE(metadata_text, '(^|\\s)' || $2 || '(\\s|$)', ' ', 'gi'), '\\s+', ' ', 'g')),
                     updated_at = NOW()
-                WHERE book_id = $3 AND discord_message_id = $4
+                WHERE book_id = $3 AND source_id = $4
                 RETURNING *
-            `, [date, escapedDate, internalBookId, discord_message_id]);
+            `, [date, escapedDate, internalBookId, source_id]);
 
             if (dropResult.rows.length === 0) {
                 return res.status(404).json({ error: 'Drop not found' });
@@ -195,17 +167,17 @@ function register(app, deps) {
         }
     });
 
-    app.get('/api/drops/:book_id/:discord_message_id/events', requireAuth, setTenantContext, async (req, res, next) => {
+    app.get('/api/drops/:book_id/:source_id/events', requireAuth, setTenantContext, async (req, res, next) => {
         try {
             const tenantSchema = req.tenantContext?.tenantSchema || req.tenantSchema;
-            const { book_id, discord_message_id } = req.params;
+            const { book_id, source_id } = req.params;
             const client = req.dbClient || pool;
 
             if (!BOOK_ID_PATTERN.test(book_id)) {
                 return res.status(400).json({ error: 'Invalid book ID format' });
             }
-            if (!discord_message_id || discord_message_id.length > 100) {
-                return res.status(400).json({ error: 'Invalid message ID' });
+            if (!source_id || source_id.length > 200) {
+                return res.status(400).json({ error: 'Invalid source ID' });
             }
 
             const bookResult = await client.query(
@@ -220,9 +192,9 @@ function register(app, deps) {
             const eventsResult = await client.query(`
                 SELECT id, event_type, event_data, performed_by, created_at
                 FROM ${tenantSchema}.drop_events
-                WHERE book_id = $1 AND discord_message_id = $2
+                WHERE book_id = $1 AND source_id = $2
                 ORDER BY created_at ASC
-            `, [bookResult.rows[0].id, discord_message_id]);
+            `, [bookResult.rows[0].id, source_id]);
 
             res.json({ events: eventsResult.rows });
         } catch (error) {
@@ -260,18 +232,17 @@ function register(app, deps) {
 
             let searchResult;
             if (isTagSearch && tagTerm) {
-                // Tag search: match against extracted_tags array (case-insensitive prefix)
+                // Exact-tag path: uses GIN containment operator — O(log n) via the
+                // idx_drops_extracted_tags_gin index (added in migration 012).
+                // Tags are stored lowercase at write time so lower($2) is consistent.
                 searchResult = await client.query(`
                     SELECT *, 1.0 as rank
                     FROM ${tenantSchema}.drops
                     WHERE book_id = $1
-                      AND EXISTS (
-                          SELECT 1 FROM unnest(extracted_tags) t
-                          WHERE lower(t) LIKE $2
-                      )
+                      AND extracted_tags @> ARRAY[$2]
                     ORDER BY COALESCE(sent_at, created_at) DESC
                     LIMIT 100
-                `, [bookInternalId, `${tagTerm}%`]);
+                `, [bookInternalId, tagTerm]);
             } else {
                 const queryLang = detectLanguage(query);
                 const ftsConfig = getFtsConfig(queryLang.lang);
@@ -280,6 +251,9 @@ function register(app, deps) {
                     FROM ${tenantSchema}.drops
                     WHERE book_id = $2 AND (
                         search_vector @@ plainto_tsquery($3, $1)
+                        -- Prefix search can't use GIN containment; sequential scan is
+                        -- acceptable here because prefix queries are rare and
+                        -- short-circuited by the FTS path above.
                         OR EXISTS (
                             SELECT 1 FROM unnest(extracted_tags) t
                             WHERE lower(t) LIKE $4

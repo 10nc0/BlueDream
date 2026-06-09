@@ -22,7 +22,7 @@
     <!-- Favicons -->
     <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png">
     <link rel="icon" type="image/png" sizes="16x16" href="/icons/favicon-16.png">
-    <link rel="stylesheet" href="/css/dashboard.css?v=20260324-10">
+    <link rel="stylesheet" href="/css/dashboard.css?v=20260609-2">
     <link rel="stylesheet" href="/css/components/cat-animation.css?v=20260322-11">
     <link rel="stylesheet" href="/css/components/tooltips.css?v=20251101-2">
     <link rel="stylesheet" href="/css/components/analytics.css?v=20251101-2">
@@ -48,16 +48,16 @@
             
             <!-- User Info Section (right-aligned) - centered vertically -->
             <div id="headerRight" style="display: flex; align-items: center; gap: 0.75rem; margin-left: auto;">
-                <div id="userInfo"></div>
                 <!-- Date/Time + Buttons grouped together -->
-                <div style="display: flex; align-items: center; gap: 0.25rem;">
-                    <div id="dateTimeDefault" class="date-time-display" style="text-align: center; color: #94a3b8; font-size: 0.7rem; line-height: 1.2; animation: breathe-datetime 5s ease-in-out infinite;">
+                <div style="display: flex; align-items: center; gap: 0.75rem; flex-shrink: 0;">
+                    <div id="dateTimeDefault" class="date-time-display" style="text-align: center; color: #94a3b8; font-size: 0.84rem; line-height: 1.2;">
                         <span id="currentTime">2025/12/10<br>12:00:00PM</span>
                     </div>
-                    <div id="dateTimeCompact" class="date-time-display" style="display: none; text-align: center; color: #94a3b8; font-size: 0.65rem; line-height: 1.1; animation: breathe-datetime 5s ease-in-out infinite;">
+                    <div id="dateTimeCompact" class="date-time-display" style="display: none; text-align: center; color: #94a3b8; font-size: 0.78rem; line-height: 1.1;">
                         <span id="currentTimeCompact">2025/12/10<br>12:00:00PM</span>
                     </div>
                     <button id="aiPlaygroundBtn" style="padding: 0.375rem 0.75rem; font-size: 0.875rem; height: 28px; display: flex; align-items: center; white-space: nowrap; background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: white; border: none; border-radius: 0.5rem; cursor: pointer; font-weight: 600; transition: all 0.2s;">🧠 AI</button>
+                    <button id="settingsBtn" title="Account Settings" style="padding: 0.375rem 0.75rem; font-size: 0.875rem; height: 28px; display: flex; align-items: center; gap: 0.3rem; white-space: nowrap; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; border: none; border-radius: 0.5rem; cursor: pointer; font-weight: 600; transition: all 0.2s;"><span class="settings-label">👤</span></button>
                 </div>
                 <button class="logout-btn" style="padding: 0.375rem 0.75rem; font-size: 0.875rem; height: 28px; display: flex; align-items: center; white-space: nowrap;">Logout</button>
             </div>
@@ -329,6 +329,9 @@
         </div>
 
 
+        <!-- Account Settings Tab - shell built dynamically by AccountModule.init() -->
+        <div id="accountTab" class="tab-content"></div>
+
         <!-- SCHEMA SWITCHEROO: Dev Panel REUSES Books tab DOM elements completely -->
         <!-- No separate HTML needed - just switch header text dynamically in JavaScript -->
     </div>
@@ -468,16 +471,6 @@
 
                 <div class="form-group" style="display: none;">
                     <div id="webhooksList"><!-- legacy compat --></div>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">
-                        Tags
-                        <span class="optional-badge">Optional</span>
-                    </label>
-                    <div class="tag-input-container" id="tagContainer">
-                        <input type="text" class="tag-input" id="botTagsInput" placeholder="Type and press Enter...">
-                    </div>
-                    <small class="form-help">Optional - add tags to organize your books</small>
                 </div>
                 <!-- Monthly email backup opt-in: shown in edit mode only -->
                 <div class="form-group" id="monthlyEmailSection" style="display: none;">
@@ -653,7 +646,7 @@
     <script src="/js/ui/phi-breath.js?v=20251101-2"></script>
     
     <!-- Layout Controller - unified state machine for mobile/desktop/expansion -->
-    <script src="/js/layout-controller.js?v=20260324-2"></script>
+    <script src="/js/layout-controller.js?v=20260609-2"></script>
 
     <!-- Modular architecture: State and Auth modules -->
     <script src="/js/modules/state.js?v=20260111-2"></script>
@@ -662,7 +655,8 @@
     <script src="/js/modules/books.js?v=20260111-1"></script>
     <script src="/js/modules/messages.js?v=20260111-1"></script>
 
-    <script src="/js/dashboard.js?v=20260324-3"></script>
+    <script src="/js/dashboard.js?v=20260609-4"></script>
+    <script src="/js/ui/account.js?v=20260609-2"></script>
     
     <!-- Load external scripts AFTER authFetch is defined -->
     <script src="/js/ui/tooltips.js?v=20251101-2"></script>

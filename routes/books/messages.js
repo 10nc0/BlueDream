@@ -400,7 +400,7 @@ function register(app, deps) {
                 for (const schemaRow of allSchemas) {
                     try {
                         let schemaQuery = `
-                            SELECT fractal_id, name as book_name, output_credentials, created_at, tags
+                            SELECT fractal_id, name as book_name, output_credentials, created_at
                             FROM ${schemaRow.tenant_schema}.books
                             WHERE status = 'active' AND archived = false
                         `;
@@ -417,7 +417,7 @@ function register(app, deps) {
                 }
             } else {
                 let booksQuery = `
-                    SELECT fractal_id, name as book_name, output_credentials, created_at, tags
+                    SELECT fractal_id, name as book_name, output_credentials, created_at
                     FROM ${tenantSchema}.books
                     WHERE status = 'active' AND archived = false
                 `;
@@ -437,11 +437,6 @@ function register(app, deps) {
                 if ((book.book_name || '').toLowerCase().includes(tagQuery)) {
                     metadataMatches.add(book.fractal_id);
                     continue;
-                }
-                if (book.tags && Array.isArray(book.tags)) {
-                    if (book.tags.some(tag => (tag || '').toLowerCase().includes(tagQuery))) {
-                        metadataMatches.add(book.fractal_id);
-                    }
                 }
             }
 

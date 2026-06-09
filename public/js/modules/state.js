@@ -11,7 +11,6 @@ window.Nyan.StateService = (function() {
         allMessages: {},
         currentUser: null,
         bookSearchContext: { query: '', bookId: null },
-        botTags: [],
         botWebhooks: [],
         users: [],
         sessions: [],
@@ -64,11 +63,6 @@ window.Nyan.StateService = (function() {
         getBookSearchContext: () => _state.bookSearchContext,
         setBookSearchContext: (context) => { _state.bookSearchContext = context; },
         
-        getBotTags: () => _state.botTags,
-        setBotTags: (tags) => { _state.botTags = tags; },
-        addBotTag: (tag) => { _state.botTags.push(tag); },
-        removeBotTag: (tag) => { _state.botTags = _state.botTags.filter(t => t !== tag); },
-        
         getBotWebhooks: () => _state.botWebhooks,
         setBotWebhooks: (webhooks) => { _state.botWebhooks = webhooks; },
         
@@ -107,7 +101,6 @@ window.Nyan.StateService = (function() {
             _state.allMessages = {};
             _state.currentUser = null;
             _state.bookSearchContext = { query: '', bookId: null };
-            _state.botTags = [];
             _state.botWebhooks = [];
             _state.users = [];
             _state.sessions = [];

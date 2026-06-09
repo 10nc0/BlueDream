@@ -112,7 +112,7 @@ async function loadBookExportData({ client, thothBot, tenantSchema, book_id, sel
         [book.id]
     );
     const dropsMap = new Map();
-    dropsResult.rows.forEach(drop => dropsMap.set(drop.discord_message_id, drop));
+    dropsResult.rows.forEach(drop => dropsMap.set(drop.source_id, drop));
 
     const anattaCidByMsgId = new Map();
     try {
