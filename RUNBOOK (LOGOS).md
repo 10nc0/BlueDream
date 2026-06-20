@@ -40,6 +40,8 @@ Run after every fresh deployment or major environment change.
 | Per-book webhooks | Dashboard → Edit Book → Outpipes | — |
 | HTTP Token | Dashboard → Edit Book → HTTP Token | — |
 
+**Wormhole ingestion (dokodemo door):** Any URL arriving via an inpipe channel — a Dropbox share, Google Drive doc, Notion page, or any web link — is stored as-is in the ledger. The link is the door: agents and LLMs walk through it on demand when answering a query. No pre-fetching at ingest — content is resolved lazily, only when needed. This keeps the pipe clean and the ledger lean. (Firecrawl is a separate concern: enriching AI audit sources in the playground — orthogonal to inpipe storage.)
+
 **When infrastructure approaches a paid tier, fork rather than upgrade.**
 
 A Nyanbook node is stateless by design — the durable record lives in IPFS and Discord, not the database. When Supabase storage approaches its free limit (~500K messages), the lowest-cost path is:
@@ -352,6 +354,33 @@ No data loss — messages still go to PostgreSQL + Discord. New `ipfs_cid` value
 **Recovery:** [pinata.cloud](https://pinata.cloud) → API Keys → new key → update `PINATA_JWT` → restart. Historical NULL CIDs are not retroactively pinned.
 
 CIDs are content-addressed and provider-agnostic. Any CID pinned via Pinata can be re-pinned elsewhere using just the CID. The CID is the sovereignty anchor — not Pinata.
+
+### Antifragile Storage — Why the Risk Is at the Pipe, Not the Silo
+
+The instinct to fixate on IPFS vs Discord vs any single silo misses where the actual vulnerability sits.
+
+**The pipe is the risk.** `routes/pipe.js` is the single ingest path where a message transitions from the source channel into the ledger. This is where packet integrity, breath-stamp sequence, sender fidelity, and idempotency must hold. Once a message clears the pipe and lands in the ledger, storage is just fan-out — a rail delivery problem, not an integrity problem.
+
+**Storage is antifragile by outpipe fan-out.** Every outpipe a user adds is an independent failure domain with zero code change:
+
+```
+pipe.js (integrity boundary)
+  └── ledger row (PostgreSQL)
+  └── outpipe → Discord thread A       (geo-redundant, CDN-backed, no pin expiry)
+  └── outpipe → Discord thread B       (cold backup server)
+  └── outpipe → custom webhook N
+  └── outpipe → custom webhook N+1
+  └── monthly ZIP/email export         (air-gap, human-readable, no service dependency)
+  └── outpipe → IPFS/Pinata            (additive when enterprise requires it)
+```
+
+The system gets more resilient as usage grows — each new outpipe is another copy. That is the antifragile property: adding users and books increases redundancy as a side effect of normal operation, not as a separate backup operation.
+
+**Why Discord is sufficient as a base.** Discord runs Midjourney's entire creative corpus at scale — geo-redundant, CDN-backed, indefinite retention per server, no per-message storage fee. A message threaded to 10 Discord channels across independent servers is genuinely more durable than a single IPFS pin whose continuity depends on a billing cycle.
+
+**IPFS is additive, not foundational.** When an enterprise or regulated customer requires cryptographic provenance with a content-addressed receipt, IPFS is another outpipe webhook. It can be wired at any time without touching the pipe. Deferring it until that customer exists is correct prioritisation — not a gap.
+
+**Operational implication:** when diagnosing a message loss incident, start at the pipe (idempotency key, breath stamp, queue depth, channel ack) — not at the storage silo. If the pipe is intact, the fan-out has N chances to succeed.
 
 ---
 
