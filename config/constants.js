@@ -367,6 +367,19 @@ const EMAIL = {
   })()
 };
 
+// ==================== Ψ-EMA (Financial Physics) ====================
+// Single source of truth for Ψ-EMA rolling window.
+// Any change here propagates to psi-EMA.js, PSI_EMA_DOCUMENTATION (LLM context),
+// and all downstream callers automatically.
+const PSI_EMA = {
+  // Rolling window for MAD z-score calculation (median + MAD pass)
+  // 50 periods ≈ 1 year for weekly data — validated against 30-year S&P 500 backtest:
+  //   77.16% φ-band occupancy (vs 68.77% for 35-period), p < 10⁻²⁵ statistical significance
+  // Warm-up cost: 2 × 50 − 2 = 98 bars before first valid z-score.
+  // Do NOT lower without re-running the backtest.
+  ROLLING_WINDOW: 50
+};
+
 // ==================== Miscellaneous ====================
 const MISC = {
   PLAYROUND_GC_INTERVAL_MS: TIME.DAY, // 24 hour maintenance window
@@ -395,6 +408,7 @@ module.exports = {
   IP_GEO,
   EMAIL,
   MISC,
+  PSI_EMA,
   LLM_BACKENDS,
   getLLMBackend,
   getFastLLMBackend,

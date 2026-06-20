@@ -239,9 +239,9 @@ For each: New Application → Bot → Reset Token → copy. Invite all 4 to your
 
 | Key | Value |
 |-----|-------|
-| `HERMES_TOKEN` / `THOTH_TOKEN` / `IDRIS_TOKEN` / `HORUS_TOKEN` | Each bot's token |
+| `HERMES_TOKEN` / `THOTH_TOKEN` / `IDRIS_AI_LOG_TOKEN` / `HORUS_AI_LOG_TOKEN` | Each bot's token |
 | `NYANBOOK_WEBHOOK_URL` | Discord channel → Edit → Integrations → Webhooks → copy URL |
-| `DISCORD_LOG_CHANNEL_ID` | Right-click log channel → Copy Channel ID |
+| `BACKUP_DISCORD_CHANNEL_ID` | Right-click the channel for backup snapshots → Copy Channel ID |
 | `NYAN_OUTBOUND_API` | Any random string, 32+ chars |
 
 ---

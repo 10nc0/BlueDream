@@ -83,11 +83,11 @@ const { createDbInit } = require('./lib/db-init');
 
 // NOTE: DATABASE_URL is no longer in this list — DB readiness is enforced
 // upstream by resolveDatabase() (handles DATABASE_URL OR PG* equivalently).
+// NOTE: LLM provider uses an "at-least-one" check below (Groq / OpenRouter / Ollama).
+// NOTE: NYANBOOK_WEBHOOK_URL is a soft-warn — Discord is one of several optional outpipes.
 const criticalSecrets = {
     SESSION_SECRET: 'Session encryption key',
     FRACTAL_SALT: 'Secure book ID generation (crypto salt)',
-    NYANBOOK_WEBHOOK_URL: 'Discord Ledger #01 (output book)',
-    PLAYGROUND_AI_KEY: `AI Playground reasoning (${modelIdToLabel(CONSTANTS.getLLMBackend().model)})`
 };
 
 const missingCriticalSecrets = Object.entries(criticalSecrets).filter(([key]) => !process.env[key]);
@@ -106,11 +106,28 @@ if (missingCriticalSecrets.length > 0) {
     process.exit(1);
 }
 
+// LLM provider: at least one of Groq, OpenRouter, or Ollama must be configured.
+// Flat PLAYGROUND_AI_KEY requirement removed — Ollama (sovereign mode) and OpenRouter
+// are valid sole providers. groq-client.js already handles the three-tier cascade.
+const LLM_PROVIDER_KEYS = ['PLAYGROUND_AI_KEY', 'PLAYGROUND_GROQ_TOKEN', 'OPENROUTER_API_KEY', 'OLLAMA_BASE_URL'];
+const hasLLMProvider = LLM_PROVIDER_KEYS.some(k => process.env[k]);
+if (!hasLLMProvider) {
+    console.error('❌ CRITICAL: No LLM provider configured (fail-closed)');
+    console.error('');
+    console.error('   Set at least one of:');
+    console.error('   • PLAYGROUND_AI_KEY / PLAYGROUND_GROQ_TOKEN — Groq cloud (groq.com, free tier)');
+    console.error('   • OPENROUTER_API_KEY                        — OpenRouter cloud failover (openrouter.ai, free tier)');
+    console.error('   • OLLAMA_BASE_URL                           — local/self-hosted sovereign AI (ollama.ai)');
+    console.error('');
+    console.error('🛑 Server will NOT start until at least one LLM provider is configured.');
+    process.exit(1);
+}
+
 const ALLOWED_GROUPS = process.env.ALLOWED_GROUPS ? process.env.ALLOWED_GROUPS.split(',').map(g => g.trim()) : [];
 const ALLOWED_NUMBERS = process.env.ALLOWED_NUMBERS ? process.env.ALLOWED_NUMBERS.split(',').map(n => n.trim()) : [];
 
 // GLOBAL CONSTANTS: Nyanbook Ledger (Output #01) - centralized monitoring for all tenants
-// SECURITY: Loaded from environment variable (fail-closed check above)
+// Optional — Discord outpipe. Undefined when NYANBOOK_WEBHOOK_URL is not set; callers guard with ?.
 const NYANBOOK_LEDGER_WEBHOOK = process.env.NYANBOOK_WEBHOOK_URL;
 
 // ENVIRONMENT CHECK (must be defined before pool for SSL config)
@@ -1067,9 +1084,9 @@ app.listen(PORT, '0.0.0.0', async () => {
             [['EXA_API_KEY'],
              '🔍', 'Exa search (semantic cascade tier)',
              'Search cascade is DDG+Brave only — set EXA_API_KEY to add semantic fallback (exa.ai, 1k/month free)'],
-            [['HERMES_TOKEN', 'THOTH_TOKEN', 'IDRIS_AI_LOG_TOKEN', 'HORUS_AI_LOG_TOKEN'],
-             '🤖', 'Discord bots (Hermes φ · Thoth 0 · Idris ι · Horus Ω)',
-             'Inbound messages will not reach Discord — set all 4 bot tokens + NYANBOOK_WEBHOOK_URL'],
+            [['HERMES_TOKEN', 'THOTH_TOKEN', 'IDRIS_AI_LOG_TOKEN', 'HORUS_AI_LOG_TOKEN', 'NYANBOOK_WEBHOOK_URL'],
+             '🤖', 'Discord integration (bots + ledger webhook)',
+             'Discord outpipe disabled — set all 4 bot tokens + NYANBOOK_WEBHOOK_URL for Discord-backed books'],
             [['TWILIO_AUTH_TOKEN', 'TWILIO_ACCOUNT_SID'],
              '📱', 'WhatsApp inpipe (Twilio)',
              'WhatsApp → book archiving disabled — set TWILIO_AUTH_TOKEN + TWILIO_ACCOUNT_SID'],

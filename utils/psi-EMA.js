@@ -90,6 +90,12 @@
 // H(0.5) - Hybrid Empiric Falsifiability & Emergent Hint: Keep recursive form, φ as emergent preference → sweet spot
 // ============================================================================
 
+const { PSI_EMA: PSI_EMA_CONFIG } = require('../config/constants');
+
+// Hoist ROLLING_WINDOW before PSI_EMA_DOCUMENTATION so the template literal can reference it.
+// Single source of truth lives in config/constants.js (PSI_EMA.ROLLING_WINDOW).
+const ROLLING_WINDOW = PSI_EMA_CONFIG.ROLLING_WINDOW;
+
 const PHI = 1.6180339887498949;           // Golden ratio φ = (1 + √5) / 2
 const PHI_SQUARED = PHI * PHI;            // φ² = φ + 1 ≈ 2.618 | 0 + φ⁰ + φ¹ = φ²
 const PHI_INVERSE = 1 / PHI;              // φ⁻¹ = φ - 1 ≈ 0.618
@@ -121,10 +127,17 @@ THE THREE DIMENSIONS (substrate-agnostic):
 
 z (ANOMALY) - Deviation from Equilibrium  
 • Formula: (Value - Median) / (MAD × 1.4826) — robust z-score using Median Absolute Deviation
-• Uses 50-period rolling window (77.16% φ-band, p < 10⁻²⁵, prioritizes truth over speed)
-• |z| < φ (1.618): Normal range
-• φ < |z| < φ² (2.618): Alert zone
-• |z| > φ²: Extreme deviation
+• Uses ${ROLLING_WINDOW}-period rolling window (77.16% φ-band, p < 10⁻²⁵, prioritizes truth over speed)
+• z is computed on PRICE (stock), not on flows — z-on-price substrate rationale:
+  - Price is the integral of all past flows ("mark of Cain") — nothing is forgotten
+  - z-on-flow is amnesiac: after a crash the flow normalizes quickly, a flatlined corpse reads 0.04 = "breathing normally"
+  - R = z(t)/z(t-1) on price-displacement asks "is the wound healing?", not "is the patient moving?"
+  - θ already covers the fast/amnesiac (flow) channel; adding z-on-flow would duplicate θ with weaker memory
+  - The trio (θ=fast/flow, z=slow/stock, R=ratio) is a complete minimal basis — adding z-on-flow collapses it
+• |z| < φ⁻¹ (0.618): NORMAL — within equilibrium noise floor
+• φ⁻¹ ≤ |z| < φ (0.618–1.618): ELEVATED — mild deviation, watch
+• φ ≤ |z| < φ² (1.618–2.618): ALERT — significant deviation, act
+• |z| ≥ φ² (2.618): EXTREME — crisis level deviation
 
 R (CONVERGENCE) - Amplitude Ratio
 • Formula: z(t) / z(t-1)
@@ -169,18 +182,23 @@ const R_BOUNDS = {
 
 // Z (Anomaly) Thresholds - φ-Derived from x = 1 + 1/x
 // Classification: Deviation from equilibrium measured in MAD units
+//
+// Four-tier system — each key is the LOWER BOUND for that tier's >= check:
+//   NORMAL   : |z| < φ⁻¹ (< 0.618)         — within equilibrium noise floor
+//   ELEVATED : φ⁻¹ ≤ |z| < φ (0.618–1.618) — mild deviation, watch
+//   ALERT    : φ ≤ |z| < φ² (1.618–2.618)  — significant deviation, act
+//   EXTREME  : |z| ≥ φ² (≥ 2.618)          — extreme deviation, crisis
+//
+// All four tiers are reachable; boundaries are non-overlapping.
+// Previous bug: ALERT was set to φ² (= EXTREME) making ALERT unreachable.
 const Z_BOUNDS = {
-  NORMAL: 1.618,             // |z| < φ: within expected range
-  ALERT: 2.618,              // φ < |z| < φ²: elevated deviation
-  EXTREME: 2.618             // |z| > φ²: extreme deviation flag
+  ELEVATED: PHI_INVERSE,  // φ⁻¹ ≈ 0.618: lower bound of ELEVATED zone
+  ALERT:    PHI,          // φ ≈ 1.618: lower bound of ALERT zone
+  EXTREME:  PHI_SQUARED   // φ² ≈ 2.618: lower bound of EXTREME zone
 };
 
-// Rolling Window for Median & MAD z-score calculation
-// 50 periods (~1 year for weekly data) - validated against 30-year S&P 500 backtest
-// 77.16% φ-band occupancy (vs 68.77% for 35-period), p < 10⁻²⁵ statistical significance
-// Prioritizes truth over speed: lower noise, fewer false positives, stronger φ-validation
-// Warm-up tribute: 98 rows (49 for rolling median + 49 for MAD) before first valid z-score
-const ROLLING_WINDOW = 50;
+// ROLLING_WINDOW is hoisted to the top of this file (before PSI_EMA_DOCUMENTATION) so
+// the template literal can reference it. See line ~100.
 
 // Composite φ-sums (no arbitrary numbers)
 // 1 = φ⁰ (unity)
@@ -1002,6 +1020,29 @@ function analyzePhase(prices) {
 // PART 3: ANOMALY z (Deviation Strength)
 // ============================================================================
 
+// ── Z-SUBSTRATE DECISION (SETTLED — do not reopen) ──────────────────────────
+// z is computed on PRICE (stock), not on flows. Rationale:
+//
+//   1. Price is the integral of all flows — the "mark of Cain".
+//      A price that crashed and never recovered carries that wound in its median
+//      displacement forever. Flows normalize within weeks (amnesiac channel).
+//
+//   2. z-on-flow reads a flatlined corpse as "breathing normally".
+//      Post-FTX example: flow z ≈ 0.04 three months after collapse because
+//      daily candle returns had renormalized. Price z ≈ 3.1 — still screaming.
+//
+//   3. R = z(t)/z(t-1) on price asks "is the wound healing?" — a meaningful
+//      clinical question. R on flow asks "is the breathing rate changing?" —
+//      loses the wound entirely once the patient stops moving.
+//
+//   4. θ already covers the fast/amnesiac (flow) channel via atan2(Δprice, price).
+//      Adding z-on-flow would duplicate θ with weaker memory, collapsing the
+//      (θ, z, R) trio from a complete minimal basis into a redundant pair.
+//
+// The trio (θ=fast/flow, z=slow/stock, R=convergence ratio) is a complete
+// minimal basis for cycle position, deviation magnitude, and momentum direction.
+// ────────────────────────────────────────────────────────────────────────────
+
 /**
  * Calculate z-scores from stock (price) data using rolling window
  * 
@@ -1015,7 +1056,7 @@ function analyzePhase(prices) {
  * @param {Object} options - Configuration options
  * @param {boolean} options.robust - Use MAD instead of stdDev (default: true)
  * @param {number} options.minSamples - Minimum samples for reliable z-score (default: 8)
- * @param {number} options.rollingWindow - Rolling window for median/MAD (default: ROLLING_WINDOW = 35)
+ * @param {number} options.rollingWindow - Rolling window for median/MAD (default: ROLLING_WINDOW from config/constants.js PSI_EMA section)
  * @returns {Object} Z-score analysis with fidelity metrics
  */
 function calculateZFlows(stocks, options = {}) {
@@ -1203,38 +1244,39 @@ function calculateZFlows(stocks, options = {}) {
 function getAnomalyAlert(z) {
   const absZ = Math.abs(z);
   
-  // H₀: Anomaly classification based on φ-derived bounds
+  // H₀: Anomaly classification — 4-tier φ-derived system, all branches reachable.
+  // Check from highest to lowest; each tier has a non-overlapping φ-boundary.
   if (absZ >= Z_BOUNDS.EXTREME) {
     return {
       level: 'EXTREME',
       emoji: '🔴',
       z_value: `${absZ.toFixed(1)}`,
       description: z > 0 ? 'Extreme positive deviation from median' : 'Extreme negative deviation from median',
-      hypothesis: `H₀: |z| > φ² (${Z_BOUNDS.EXTREME.toFixed(3)})`
+      hypothesis: `H₀: |z| ≥ φ² (${Z_BOUNDS.EXTREME.toFixed(3)})`
     };
   } else if (absZ >= Z_BOUNDS.ALERT) {
     return {
       level: 'ALERT',
       emoji: '🟠',
       z_value: `${absZ.toFixed(1)}`,
-      description: 'Elevated deviation from median',
-      hypothesis: `H₀: φ < |z| < φ² (${Z_BOUNDS.ALERT.toFixed(3)}-${Z_BOUNDS.EXTREME.toFixed(3)})`
+      description: 'Significant deviation — alert zone',
+      hypothesis: `H₀: φ ≤ |z| < φ² (${Z_BOUNDS.ALERT.toFixed(3)}–${Z_BOUNDS.EXTREME.toFixed(3)})`
     };
-  } else if (absZ >= Z_BOUNDS.NORMAL) {
+  } else if (absZ >= Z_BOUNDS.ELEVATED) {
     return {
       level: 'ELEVATED',
       emoji: '🟡',
       z_value: `${absZ.toFixed(1)}`,
-      description: 'Moderate deviation from median',
-      hypothesis: `H₀: |z| ≥ φ (${Z_BOUNDS.NORMAL.toFixed(3)})`
+      description: 'Mild deviation — watch zone',
+      hypothesis: `H₀: φ⁻¹ ≤ |z| < φ (${Z_BOUNDS.ELEVATED.toFixed(3)}–${Z_BOUNDS.ALERT.toFixed(3)})`
     };
   } else {
     return {
       level: 'NORMAL',
       emoji: '🟢',
       z_value: `${absZ.toFixed(1)}`,
-      description: 'Within equilibrium range',
-      hypothesis: `H₀: |z| < φ (${Z_BOUNDS.NORMAL.toFixed(3)})`
+      description: 'Within equilibrium noise floor',
+      hypothesis: `H₀: |z| < φ⁻¹ (${Z_BOUNDS.ELEVATED.toFixed(3)})`
     };
   }
 }
@@ -1275,10 +1317,11 @@ function analyzeAnomaly(zFlows) {
     ema21Interpolated: ema21Result.interpolated,
     ema34Interpolated: ema34Result.interpolated,
     thresholds: {
-      normal: `±φ (${Z_BOUNDS.NORMAL.toFixed(2)})`,
-      alert: `±φ² (${Z_BOUNDS.ALERT.toFixed(2)})`,
-      extreme: `>φ² (${Z_BOUNDS.EXTREME.toFixed(2)})`,
-      method: 'MAD-scaled, φ-derived'
+      normal:   `|z| < φ⁻¹ (${Z_BOUNDS.ELEVATED.toFixed(2)})`,
+      elevated: `φ⁻¹ to φ (${Z_BOUNDS.ELEVATED.toFixed(2)}–${Z_BOUNDS.ALERT.toFixed(2)})`,
+      alert:    `φ to φ² (${Z_BOUNDS.ALERT.toFixed(2)}–${Z_BOUNDS.EXTREME.toFixed(2)})`,
+      extreme:  `≥φ² (${Z_BOUNDS.EXTREME.toFixed(2)})`,
+      method:   'MAD-scaled, φ-derived'
     }
   };
 }
@@ -1481,7 +1524,7 @@ function calculatePhiConvergence(zFlows) {
     meanRatio,
     recentMeanRatio: recentMean,
     distanceFromPhi: Math.abs(recentMean - PHI),
-    converged: recentMean >= 1.3 && recentMean <= 2.0 && !isReversingTrend && !hasLowSignal,
+    converged: recentMean >= PHI_INVERSE && recentMean <= PHI && !isReversingTrend && !hasLowSignal,
     convergenceStrength: 1 - Math.min(1, Math.abs(recentMean - PHI) / PHI),
     signFlipCount,
     recentSignFlips: recentReversals,
@@ -2388,7 +2431,7 @@ class PsiEMADashboard {
     const convergenceResult = calculatePhiConvergence(zFlowResult.zFlows);
     
     // Analyze all three dimensions
-    // vφ⁸: analyzePhase now takes raw prices (stocks) and computes θ = atan2(ΔEMA-55, ΔEMA-34)
+    // vφ⁷: θ = atan2(Δprice, price) on last confirmed candle — fast (flow) channel is θ's domain, not z's
     const phaseAnalysis = analyzePhase(stocks);
     const anomalyAnalysis = analyzeAnomaly(zFlowResult.zFlows);
     const currentZ = anomalyAnalysis.current || 0;
@@ -2694,9 +2737,10 @@ When stock data is provided below, you MUST:
 
 **2. Anomaly z (Deviation Strength)** — EMA-21/EMA-34
    z = (Price - Median) / MAD
-   H₀: |z| < φ (${PHI.toFixed(3)}) = NORMAL
-   H₀: φ < |z| < φ² (${Z_BOUNDS.ALERT.toFixed(3)}) = ALERT
-   H₀: |z| > φ² (${Z_BOUNDS.EXTREME.toFixed(3)}) = EXTREME
+   H₀: |z| < φ⁻¹ (${Z_BOUNDS.ELEVATED.toFixed(3)}) = NORMAL
+   H₀: φ⁻¹ ≤ |z| < φ (${Z_BOUNDS.ELEVATED.toFixed(3)}–${Z_BOUNDS.ALERT.toFixed(3)}) = ELEVATED
+   H₀: φ ≤ |z| < φ² (${Z_BOUNDS.ALERT.toFixed(3)}–${Z_BOUNDS.EXTREME.toFixed(3)}) = ALERT
+   H₀: |z| ≥ φ² (${Z_BOUNDS.EXTREME.toFixed(3)}) = EXTREME
 
 **3. Convergence R (Amplitude Ratio)** — EMA-13/EMA-21
    R = z(t) / z(t-1)

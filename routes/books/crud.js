@@ -727,6 +727,20 @@ function register(app, deps) {
                 }
             }
 
+            // Pre-flight reachability check — non-blocking.
+            // We always save the outpipe; a warning is returned if the endpoint
+            // did not respond so the user can catch typos immediately without
+            // waiting for the first real message to fail.
+            const webhookOutpipes = outpipes.filter(p => p.type === 'webhook' && p.url);
+            const unreachable = [];
+            await Promise.allSettled(webhookOutpipes.map(async p => {
+                try {
+                    await axios.head(p.url, { timeout: 3000, validateStatus: () => true });
+                } catch (_) {
+                    unreachable.push(p.name || p.url);
+                }
+            }));
+
             const txClient = await pool.connect();
             let updateResult;
             try {
@@ -759,9 +773,13 @@ function register(app, deps) {
                 [updateResult.rows[0].fractal_id]
             ).catch(err => logger.warn({ err }, 'Failed to cancel outbox jobs on outpipe update'));
 
-            logger.info({ bookId: id, count: outpipes.length }, 'Outpipes updated');
+            logger.info({ bookId: id, count: outpipes.length, unreachable: unreachable.length }, 'Outpipes updated');
             _invalidateBooksCache(tenantSchema, req.userId);
-            res.json({ success: true, outpipes_user: updateResult.rows[0].outpipes_user });
+            const response = { success: true, outpipes_user: updateResult.rows[0].outpipes_user };
+            if (unreachable.length > 0) {
+                response.warning = `Saved. ${unreachable.length} endpoint(s) did not respond at save time — delivery will retry automatically: ${unreachable.join(', ')}`;
+            }
+            res.json(response);
         } catch (error) {
             logger.error({ err: error }, 'Error in PATCH /api/books/:id/outpipes');
             next(error);
