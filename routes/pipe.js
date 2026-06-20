@@ -76,8 +76,20 @@ function registerPipeRoutes(app, deps) {
         isConfigured: () => true
     };
     const channelRegistry = { twilio: twilioChannel, line: lineChannel, email: emailChannel, telegram: telegramChannel, webhook: webhookChannel };
-    const queueProcessor = startQueueProcessor({ ...deps, channelRegistry });
-    
+
+    // Inpipe packet processing is prod-only.
+    // Dev env shares the same DB but must never process queued packets — doing so
+    // would write ledger rows and embed breath stamps into the append-only sequence
+    // from a non-authoritative instance.  Playground / AI routes are unaffected
+    // (they are discretionary, stateless calls that don't touch the ledger).
+    const isProd = process.env.REPLIT_DEPLOYMENT === '1' || process.env.NODE_ENV === 'production';
+    let queueProcessor = null;
+    if (isProd) {
+        queueProcessor = startQueueProcessor({ ...deps, channelRegistry });
+    } else {
+        logger.warn('⚠️  Dev mode: inpipe queue processor DISABLED — packets will not be processed (prod only)');
+    }
+
     setInterval(() => cleanupIdempotencyCache(pool, logger), 60 * 1000);
     setInterval(() => cleanupDoneMessages(pool, logger), 60 * 60 * 1000);
 
@@ -823,7 +835,7 @@ function registerPipeRoutes(app, deps) {
 
     logger.info('📥 Pipe routes registered: %s', registeredRoutes.join(', '));
 
-    return { endpoints: registeredRoutes.length, stopQueueProcessor: queueProcessor.stop };
+    return { endpoints: registeredRoutes.length, stopQueueProcessor: queueProcessor?.stop ?? (() => {}) };
 }
 
 module.exports = { registerPipeRoutes };
