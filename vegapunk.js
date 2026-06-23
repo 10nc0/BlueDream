@@ -635,11 +635,19 @@ app.get('/dev', (req, res) => {
 
 // Root redirects to AI Playground (public landing page)
 app.get('/', (req, res) => {
-    // Cloud Run / load-balancer health probes — return 200 immediately.
-    // GoogleHC uses GET /, not HEAD, and does NOT follow redirects.
-    // Any non-200 (including a 302) is treated as a failed probe.
+    // Health probes — return 200 immediately.
+    //
+    // Probes that MUST get 200 (any non-200 including 302 = failed probe):
+    //   • Cloud Run startup probe  → ua 'GoogleHC/1.0'
+    //   • Kubernetes liveness      → ua 'kube-probe/...'
+    //   • Replit deployment probe  → ua does not contain 'Mozilla'
+    //     (Replit's own health layer sits above Cloud Run and uses its own UA)
+    //
+    // HEAD requests (synthetic checks) also get 200.
+    // All real browser requests contain 'Mozilla' → redirect to /AI.
     const ua = req.headers['user-agent'] || '';
-    if (req.method === 'HEAD' || ua.startsWith('GoogleHC') || ua.startsWith('kube-probe')) {
+    const isBrowser = ua.includes('Mozilla');
+    if (!isBrowser) {
         return res.status(200).end();
     }
 

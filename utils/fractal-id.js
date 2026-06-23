@@ -109,8 +109,11 @@ function verify(fractalId, type, tenantId, dbId, createdByAdminId = null) {
  *
  * The hash covers bookFractalId + timestamp + contentHash only — NOT breatheCount.
  * This preserves content-addressability so retried messages produce the same ID.
- * breatheCount appears as a readable segment (_b{N}_) for tamper-detection:
- * cross-check N against the phi breathe log to verify the arrival time window.
+ * breatheCount (_b{N}_) is the node-time anchor for this packet (load-bearing,
+ * not cosmetic): cross-check N against core.system_counters 'phi_breathe_count'
+ * to verify the arrival-time window. A replayed or backdated packet will carry
+ * an N outside the plausible range for its claimed wall-clock timestamp.
+ * Full contract: see lib/phi-breathe.js class header (Role 2).
  *
  * @param {string} bookFractalId - Parent book's fractal ID
  * @param {number} tenantId      - Tenant ID
