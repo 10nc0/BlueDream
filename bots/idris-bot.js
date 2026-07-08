@@ -7,6 +7,7 @@
 const { Client, GatewayIntentBits, ChannelType } = require('discord.js');
 const axios = require('axios');
 const { AUDIT } = require('../config/constants');
+const { splitMessageIntoChunks } = require('../lib/discord-webhooks');
 const logger = require('../lib/logger');
 
 class IdrisBot {
@@ -162,7 +163,7 @@ class IdrisBot {
         }
 
         try {
-            const webhookWithThread = `${this.webhookUrl}?thread_id=${threadId}`;
+            const webhookWithThread = `${this.webhookUrl}?thread_id=${threadId}&wait=true`;
             
             const response = await axios.post(webhookWithThread, messageData, {
                 headers: { 'Content-Type': 'application/json' }
@@ -213,72 +214,51 @@ class IdrisBot {
     }
 
     async postAuditResult(threadId, auditResult, query, bookName = null) {
-        const statusEmoji = AUDIT.STATUS_EMOJI;
+        const EMBED_DESC_LIMIT = 4096;
+        const CONT_CHUNK_SIZE  = 1900;
 
-        const emoji = statusEmoji[auditResult.status] || '❓';
-        const confidence = auditResult.confidence ?? null;
-        const confidenceDisplay = confidence !== null
-            ? `${confidence}% ${this.getConfidenceBar(confidence)}`
-            : 'unverified';
+        const emoji  = AUDIT.STATUS_EMOJI[auditResult.status] || '❓';
+        const status = auditResult.status || 'UNKNOWN';
+        const answer = auditResult.answer || '';
+
+        // Pre-compute chunks so total is known before the first post
+        const descText   = answer.substring(0, EMBED_DESC_LIMIT);
+        const overflow   = answer.substring(EMBED_DESC_LIMIT);
+        const contChunks = overflow ? splitMessageIntoChunks(overflow, CONT_CHUNK_SIZE) : [];
+        const total      = 1 + contChunks.length;
+
+        const queryText = query.length > 300 ? query.substring(0, 300) + '\u2026' : query;
+
+        const fields = [
+            { name: '📝 Query', value: queryText, inline: false }
+        ];
+        if (bookName) {
+            fields.push({ name: '📚 Book', value: bookName, inline: false });
+        }
 
         const embed = {
-            title: `${emoji} AI Audit Result`,
-            color: this.getStatusColor(auditResult.status),
-            fields: [
-                {
-                    name: '📝 Query',
-                    value: query.length > 200 ? query.substring(0, 200) + '...' : query,
-                    inline: false
-                },
-                {
-                    name: '📊 Status',
-                    value: `**${auditResult.status}**`,
-                    inline: true
-                },
-                {
-                    name: '🎯 Confidence',
-                    value: confidenceDisplay,
-                    inline: true
-                }
-            ],
+            title: `${emoji} ${status}`,
+            color: this.getStatusColor(status),
+            fields,
             timestamp: new Date().toISOString()
         };
+        if (descText) embed.description = descText;
 
-        if (bookName) {
-            embed.fields.unshift({
-                name: '📚 Book Context',
-                value: bookName,
-                inline: true
-            });
+        const headerData  = await this.postToThread(threadId, { embeds: [embed] });
+        const headerMsgId = headerData && headerData.id ? headerData.id : null;
+
+        if (contChunks.length > 0) {
+            for (let i = 0; i < contChunks.length; i++) {
+                const seq     = i + 2;
+                const anchor  = headerMsgId || 'unknown';
+                const content = `\u27b6 audit:${anchor} ${seq}/${total}\n${contChunks[i]}`;
+                const msgData = { content };
+                if (headerMsgId) msgData.message_reference = { message_id: headerMsgId };
+                await this.postToThread(threadId, msgData);
+            }
         }
 
-        if (auditResult.answer) {
-            embed.fields.push({
-                name: '💬 Answer',
-                value: auditResult.answer.length > 500 ? auditResult.answer.substring(0, 500) + '...' : auditResult.answer,
-                inline: false
-            });
-        }
-
-        if (auditResult.data_extracted && Object.keys(auditResult.data_extracted).length > 0) {
-            const dataStr = JSON.stringify(auditResult.data_extracted, null, 2);
-            embed.fields.push({
-                name: '📊 Extracted Data',
-                value: '```json\n' + (dataStr.length > 400 ? dataStr.substring(0, 400) + '...' : dataStr) + '\n```',
-                inline: false
-            });
-        }
-
-        if (auditResult.reason) {
-            embed.fields.push({
-                name: '💭 Reasoning',
-                value: auditResult.reason.length > 300 ? auditResult.reason.substring(0, 300) + '...' : auditResult.reason,
-                inline: false
-            });
-        }
-
-        await this.postToThread(threadId, { embeds: [embed] });
-        logger.info({ threadId }, '📝 Idris posted audit result');
+        logger.info({ threadId, parts: total }, '📝 Idris posted audit result');
     }
 
     async postMonthlyClosing(threadId, tally) {

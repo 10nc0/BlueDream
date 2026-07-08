@@ -294,18 +294,19 @@ Analyze the data and answer the user's question. Count carefully when asked abou
                                 const isDiscordMirror = /discord\.com\/api\/webhooks\//.test(mirrorWebhookUrl);
                                 if (isDiscordMirror) {
                                     const mirrorUrl = mirrorThreadId ? `${mirrorWebhookUrl}${mirrorWebhookUrl.includes('?') ? '&' : '?'}thread_id=${mirrorThreadId}` : mirrorWebhookUrl;
-                                    await axios.post(mirrorUrl, {
-                                        embeds: [{
-                                            title: `🐱 Audit Mirror`,
-                                            color: idrisBot.getStatusColor(auditPayload.status),
-                                            fields: [
-                                                { name: '📝 Query', value: query.length > 200 ? query.substring(0, 200) + '...' : query, inline: false },
-                                                { name: '💬 Answer', value: (auditPayload.answer || '').length > 500 ? auditPayload.answer.substring(0, 500) + '...' : (auditPayload.answer || 'No answer'), inline: false },
-                                                { name: '📚 Book', value: primaryBookName, inline: true }
-                                            ],
-                                            timestamp: new Date().toISOString()
-                                        }]
-                                    }, { headers: { 'Content-Type': 'application/json' }, timeout: 10000 });
+                                    const mirrorEmoji  = AUDIT.STATUS_EMOJI[auditPayload.status] || '❓';
+                                    const mirrorAnswer = (auditPayload.answer || '').substring(0, 4096);
+                                    const mirrorEmbed  = {
+                                        title:       `${mirrorEmoji} ${auditPayload.status || 'UNKNOWN'}`,
+                                        color:       idrisBot.getStatusColor(auditPayload.status),
+                                        description: mirrorAnswer || undefined,
+                                        fields: [
+                                            { name: '📝 Query', value: query.length > 300 ? query.substring(0, 300) + '\u2026' : query, inline: false }
+                                        ],
+                                        timestamp: new Date().toISOString()
+                                    };
+                                    if (primaryBookName) mirrorEmbed.fields.push({ name: '📚 Book', value: primaryBookName, inline: false });
+                                    await axios.post(mirrorUrl, { embeds: [mirrorEmbed] }, { headers: { 'Content-Type': 'application/json' }, timeout: 10000 });
                                 } else {
                                     const webhookHost = new URL(mirrorWebhookUrl).hostname;
                                     const blockedPatterns = /^(localhost|127\.|10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|0\.|169\.254\.|::1|fc|fd|fe80)/i;

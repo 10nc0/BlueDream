@@ -951,7 +951,9 @@ function interpretPhase(theta) {
  * @param {number[]} prices - Price time series
  * @returns {Object} Phase analysis with signals
  */
-function analyzePhase(prices) {
+function analyzePhase(prices, options = {}) {
+  const { lagPrices = null, lag = 1 } = options;
+
   if (!prices || prices.length < 2) {
     return { 
       error: 'Insufficient data (need at least 2 periods)',
@@ -972,7 +974,8 @@ function analyzePhase(prices) {
   const currentPrice = prices[prices.length - 1];
   const currentDelta = prices[prices.length - 1] - prices[prices.length - 2];
   
-  // EMA for smoothing (crossover signals)
+  // EMA for smoothing (crossover signals) — always on the passed-in `prices` series
+  // (e.g. week-bucketed closes), independent of any current-theta lag override below.
   const ema34Result = calculateEMA(prices, FIB_PERIODS.FAST_THETA);
   const ema55Result = calculateEMA(prices, FIB_PERIODS.SLOW_THETA);
   
@@ -980,11 +983,25 @@ function analyzePhase(prices) {
   // Pre-market / stale bars have flow=0 (close == prev close): not a real candle.
   // Only 2 real completed candles needed for any timeframe (1d or 7d).
   // θ = atan2(flow, stock) on the last pair where |flow| > 0 (i.e., price actually moved).
-  let lookback = prices.length - 1;
-  while (lookback > 1 && prices[lookback] === prices[lookback - 1]) lookback--;
-  const confirmedStock = prices[lookback];
-  const confirmedFlow  = prices[lookback] - prices[lookback - 1];
-  const currentTheta   = Math.atan2(confirmedFlow, confirmedStock) * (180 / Math.PI);
+  //
+  // vφ⁹: if `lagPrices` is supplied (e.g. daily closes for a weekly dimension), compute
+  // currentTheta as "today vs `lag` trading days ago" on that finer-grained series instead
+  // of "latest bucket vs previous bucket" on `prices`. This avoids the case where the newest
+  // week-bucketed candle is only 1-2 trading days old and its close coincidentally equals
+  // the most recent daily close — which would otherwise make weekly θ collapse onto daily θ.
+  let confirmedStock, confirmedFlow;
+  if (lagPrices && lagPrices.length > lag) {
+    let lb = lagPrices.length - 1;
+    while (lb > lag && lagPrices[lb] === lagPrices[lb - 1]) lb--;
+    confirmedStock = lagPrices[lb];
+    confirmedFlow  = lagPrices[lb] - lagPrices[Math.max(0, lb - lag)];
+  } else {
+    let lookback = prices.length - 1;
+    while (lookback > 1 && prices[lookback] === prices[lookback - 1]) lookback--;
+    confirmedStock = prices[lookback];
+    confirmedFlow  = prices[lookback] - prices[lookback - 1];
+  }
+  const currentTheta = Math.atan2(confirmedFlow, confirmedStock) * (180 / Math.PI);
   
   // Interpret phase
   const interpretation = interpretPhase(currentTheta);
@@ -2411,7 +2428,7 @@ class PsiEMADashboard {
    * @returns {Object} Complete 3-dimensional wave function analysis
    */
   analyze(data) {
-    const { stocks, flows } = data;
+    const { stocks, flows, phaseLagSeries, phaseLag } = data;
     
     if (!stocks || stocks.length < 3) {
       return { error: 'Need at least 3 periods of stock data' };
@@ -2432,7 +2449,10 @@ class PsiEMADashboard {
     
     // Analyze all three dimensions
     // vφ⁷: θ = atan2(Δprice, price) on last confirmed candle — fast (flow) channel is θ's domain, not z's
-    const phaseAnalysis = analyzePhase(stocks);
+    // vφ⁹: optional rolling-lag override (e.g. weekly θ = daily closes compared N trading days back)
+    // instead of the last two bars of `stocks` — avoids collapsing to the daily comparison when
+    // the newest week-bucketed candle is still forming (only 1-2 trading days old).
+    const phaseAnalysis = analyzePhase(stocks, { lagPrices: phaseLagSeries, lag: phaseLag });
     const anomalyAnalysis = analyzeAnomaly(zFlowResult.zFlows);
     const currentZ = anomalyAnalysis.current || 0;
     

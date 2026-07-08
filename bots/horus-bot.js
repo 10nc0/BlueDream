@@ -74,53 +74,8 @@ class HorusBot {
                 throw new Error(`Thread ${threadId} not found or not a thread`);
             }
 
-            const messages = await thread.messages.fetch({ limit });
-
-            const auditLogs = messages
-                .map(msg => {
-                    const log = {
-                        id: msg.id,
-                        timestamp: msg.createdAt.toISOString(),
-                        content: msg.content,
-                        embeds: []
-                    };
-
-                    // Parse embeds for structured audit data
-                    if (msg.embeds.length > 0) {
-                        log.embeds = msg.embeds.map(embed => ({
-                            title: embed.title,
-                            color: embed.color,
-                            fields: embed.fields.map(f => ({
-                                name: f.name,
-                                value: f.value,
-                                inline: f.inline
-                            })),
-                            timestamp: embed.timestamp
-                        }));
-
-                        // Extract status from first embed if it's an audit result
-                        const firstEmbed = msg.embeds[0];
-                        if (firstEmbed.title && firstEmbed.title.includes('AI Audit Result')) {
-                            const statusField = firstEmbed.fields.find(f => f.name === '📊 Status');
-                            const confidenceField = firstEmbed.fields.find(f => f.name === '🎯 Confidence');
-                            const queryField = firstEmbed.fields.find(f => f.name === '📝 Query');
-                            const answerField = firstEmbed.fields.find(f => f.name === '💬 Answer');
-                            const bookField = firstEmbed.fields.find(f => f.name === '📚 Book Context');
-
-                            const rawConf = confidenceField ? parseInt(confidenceField.value) : null;
-                            log.parsed = {
-                                status: statusField ? statusField.value.replace(/\*/g, '') : null,
-                                confidence: Number.isNaN(rawConf) ? null : rawConf,
-                                query: queryField ? queryField.value : null,
-                                answer: answerField ? answerField.value : null,
-                                bookContext: bookField ? bookField.value : null
-                            };
-                        }
-                    }
-
-                    return log;
-                });
-            // Discord returns newest first - keep that order for display
+            const messages  = await thread.messages.fetch({ limit });
+            const auditLogs = await this._stitchWindow(messages, thread);
 
             logger.info({ count: auditLogs.length, threadId }, '📊 Horus fetched audit logs');
             return auditLogs;
@@ -149,13 +104,18 @@ class HorusBot {
 
             const messages = await thread.messages.fetch(fetchOptions);
 
-            const auditLogs = messages
-                .map(msg => this.parseAuditMessage(msg))
-                .reverse();
+            // If the oldest raw message is a continuation its header may be on the next page
+            const rawArray      = [...messages.values()];
+            const oldestRaw     = rawArray[rawArray.length - 1];
+            const oldestIsCont  = oldestRaw && this._classifyMessage(oldestRaw) === 'continuation';
+
+            const auditLogs = await this._stitchWindow(messages, thread);
+            // _stitchWindow returns newest→oldest; reverse to oldest→newest for paginated display
+            auditLogs.reverse();
 
             return {
-                logs: auditLogs,
-                hasMore: messages.size === limit,
+                logs:     auditLogs,
+                hasMore:  messages.size === limit || oldestIsCont,
                 oldestId: auditLogs.length > 0 ? auditLogs[0].id : null,
                 newestId: auditLogs.length > 0 ? auditLogs[auditLogs.length - 1].id : null
             };
@@ -165,64 +125,151 @@ class HorusBot {
         }
     }
 
+    // Classify a raw Discord message for stitching
+    _classifyMessage(msg) {
+        const firstEmbed = msg.embeds?.[0];
+        if (firstEmbed) {
+            if (firstEmbed.title) {
+                if (firstEmbed.title.includes('Monthly Book Closing')) return 'closing';
+                // Legacy: "✅ AI Audit Result" (old embed format, answer in field)
+                if (firstEmbed.title.includes('AI Audit Result'))      return 'legacy-audit';
+            }
+            // New format: answer in embed.description, slim field set
+            if (firstEmbed.description != null && firstEmbed.fields?.[0]?.name === '📝 Query') {
+                return 'audit';
+            }
+        }
+        // Overflow continuation posted by Idris as a Discord reply
+        if (msg.content && msg.content.startsWith('\u27b6 audit:')) return 'continuation';
+        return 'other';
+    }
+
     parseAuditMessage(msg) {
+        const type = this._classifyMessage(msg);
         const log = {
-            id: msg.id,
+            id:        msg.id,
             timestamp: msg.createdAt.toISOString(),
-            content: msg.content,
-            embeds: []
+            content:   msg.content,
+            embeds:    []
         };
 
         if (msg.embeds.length > 0) {
             log.embeds = msg.embeds.map(embed => ({
-                title: embed.title,
-                color: embed.color,
-                fields: embed.fields.map(f => ({
-                    name: f.name,
-                    value: f.value,
-                    inline: f.inline
-                })),
-                timestamp: embed.timestamp
+                title:       embed.title,
+                description: embed.description,
+                color:       embed.color,
+                fields:      embed.fields.map(f => ({ name: f.name, value: f.value, inline: f.inline })),
+                timestamp:   embed.timestamp,
+                footer:      embed.footer ? { text: embed.footer.text } : null
             }));
+        }
 
-            const firstEmbed = msg.embeds[0];
-            if (firstEmbed.title && firstEmbed.title.includes('AI Audit Result')) {
-                const statusField = firstEmbed.fields.find(f => f.name === '📊 Status');
-                const confidenceField = firstEmbed.fields.find(f => f.name === '🎯 Confidence');
-                const queryField = firstEmbed.fields.find(f => f.name === '📝 Query');
-                const answerField = firstEmbed.fields.find(f => f.name === '💬 Answer');
-                const bookField = firstEmbed.fields.find(f => f.name === '📚 Book Context');
+        const firstEmbed = msg.embeds[0];
 
-                const rawConf = confidenceField ? parseInt(confidenceField.value) : null;
-                log.type = 'audit';
-                log.parsed = {
-                    status: statusField ? statusField.value.replace(/\*/g, '') : null,
-                    confidence: Number.isNaN(rawConf) ? null : rawConf,
-                    query: queryField ? queryField.value : null,
-                    answer: answerField ? answerField.value : null,
-                    bookContext: bookField ? bookField.value : null
-                };
-            } else if (firstEmbed.title && firstEmbed.title.includes('Monthly Book Closing')) {
-                log.type = 'closing';
-                const monthMatch = firstEmbed.title.match(/Monthly Book Closing\s*—\s*(.+)$/);
-                const getClosingField = (name) => firstEmbed.fields.find(f => f.name === name)?.value ?? null;
-                log.parsed = {
-                    month: monthMatch ? monthMatch[1].trim() : null,
-                    totalMessages: parseInt(getClosingField('📬 Total Messages')) || 0,
-                    textMessages: parseInt(getClosingField('💬 Text')) || 0,
-                    mediaMessages: parseInt(getClosingField('🖼️ Media')) || 0,
-                    contributors: parseInt(getClosingField('👥 Contributors')) || 0,
-                    attachmentSize: getClosingField('📎 Attachment Size'),
-                    entities: getClosingField('🔍 Entities'),
-                    languages: getClosingField('🌐 Languages'),
-                    tags: getClosingField('🏷️ Tags'),
-                    timeRange: getClosingField('🕐 Time Range'),
-                    bookInfo: firstEmbed.footer?.text ?? null
-                };
-            }
+        if (type === 'audit') {
+            // New format: description holds the answer, slim fields
+            const queryField = firstEmbed.fields?.find(f => f.name === '📝 Query');
+            const bookField  = firstEmbed.fields?.find(f => f.name === '📚 Book');
+            // Strip leading emoji from title to get status: "{emoji} {STATUS}"
+            const statusMatch = firstEmbed.title ? firstEmbed.title.match(/^\S+\s+(.+)$/) : null;
+            log.type = 'audit';
+            log.parsed = {
+                status:      statusMatch ? statusMatch[1].trim() : null,
+                confidence:  null,
+                query:       queryField ? queryField.value : null,
+                answer:      firstEmbed.description || null,
+                bookContext: bookField  ? bookField.value  : null
+            };
+        } else if (type === 'legacy-audit') {
+            // Old format: answer truncated to 500 chars in a field
+            const statusField     = firstEmbed.fields?.find(f => f.name === '📊 Status');
+            const confidenceField = firstEmbed.fields?.find(f => f.name === '🎯 Confidence');
+            const queryField      = firstEmbed.fields?.find(f => f.name === '📝 Query');
+            const answerField     = firstEmbed.fields?.find(f => f.name === '💬 Answer');
+            const bookField       = firstEmbed.fields?.find(f => f.name === '📚 Book Context');
+            const rawConf = confidenceField ? parseInt(confidenceField.value) : null;
+            log.type = 'audit';
+            log.parsed = {
+                status:      statusField ? statusField.value.replace(/\*/g, '') : null,
+                confidence:  Number.isNaN(rawConf) ? null : rawConf,
+                query:       queryField ? queryField.value : null,
+                answer:      answerField ? answerField.value : null,
+                bookContext: bookField   ? bookField.value  : null
+            };
+        } else if (type === 'closing') {
+            const monthMatch      = firstEmbed.title.match(/Monthly Book Closing\s*—\s*(.+)$/);
+            const getClosingField = (name) => firstEmbed.fields?.find(f => f.name === name)?.value ?? null;
+            log.type = 'closing';
+            log.parsed = {
+                month:          monthMatch ? monthMatch[1].trim() : null,
+                totalMessages:  parseInt(getClosingField('📬 Total Messages')) || 0,
+                textMessages:   parseInt(getClosingField('💬 Text'))           || 0,
+                mediaMessages:  parseInt(getClosingField('🖼️ Media'))          || 0,
+                contributors:   parseInt(getClosingField('👥 Contributors'))   || 0,
+                attachmentSize: getClosingField('📎 Attachment Size'),
+                entities:       getClosingField('🔍 Entities'),
+                languages:      getClosingField('🌐 Languages'),
+                tags:           getClosingField('🏷️ Tags'),
+                timeRange:      getClosingField('🕐 Time Range'),
+                bookInfo:       firstEmbed.footer?.text ?? null
+            };
         }
 
         return log;
+    }
+
+    // Two-pass stitch: collect headers + continuations, join overflow chunks back onto headers.
+    // rawMessages is a Discord Collection (newest→oldest, Discord default).
+    // Returns an array of log entries (headers only), newest→oldest.
+    async _stitchWindow(rawMessages, thread) {
+        const CONT_RE = /^\u27b6 audit:(\d+) (\d+)\/(\d+)\n([\s\S]*)/;
+
+        const headerMap = new Map();  // msgId → log entry (insertion order = newest→oldest)
+        const conts     = [];         // { parentId, seq, text }
+
+        for (const msg of rawMessages.values()) {
+            const type = this._classifyMessage(msg);
+            if (type === 'audit' || type === 'legacy-audit' || type === 'closing') {
+                headerMap.set(msg.id, this.parseAuditMessage(msg));
+            } else if (type === 'continuation') {
+                const m = CONT_RE.exec(msg.content);
+                if (m) conts.push({ parentId: m[1], seq: parseInt(m[2]), text: m[4] });
+            }
+        }
+
+        // Sort so overflow appends in correct order (seq 2, 3, 4 …)
+        conts.sort((a, b) => a.seq - b.seq);
+
+        const orphanMap = new Map();  // parentId → sorted cont list (cross-page case)
+
+        for (const cont of conts) {
+            if (headerMap.has(cont.parentId)) {
+                const log = headerMap.get(cont.parentId);
+                if (log.parsed) log.parsed.answer = (log.parsed.answer || '') + cont.text;
+            } else {
+                if (!orphanMap.has(cont.parentId)) orphanMap.set(cont.parentId, []);
+                orphanMap.get(cont.parentId).push(cont);
+            }
+        }
+
+        // Resolve orphans: fetch parent headers not present in the current window
+        for (const [parentId, orphanConts] of orphanMap.entries()) {
+            try {
+                const parentMsg = await thread.messages.fetch(parentId);
+                if (parentMsg) {
+                    const log = this.parseAuditMessage(parentMsg);
+                    if (log.parsed) {
+                        orphanConts.sort((a, b) => a.seq - b.seq);
+                        log.parsed.answer = (log.parsed.answer || '') + orphanConts.map(c => c.text).join('');
+                    }
+                    headerMap.set(parentId, log);
+                }
+            } catch (fetchErr) {
+                logger.warn({ parentId, err: fetchErr.message }, '\u26a0\ufe0f Horus could not fetch orphan parent message');
+            }
+        }
+
+        return [...headerMap.values()];
     }
 
     async getAuditStats(threadId) {

@@ -250,9 +250,13 @@ The README mentions a "queue processor." It maps to three separate systems — n
 
 ### Phi Breathe (`lib/phi-breathe.js`)
 
-Background scheduler with φ-derived timing. Alternates Inhale (base × 1.618) and Exhale (base) cycles at ~4–6s ticks.
+PhiBreathe serves two roles — both are load-bearing.
 
-**Leader election:** `pg_try_advisory_lock(1314212174)` — only one instance fires tasks in multi-instance setups.
+#### Role 1 — Background scheduler
+
+Alternates Inhale (base × 1.618) and Exhale (base) cycles at ~4–6s ticks. Subscriber tasks run on independent timers with circuit breakers.
+
+**Leader election:** `pg_try_advisory_lock(1314212174)` — only one instance fires tasks in multi-instance deployments.
 
 | Task | Cycle | Purpose |
 |------|-------|---------|
@@ -263,6 +267,23 @@ Background scheduler with φ-derived timing. Alternates Inhale (base × 1.618) a
 | Pending book expiry | 24 hr | Expire books never activated within 72 hours |
 
 **Circuit breaker:** 3 consecutive failures → auto-unsubscribe → 5-min cooldown → one re-registration attempt. Watch for `⚡ Circuit breaker` in logs.
+
+#### Role 2 — Node-time anchor for packet integrity
+
+`phiBreatheCount` is a monotonically increasing integer backed by an atomic DB upsert (`core.system_counters`, key `phi_breathe_count`). It is stamped onto every packet the node processes:
+
+| Stamp location | Column | Written by |
+|---|---|---|
+| `{tenant}.anatta_messages` | `phi_breathe_stamp` | `lib/packet-queue.js` |
+| `{tenant}.drops` | `phi_breathe_stamp` | `lib/drop-writer.js` (migration 006) |
+| `core.message_ledger` | `phi_breathe_stamp` | `lib/packet-queue.js` |
+| Message fractal ID | `_b{N}_` segment | `utils/fractal-id.js` `generateMsg()` |
+
+**What this enables:** cross-checking the `_b{N}_` value in a message's fractal ID against the `core.system_counters` counter log lets an auditor verify the plausible arrival-time window without trusting wall-clock timestamps. A replayed or backdated packet carries an `N` that falls outside the counter range for the claimed arrival time.
+
+**Leader election is critical here:** a split-brain (two instances both incrementing) would produce gaps or collisions in the counter sequence, invalidating the arrival-time contract. The advisory lock prevents this.
+
+**Dev mode:** the counter is ephemeral in dev (`_devPhiBreathe()` — no DB write). The queue processor is also disabled in dev, so no packets are stamped. Dev packet IDs must not carry a phi stamp that could be confused with a prod arrival-time reference.
 
 ### Heal Queue (`lib/heal-queue.js`)
 
@@ -530,12 +551,34 @@ lib/tools/ (10 tools):
 
 ```
 lib/outpipes/
-├── router.js     — Dispatches all outpipes; fetches media bytes once before the loop
+├── router.js      — Dispatches all outpipes; fetches media bytes once before the loop
 ├── fetch-bytes.js — Shared byte-fetch util (2xx + non-HTML guard, 10 s timeout)
-├── discord.js    — Discord webhook delivery (CDN URL, no byte push needed)
-├── email.js      — Email via Resend (attaches bytes inline when available)
-└── webhook.js    — multipart/form-data POST with raw bytes + metadata; HMAC-SHA256 optional
+├── base.js        — BaseOutpipe: shared helpers (buildSenderLabel, resolveMedia,
+│                    postToDiscord with 2 000-char chunking via splitMessageIntoChunks)
+├── webhook.js     — WebhookOutpipe extends BaseOutpipe
+│                    Transport = HTTP POST to a URL; grammar resolved per request:
+│                      • grammar='discord' → Discord payload (username/content/embeds/files[0])
+│                        via base.postToDiscord (chunked, sender-labelled, media-embedded)
+│                      • grammar='generic' → multipart/form-data raw bytes + metadata; HMAC-SHA256 optional
+│                    resolveGrammar() prefers explicit config.grammar, falls back to URL sniff
+├── discord.js     — DiscordOutpipe extends WebhookOutpipe
+│                    IS-A webhook (same HTTP transport); pins grammar='discord' at construction.
+│                    Add new HTTP grammars (Slack, Teams …) the same way — extend WebhookOutpipe,
+│                    pin grammar, add a branch in WebhookOutpipe.deliver. Do NOT add transport classes.
+└── email.js       — EmailOutpipe extends BaseOutpipe
+                     Different transport (Resend SMTP API); attaches bytes inline when available.
 ```
+
+**Transport vs grammar taxonomy:**
+
+| Layer | Class | What it owns |
+|-------|-------|--------------|
+| Transport | `WebhookOutpipe` | HTTP POST to any URL |
+| Grammar | `discord` / `generic` | Payload shape (resolved by `resolveGrammar()`) |
+| Species | `DiscordOutpipe` | IS-A `WebhookOutpipe` with grammar pinned to `'discord'` |
+| Transport | `EmailOutpipe` | Resend API (different transport entirely) |
+
+**Discord 2 000-char chunking** lives in `base.postToDiscord` and is called by every Discord delivery path — `DiscordOutpipe.deliver`, `WebhookOutpipe.deliver` when grammar='discord', and `lib/discord-webhooks.createSendToLedger`. Callers never need to chunk manually.
 
 > **Media sovereignty note:** BlueDream forwards raw bytes to webhook and email outpipes at delivery time — the subscriber receives a sovereign copy independent of Discord CDN. The message record (hashes, fractal IDs) is permanent. To keep the media files themselves beyond Discord CDN's lifetime, point an outpipe at storage you own.
 

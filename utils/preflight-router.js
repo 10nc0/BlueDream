@@ -208,13 +208,6 @@ function safeFixed(val, decimals = 2) {
   return !isNaN(num) ? num.toFixed(decimals) : 'N/A';
 }
 
-// θ display: 2dp; any value that rounds to 0.00 → flag ~0°
-function fmtTheta(theta) {
-  if (theta == null || isNaN(theta)) return 'N/A';
-  if (Math.abs(theta) < 0.005) return '~0°';
-  return theta.toFixed(2) + '°';
-}
-
 /**
  * Format market cap into human-readable format (e.g., $2.5T, $150B)
  */
@@ -675,7 +668,16 @@ async function preflightRouter(options) {
                   const weeklyClosesRaw = result.stockData?.weekly?.closes || [];
                   // Filter out null/NaN values from yfinance
                   const weeklyCloses = weeklyClosesRaw.filter(v => v != null && !isNaN(v));
-                  result.psiEmaAnalysisWeekly = weeklyDashboard.analyze({ stocks: weeklyCloses });
+                  // vφ⁹: θ uses a rolling 5-trading-day lag on the DAILY closes (today vs
+                  // today-5), not the last two week-bucketed candles. The newest weekly
+                  // bucket is often only 1-2 trading days old, which would otherwise make
+                  // weekly θ collapse onto daily θ (same underlying two price points).
+                  // z and R are unaffected — they still use the full weekly-bucketed series.
+                  result.psiEmaAnalysisWeekly = weeklyDashboard.analyze({
+                    stocks: weeklyCloses,
+                    phaseLagSeries: dailyCloses,
+                    phaseLag: 5
+                  });
                   result.psiEmaAnalysisWeekly.timeframe = 'weekly';
                   const fidelityInfo = result.psiEmaAnalysisWeekly.fidelity?.breakdown || 'N/A';
                   logger.debug(`📊 Preflight: Ψ-EMA weekly analysis complete for ${result.ticker} (${fidelityInfo})`);
@@ -881,42 +883,7 @@ function buildStockContext(preflight) {
   if (!stockData || !psiEmaAnalysis) return null;
   
   const ageFlag = dataAge?.flag || '⚠️';
-  
-  // Correctly map PsiEMADashboard output structure (vφ⁴: no composite signal):
-  // - summary: aggregated signals (phaseSignal, anomalyLevel, regime)
-  // - dimensions: detailed analysis (phase.current, anomaly.currentZ, convergence.currentR)
-  // - fidelity: grade, percent
-  const summary = psiEmaAnalysis.summary || {};
-  const phase = psiEmaAnalysis.dimensions?.phase || {};
-  const anomaly = psiEmaAnalysis.dimensions?.anomaly || {};
-  const convergence = psiEmaAnalysis.dimensions?.convergence || {};
-  const fidelity = psiEmaAnalysis.fidelity || {};
   const fundamentals = stockData.fundamentals || {};
-  
-  // Extract raw dimension values
-  const phaseTheta = phase.current;   // θ angle in degrees
-  const anomalyZ   = anomaly.current; // z-score
-  const convergenceR = convergence.currentDisplay ?? convergence.current; // R ratio
-
-  // vφ⁴: reading from deriveReading decision tree — source of truth for all labels
-  const reading = psiEmaAnalysis.reading || {};
-  const readingText  = reading.reading  || summary.reading      || 'N/A';
-  const readingEmoji = reading.emoji    || summary.readingEmoji  || '⚪';
-
-  // Canonical CSV signal labels — pure math, the scribe describes not prescribes
-  // θ signal: IF(Theta<0,"(-) negative","(+) positive")
-  const phaseSignal = (phaseTheta != null && !isNaN(phaseTheta) && phaseTheta < 0)
-    ? '(-) negative' : '(+) positive';
-  // z signal: IF(ABS(z)>φ²,"Anomaly","Low Anomaly")  — φ²=2.618
-  const anomalyLevel = (anomalyZ != null && !isNaN(anomalyZ) && Math.abs(anomalyZ) > 2.618)
-    ? 'Anomaly' : 'Low Anomaly';
-  // R signal: reading label from deriveReading (same label shown in Assessment line)
-  const regimeLabel = readingText !== 'N/A' ? readingText : 'N/A';
-  
-  // Build tetralemma alert if φ² crossed
-  const tetralemmaAlert = psiEmaAnalysis.renewal?.tetralemma 
-    ? `\n${psiEmaAnalysis.renewal.tetralemma.warning}\nTetralemma: (10)Bubble (01)Breakthrough (11)Both (00)Neither - Investigate fundamentals.`
-    : '';
   
   // Build company header
   let companyHeader = '';
@@ -951,21 +918,15 @@ function buildStockContext(preflight) {
   }
   const fundamentalsLine = fundParts.length > 0 ? fundParts.join(' | ') : '';
 
-  // Compact Ψ-EMA table: summary row for quick reading before the DAILY/WEEKLY detail block.
+  // Company header + fundamentals only. The Ψ-EMA header, per-dimension signal
+  // labels, and Reading line all live in the DAILY/WEEKLY tree built by
+  // pipeline-orchestrator.js (stepReasoning) to avoid duplicating the same
+  // information across the two context blocks that get concatenated together.
   // atomicSection before price — "what and how" of the company from sector/industry map.
   return `${companyHeader}
 ${atomicSection}
 **Price**: ${stockData.currency || 'USD'} ${safeFixed(stockData.currentPrice)} (${ageFlag} ${dataAge?.timestamp})
 ${fundamentalsLine}
-
-**Ψ-EMA** (θ=Cycle Position, z=Price Deviation, R=Momentum Ratio): alignment → conviction; conflict → caution.
-| Dim | Value | Signal |
-|-----|-------|--------|
-| θ | ${fmtTheta(phaseTheta)} | ${phaseSignal} |
-| z | ${safeFixed(anomalyZ)}σ | ${anomalyLevel} |
-| R | ${convergenceR != null ? safeFixed(convergenceR) : 'N/A'} | ${regimeLabel} |
-
-**Reading**: ${readingEmoji} ${readingText}${tetralemmaAlert}
 `;
 }
 

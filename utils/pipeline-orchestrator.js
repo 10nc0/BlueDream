@@ -1157,39 +1157,32 @@ Do NOT add these units inside the H₀ Physical Audit Advisory section.`;
       // Build assessment one-liner (pragmatic, no medical metaphor)
       const readingText = analysis.reading?.reading || analysis.summary?.reading || 'Unknown';
       const readingEmoji = analysis.reading?.emoji || '⚪';
-      const rVal = convergence.currentDisplay ?? convergence.current;
-      const zVal = anomaly.current;
-      
-      // Derive R label from value
-      let rLabel = 'N/A';
-      if (rVal != null && !isNaN(rVal)) {
-        if (rVal < 0) rLabel = 'Reversal';
-        else if (rVal < 0.382) rLabel = 'Weak';
-        else if (rVal < 0.618) rLabel = 'Moderate';
-        else if (rVal < 1.618) rLabel = 'Healthy';
-        else if (rVal < 2.618) rLabel = 'Strong';
-        else rLabel = 'Extreme';
-      }
-      
-      // Canonical z label — IF(ABS(z)>φ²,"Anomaly","Low Anomaly") — φ²=2.618
-      const zLabel = (zVal != null && !isNaN(zVal) && Math.abs(zVal) > 2.618) ? 'Anomaly' : 'Low Anomaly';
-      
-      // Format values for display
-      const fmtR = (rVal != null && !isNaN(rVal)) ? rVal.toFixed(2) : 'N/A';
-      const fmtZ = (zVal != null && !isNaN(zVal)) ? zVal.toFixed(2) : 'N/A';
       
       let clinicalSection;
       if (!pathogenResult.healthy) {
-        // Pathogen detected - still flag it but less medical
+        // Pathogen detected - still flag it but less medical. R/z values + labels are
+        // already shown inline in the DAILY/WEEKLY tree below - no need to restate them.
         clinicalSection = `
 ⚠️ **Risk Alert**: ${clinicalReport.diagnosis.emoji} ${clinicalReport.diagnosis.primary}
-📊 R=${fmtR} (${rLabel}), z=${fmtZ}σ (${zLabel})
 💡 ${clinicalReport.prognosis}
 `;
       } else {
-        // Healthy - one-liner assessment
+        // Healthy - one-liner verdict. Instead of restating the Daily R/z values and
+        // labels (already inline in the tree below), compare Daily vs Weekly readings —
+        // this is the one piece of information the tree doesn't already show, and it
+        // fulfills the "alignment → conviction; conflict → caution" framing in the header.
+        const weeklyReadingText = analysisWeekly?.reading?.reading;
+        const weeklyReadingEmoji = analysisWeekly?.reading?.emoji || '⚪';
+        let verdict;
+        if (weeklyReadingText) {
+          verdict = (weeklyReadingText === readingText)
+            ? `${readingEmoji} ${readingText} (both short (1d) and long (7d) trend in alignment).`
+            : `Short (1d: ${readingEmoji} ${readingText}) and long (7d: ${weeklyReadingEmoji} ${weeklyReadingText}) trend diverge — caution.`;
+        } else {
+          verdict = `${readingEmoji} ${readingText}.`;
+        }
         clinicalSection = `
-📊 **Assessment**: ${readingEmoji} ${readingText} — R=${fmtR} (${rLabel}), z=${fmtZ}σ (${zLabel}).
+📊 **Assessment**: ${verdict}
 `;
       }
       
@@ -1205,6 +1198,11 @@ Do NOT add these units inside the H₀ Physical Audit Advisory section.`;
         if (Math.abs(theta) < 0.005) return '~0°';
         return theta.toFixed(2) + '°';
       };
+      // Per-dimension signal labels, folded inline next to each value instead of a
+      // separate Dim|Value|Signal table (avoids repeating the same info twice).
+      const phaseLabel = (theta) => (theta != null && !isNaN(theta) && theta < 0) ? 'Negative' : 'Positive';
+      // Canonical z label — IF(ABS(z)>φ²,"Anomaly","Low Anomaly") — φ²=2.618
+      const zLabel = (z) => (z != null && !isNaN(z) && Math.abs(z) > 2.618) ? 'Anomaly' : 'Low Anomaly';
       
       // Helper to get fidelity percentage (handles undefined, NaN, string 'N/A')
       const getFidelityPct = (f) => {
@@ -1213,17 +1211,17 @@ Do NOT add these units inside the H₀ Physical Audit Advisory section.`;
         return 0;
       };
       
-      // Build weekly section (full tree format)
+      // Build weekly section (full tree format). R's inline label carries the overall
+      // Reading (emoji + text) for that timeframe — replaces the old separate Reading line.
       let weeklySection = '';
       if (analysisWeekly) {
         const rWeekly = convergenceW.currentDisplay ?? convergenceW.current;
         const weeklyFidelityPct = getFidelityPct(fidelityW);
         weeklySection = `
 **WEEKLY (7d candles, 13-month window)** [${weeklyGradeEmoji} ${fidelityW.grade || '?'} grade, ${weeklyFidelityPct}% fidelity]
-├─ θ (Phase) = **${fmtTheta(phaseW.current)}**
-├─ z (Anomaly) = **${fmt(anomalyW.current)}σ**
-├─ R (Convergence) = **${fmt(rWeekly)}**
-└─ **Reading**: ${analysisWeekly.reading?.emoji || '⚪'} ${analysisWeekly.reading?.reading || 'N/A'}`;
+├─ θ (Phase) = **${fmtTheta(phaseW.current)}** (${phaseLabel(phaseW.current)})
+├─ z (Anomaly) = **${fmt(anomalyW.current)}σ** (${zLabel(anomalyW.current)})
+└─ R (Convergence) = **${fmt(rWeekly)}** (${analysisWeekly.reading?.emoji || '⚪'} ${analysisWeekly.reading?.reading || 'N/A'})`;
       } else {
         weeklySection = `
 **WEEKLY (7d candles, 13-month window)**: ⚠️ ${weeklyUnavailableReason || 'Insufficient data'}`;
@@ -1232,14 +1230,20 @@ Do NOT add these units inside the H₀ Physical Audit Advisory section.`;
       // Note: Fundamentals already in preflight context - don't duplicate here
       const dailyFidelityPct = getFidelityPct(fidelity);
       
+      // Tetralemma alert (φ² crossed) - was previously appended to the standalone
+      // Reading line in preflight-router.js; now attached to the daily block since
+      // that line no longer exists as a separate element.
+      const tetralemmaAlert = analysis.renewal?.tetralemma
+        ? `\n${analysis.renewal.tetralemma.warning}\nTetralemma: (10)Bubble (01)Breakthrough (11)Both (00)Neither - Investigate fundamentals.`
+        : '';
+      
       psiEmaInstruction = `
 **Ψ-EMA** (θ=Cycle Position, z=Price Deviation, R=Momentum Ratio): alignment → conviction; conflict → caution.
 
 **DAILY (1d candles, 3-month window)** [${dailyGradeEmoji} ${fidelity.grade || '?'} grade, ${dailyFidelityPct}% fidelity]
-├─ θ (Phase) = **${fmtTheta(phase.current)}**
-├─ z (Anomaly) = **${fmt(anomaly.current)}σ**
-├─ R (Convergence) = **${fmt(convergence.currentDisplay ?? convergence.current)}**
-└─ **Reading**: ${analysis.reading?.emoji || '⚪'} ${analysis.reading?.reading || 'N/A'}
+├─ θ (Phase) = **${fmtTheta(phase.current)}** (${phaseLabel(phase.current)})
+├─ z (Anomaly) = **${fmt(anomaly.current)}σ** (${zLabel(anomaly.current)})
+└─ R (Convergence) = **${fmt(convergence.currentDisplay ?? convergence.current)}** (${analysis.reading?.emoji || '⚪'} ${analysis.reading?.reading || 'N/A'})${tetralemmaAlert}
 ${weeklySection}
 
 ${clinicalSection}
