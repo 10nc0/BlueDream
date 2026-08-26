@@ -1,1 +1,2 @@
 - [Mesh cursor sealing](mesh-cursor-sealing.md) — cursor uses AES-256-GCM (SESSION_SECRET), tiebreaker is drops.id (SERIAL PK) not source_id
+- [Ψ-EMA weekly θ rolling-lag fix](psi-ema-weekly-theta-lag.md) — weekly θ must lag daily closes by N days, not compare bucket-to-bucket (collapses onto daily θ near week start)

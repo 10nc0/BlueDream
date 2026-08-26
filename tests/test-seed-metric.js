@@ -13,6 +13,7 @@ const {
   validateSeedMetricInvariants,
   emptyCityRecord,
   parseTFR,
+  buildSeedMetricReading,
 } = require('../utils/seed-metric-calculator');
 const { CITY_TO_COUNTRY, ISO2_TO_CURRENCY } = require('../utils/geo-data');
 
@@ -668,6 +669,73 @@ assert(
   'parseTFR: left-side year list, target=2024 → 1.62',
   parseTFR(listLeftSnippet, 'United States', '2024'),
   1.62
+);
+
+// ─── deterministic Seed Metric reading ───────────────────────────────────────
+
+console.log('\n── buildSeedMetricReading ──');
+
+const reading = buildSeedMetricReading({
+  cities: {
+    singapore: {
+      historical: {
+        pricePerSqm: { value: 2000, currency: 'SGD' },
+        income: { value: 35000, currency: 'SGD' },
+      },
+      current: {
+        pricePerSqm: { value: 4000, currency: 'SGD' },
+        income: { value: 70000, currency: 'SGD' },
+      },
+    },
+  },
+}, {
+  Singapore: { historical: 1.6, current: 1.0 },
+});
+
+assert(
+  'reading includes modeled land burden and both TFR values',
+  reading.includes("**Reading:** Singapore's modeled 700sqm land-price burden moved from 40 to 40 single-earner years. Over the same comparison, TFR moved from 1.6 to 1.0."),
+  true
+);
+
+const incompleteReading = buildSeedMetricReading({
+  cities: {
+    tokyo: {
+      historical: { pricePerSqm: null, income: null },
+      current: {
+        pricePerSqm: { value: 500000, currency: 'JPY' },
+        income: { value: 5000000, currency: 'JPY' },
+      },
+    },
+  },
+}, {
+  Tokyo: { historical: null, current: 1.1 },
+});
+
+assert(
+  'reading states an unavailable historical comparison without inventing a trend',
+  incompleteReading.includes('Tokyo\'s current modeled 700sqm land-price burden is 70 single-earner years. Current TFR is 1.1. The historical comparison remains unavailable, so no trend is inferred.'),
+  true
+);
+
+const currencyGapReading = buildSeedMetricReading({
+  cities: {
+    singapore: {
+      historical: { pricePerSqm: null, income: null },
+      current: {
+        pricePerSqm: { value: 3000, currency: 'USD' },
+        income: { value: 70000, currency: 'SGD' },
+      },
+    },
+  },
+}, {
+  Singapore: { historical: 1.6, current: 1.0 },
+});
+
+assert(
+  'reading preserves a verified TFR movement while withholding a currency-mismatched land trend',
+  currencyGapReading.includes('Singapore\'s price and income inputs cannot yet produce a same-currency years reading, so no land-burden trend is inferred. TFR moved from 1.6 to 1.0 across the available comparison.'),
+  true
 );
 
 // ─── Summary ─────────────────────────────────────────────────────────────────

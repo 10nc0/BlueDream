@@ -1637,7 +1637,7 @@ async function analyzeDocumentVisuals(buffer, fileName, options = {}) {
             const response = await axios.post(
                 GROQ_API_URL,
                 {
-                    model: 'meta-llama/llama-4-scout-17b-16e-instruct',
+                    model: 'groq/compound', // vision/routing model (llama-4-scout retired 2026-08-19)
                     messages: [
                         {
                             role: 'user',

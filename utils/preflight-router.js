@@ -878,11 +878,21 @@ async function preflightRouter(options) {
  * Build full Ψ-EMA stock context for system message injection
  * Maps PsiEMADashboard.analyze() output to LLM-readable format
  */
+function formatPriceLine(stockData, dataAge) {
+  const ageFlag = dataAge?.flag || '⚠️';
+  const live = stockData?.livePrice;
+  if (live && live.price != null) {
+    const stateLabel = live.marketState ? ` [${live.marketState}]` : '';
+    const asOfTime = live.asOf ? new Date(live.asOf).toISOString().replace('T', ' ').slice(0, 16) + ' UTC' : 'unknown time';
+    return `${live.currency || stockData.currency || 'USD'} ${safeFixed(live.price)} (~15-20min delayed quote${stateLabel}, as of ${asOfTime}) — last daily close: ${safeFixed(stockData.currentPrice)} (${ageFlag} ${dataAge?.timestamp})`;
+  }
+  return `${stockData?.currency || 'USD'} ${safeFixed(stockData?.currentPrice)} (${ageFlag} ${dataAge?.timestamp}, live quote unavailable)`;
+}
+
 function buildStockContext(preflight) {
   const { ticker, stockData, psiEmaAnalysis, dataAge } = preflight;
   if (!stockData || !psiEmaAnalysis) return null;
   
-  const ageFlag = dataAge?.flag || '⚠️';
   const fundamentals = stockData.fundamentals || {};
   
   // Build company header
@@ -906,6 +916,7 @@ function buildStockContext(preflight) {
   }
   
   companyHeader = `### ${stockData.name || ticker} (${ticker})${sectorIndustry ? ` — ${sectorIndustry}` : ''}`;
+  const priceLine = formatPriceLine(stockData, dataAge);
 
   // Format fundamentals (inline with D/E ratio)
   const fundParts = [];
@@ -925,7 +936,7 @@ function buildStockContext(preflight) {
   // atomicSection before price — "what and how" of the company from sector/industry map.
   return `${companyHeader}
 ${atomicSection}
-**Price**: ${stockData.currency || 'USD'} ${safeFixed(stockData.currentPrice)} (${ageFlag} ${dataAge?.timestamp})
+**Price**: ${priceLine}
 ${fundamentalsLine}
 `;
 }
@@ -939,7 +950,6 @@ ${fundamentalsLine}
  */
 function buildLimitedStockContext(preflight, reason = null) {
   const { ticker, stockData, dataAge } = preflight;
-  const ageFlag = dataAge?.flag || '⚠️';
   const dataPoints = stockData?.closes?.length || 0;
   const fundamentals = stockData?.fundamentals || {};
   
@@ -970,14 +980,13 @@ function buildLimitedStockContext(preflight, reason = null) {
   return `
 ## Stock Data for ${ticker} (${stockData?.name || ticker})
 **Data Source**: yfinance (VERIFIED - REAL PRICES)
-**Current Price**: ${stockData?.currency || 'USD'} ${safeFixed(stockData?.currentPrice)}
-**Data Timestamp**: ${ageFlag} ${dataAge?.timestamp} (${dataAge?.age})
+**Current Price**: ${formatPriceLine(stockData, dataAge)}
 ${fundamentalsSection}
 
 ### ⚠️ Ψ-EMA Wave Analysis UNAVAILABLE
 - **Data Points Available**: ${dataPoints} trading days
 ${reasonText}
-- **Missing**: Phase θ, Anomaly z, Convergence R signals
+- **Missing**: θ (Orientation), z (Deviation), R (Trend Momentum) signals
 
 The price and fundamentals above are verified.
 `;

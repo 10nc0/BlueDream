@@ -1,5 +1,7 @@
 'use strict';
 
+const { getLLMBackend } = require('../config/constants');
+
 const REGISTRY_VERSION = '2026.03.29';
 
 const NYAN_IDENTITY_DOCUMENTATION = `[NYAN IDENTITY REGISTRY v${REGISTRY_VERSION} — GROUND TRUTH]
@@ -48,7 +50,7 @@ Sovereignty is a choice, not a requirement.
 - Inpipes: WhatsApp (Twilio), LINE, Telegram, Email
 - Outpipe: Discord (mirroring, audit logging, threading)
 - Optional: IPFS pinning via Pinata for permanent backup
-- Powered by Groq (Llama 3.3 70B)
+- Powered by Groq (${getLLMBackend().model})
 
 ## For Forkers
 

@@ -499,12 +499,16 @@ async function fetchStockPrices(ticker, customPeriod = null) {
     }
 
     const noValidate = { validateResult: false };
-    const [dailyRaw, weeklyRaw, summaryRaw] = await Promise.all([
+    const [dailyRaw, weeklyRaw, summaryRaw, quoteRaw] = await Promise.all([
         yahooFinance.historical(safeTicker, queryOpts, noValidate),
         yahooFinance.historical(safeTicker, { period1: weeklyPeriod1, period2, interval: '1wk' }, noValidate),
         yahooFinance.quoteSummary(safeTicker, {
             modules: ['assetProfile', 'summaryDetail', 'defaultKeyStatistics', 'financialData', 'quoteType']
         }, noValidate).catch(() => ({})),
+        // Near-real-time quote (Yahoo's free feed, ~15-20min delayed for most exchanges —
+        // NOT tick-by-tick realtime. Used only for the display header; Ψ-EMA math stays
+        // on daily closes by design (see replit.md AI Pipeline section).
+        yahooFinance.quote(safeTicker, {}, noValidate).catch(() => null),
     ]);
 
     if (!dailyRaw || dailyRaw.length === 0) {
@@ -560,6 +564,16 @@ async function fetchStockPrices(ticker, customPeriod = null) {
     const name = quoteType.longName || quoteType.shortName || profile.longName || profile.shortName || safeTicker;
     const currency = sumDetail.currency || 'USD';
 
+    // Near-real-time quote (~15-20min delayed on Yahoo's free feed — never claim "live").
+    // null when the quote endpoint fails/is unavailable for this ticker; callers must
+    // fall back to the daily close (currentPrice) + calculateDataAge() staleness flag.
+    const livePrice = (quoteRaw && quoteRaw.regularMarketPrice != null) ? {
+        price: safeFloat(quoteRaw.regularMarketPrice),
+        currency: quoteRaw.currency || currency,
+        asOf: quoteRaw.regularMarketTime ? new Date(quoteRaw.regularMarketTime).toISOString() : null,
+        marketState: quoteRaw.marketState || null, // PRE | REGULAR | POST | CLOSED
+    } : null;
+
     const realDailyCount  = daily.flags.filter(f => !f).length;
     const realWeeklyCount = weekly.flags.filter(f => !f).length;
     const weeklyUnavailableReason = weekly.closes.length < 13
@@ -570,6 +584,7 @@ async function fetchStockPrices(ticker, customPeriod = null) {
         name,
         currency,
         currentPrice,
+        livePrice,
         closes:    daily.closes,
         dates:     daily.dates,
         startDate: daily.dates[0]?.replace('*', '') || null,
@@ -661,7 +676,7 @@ async function extractTickerWithAI(query) {
     const response = await axios.post(
       GROQ_API_URL,
       {
-        model: 'llama-3.1-8b-instant',
+        model: 'openai/gpt-oss-20b', // fast model (llama-3.1-8b-instant retired 2026-08-19)
         messages: [
           {
             role: 'system',

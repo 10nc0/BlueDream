@@ -1,0 +1,17 @@
+-- Task #211: agent_token_hash column on tenantSchema.books is now dormant.
+-- The canonical token store was hoisted to core.book_registry in Task #211
+-- so that all four agent endpoints (POST /api/webhook/:fractalId,
+-- GET /api/webhook/:fractalId/messages, POST /api/agent/message,
+-- GET /api/agent/messages) resolve the token from a single O(1) source.
+--
+-- This column is no longer written or read at runtime.
+-- It is intentionally left in place for data-archaeology — existing hash
+-- values remain stored but are ignored by the application.
+-- DO NOT DROP this column; new-tenant replay runs the full migration chain
+-- from 001 and a DROP here would fail if 002_agent_token.sql has already
+-- created it. The column simply goes dormant.
+--
+-- To reclaim space on a running cluster an operator may run (manual, NOT here):
+--   ALTER TABLE tenantN.books DROP COLUMN agent_token_hash;
+-- but only AFTER confirming no code references it.
+SELECT 1; -- no-op DDL required so the migration runner records this file

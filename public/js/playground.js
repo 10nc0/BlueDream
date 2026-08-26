@@ -52,6 +52,7 @@ let conversationHistory = [];
 let cachedFileHashes = [];  // Store file hashes for follow-up queries (session-scoped)
 let mediaRecorder = null;
 let shouldSkipHydration = false;  // Flag to prevent auto-hydration after manual clear
+let _cachedModelLabel = 'Groq AI'; // populated by /api/playground/model-info on DOMContentLoaded
 
 // ===== CONVERSATION MEMORY: localStorage persistence =====
 function loadConversationHistory() {
@@ -1604,7 +1605,12 @@ async function clearNyanHistory() {
     p1.textContent = 'No login required. No data stored. Just purr intelligence.';
     
     const p2 = document.createElement('p');
-    p2.textContent = "Powered by Groq's blazing-fast Llama 3.3 70B.";
+    p2.append('Powered by ');
+    const _modelSpan = document.createElement('span');
+    _modelSpan.id = 'welcome-model-label';
+    _modelSpan.textContent = _cachedModelLabel;
+    p2.appendChild(_modelSpan);
+    p2.append('.');
     
     const featuresDiv = document.createElement('div');
     featuresDiv.className = 'features';
@@ -1687,8 +1693,9 @@ document.addEventListener('DOMContentLoaded', () => {
         .then(r => r.ok ? r.json() : null)
         .then(data => {
             if (!data) return;
+            _cachedModelLabel = data.modelLabel;
             const el = document.getElementById('welcome-model-label');
-            if (el) el.textContent = `Groq's blazing-fast ${data.modelLabel}`;
+            if (el) el.textContent = data.modelLabel;
         })
         .catch(() => {});
 

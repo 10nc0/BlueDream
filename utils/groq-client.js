@@ -9,21 +9,31 @@ const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 // Maps Groq model names → OpenRouter model IDs for the Groq-down failover path.
 // Primary model maps to Kimi K2 — better multilingual reasoning than the Llama equivalent.
 // @ref: https://openrouter.ai/models
+// @verified: 2026-08-19 (Groq retired Llama lineup; new Groq IDs added as primary keys)
 const GROQ_TO_OPENROUTER = {
+    // Current Groq models (as of 2026-08-19)
+    'openai/gpt-oss-120b':                        'moonshotai/kimi-k2',          // heavy drafter → Kimi K2
+    'openai/gpt-oss-20b':                         'meta-llama/llama-3.1-8b-instruct', // fast → smallest OR Llama
+    'groq/compound':                              'moonshotai/kimi-k2',          // vision/compound → Kimi K2
+    // Legacy Groq model IDs (kept for BYOK callers passing old model strings)
     'llama-3.3-70b-versatile':                   'moonshotai/kimi-k2',
     'llama-3.1-70b-versatile':                   'meta-llama/llama-3.1-70b-instruct',
     'llama3-70b-8192':                            'meta-llama/llama-3-70b-instruct',
     'llama3-8b-8192':                             'meta-llama/llama-3-8b-instruct',
     'mixtral-8x7b-32768':                         'mistralai/mixtral-8x7b-instruct',
     'gemma2-9b-it':                               'google/gemma-2-9b-it',
-    // Vision model — same ID works on both Groq and OpenRouter
-    'meta-llama/llama-4-scout-17b-16e-instruct':  'meta-llama/llama-4-scout-17b-16e-instruct',
+    'meta-llama/llama-4-scout-17b-16e-instruct':  'moonshotai/kimi-k2',          // retired vision → Kimi K2
 };
 
 // Maps Groq model names → Ollama model tags (best approximation).
 // Overrideable per-request via OLLAMA_MODEL env var.
 // @ref: https://ollama.ai/library
 const GROQ_TO_OLLAMA = {
+    // Current Groq models (as of 2026-08-19)
+    'openai/gpt-oss-120b':    'llama3.3',      // best available local approximation
+    'openai/gpt-oss-20b':     'llama3.2',      // fast local approximation
+    'groq/compound':          'llama3.3',      // compound → best available local
+    // Legacy
     'llama-3.3-70b-versatile':  'llama3.3',
     'llama-3.1-70b-versatile':  'llama3.1',
     'llama3-70b-8192':          'llama3',

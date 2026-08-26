@@ -27,7 +27,7 @@ function hashSessionId(sessionId) {
   return crypto.createHash('sha256').update(`${sessionId}:nyan-memory`).digest('hex').slice(0, 16);
 }
 
-const SUMMARY_MODEL = 'llama-3.1-8b-instant';
+const SUMMARY_MODEL = 'openai/gpt-oss-20b'; // fast model (llama-3.1-8b-instant retired 2026-08-19)
 const MAX_WINDOW = 8;
 const SUMMARY_TRIGGER_INTERVAL = 2;
 const MAX_SUMMARY_SENTENCES = 5;

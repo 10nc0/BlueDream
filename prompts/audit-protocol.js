@@ -115,9 +115,9 @@ This data is PRE-VERIFIED at the system level. The mathematical analysis is TRUS
 
 ACCEPT AS VALID the following Ψ-EMA mathematical framework concepts:
 - φ (phi) = 1.618 golden ratio, φ² = 2.618, φ-convergence
-- Phase θ = arctan(Flow/Stock) for cycle position (0°-360°)
-- Anomaly z = (Flow - μ)/σ for z-score deviation (±1σ, ±2σ, ±3σ thresholds)
-- Convergence R = z(t)/z(t-1) for sustainability ratio → φ
+- θ (Orientation) = arctan(Flow/Stock) for cycle position (0°-360°)
+- z (Deviation from Median, in σ) = (Flow - μ)/σ for z-score deviation (±1σ, ±2σ, ±3σ thresholds)
+- R (Trend Momentum) = z(t)/z(t-1) for sustainability ratio → φ
 - EMA with Fibonacci periods (13, 21, 34, 55) for signal smoothing
 - Golden Cross / Death Cross crossover signals
 - Regime classification: Sub-Critical (R<1.3), Critical (R≈φ), Super-Critical (R>2.0)

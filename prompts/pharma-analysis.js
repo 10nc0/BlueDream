@@ -102,6 +102,13 @@ const CHEMISTRY_KEYWORDS_REGEX = new RegExp(
  */
 function modelIdToLabel(modelId = '') {
     const MAP = {
+        // Current Groq models (as of 2026-08-19)
+        'openai/gpt-oss-120b':                       'GPT-OSS 120B',
+        'openai/gpt-oss-20b':                        'GPT-OSS 20B',
+        'groq/compound':                             'Groq Compound',
+        'groq/compound-mini':                        'Groq Compound Mini',
+        'qwen/qwen3.6-27b':                          'Qwen 3.6 27B',
+        // Legacy model labels (kept for any stored references)
         'llama-3.3-70b-versatile':                   'Llama 3.3 70B',
         'llama-3.1-70b-versatile':                   'Llama 3.1 70B',
         'llama-3.1-8b-instant':                      'Llama 3.1 8B',

@@ -117,14 +117,20 @@ const GROQ_API_URL   = 'https://api.groq.com/openai/v1/chat/completions';
 const GROQ_AUDIO_URL = 'https://api.groq.com/openai/v1/audio/transcriptions';
 
 // ==================== LLM Backend Router ====================
-// Drafter  → always Groq Llama 3.3 70B (fast, expressive, used for S2/S4/tool-calls)
+// Drafter  → Groq openai/gpt-oss-120b (replaced llama-3.3-70b-versatile 2026-08-19:
+//            Groq retired their entire Llama lineup; gpt-oss-120b is the heaviest
+//            available text model on the new lineup)
+// Fast     → Groq openai/gpt-oss-20b (replaced llama-3.1-8b-instant)
 // Auditor  → DeepSeek R1 if DEEPSEEK_API set (reasoning chain catches confabulation),
-//            else falls back to Groq Llama (graceful degradation, same timeouts as drafter)
+//            else falls back to Groq drafter (graceful degradation, same timeouts)
 // Both are OpenAI-compatible; swap URL + model + token at the call site.
 const LLM_BACKENDS = {
   drafter: {
     url: GROQ_API_URL,
-    model: 'llama-3.3-70b-versatile',
+    // @source: Groq API
+    // @ref: https://console.groq.com/docs/models
+    // @verified: 2026-08-19
+    model: 'openai/gpt-oss-120b',
     timeouts: {
       reasoning: 15000,
       toolCall:  30000,
@@ -134,7 +140,10 @@ const LLM_BACKENDS = {
   },
   fast: {
     url: GROQ_API_URL,
-    model: 'llama-3.1-8b-instant',
+    // @source: Groq API
+    // @ref: https://console.groq.com/docs/models
+    // @verified: 2026-08-19
+    model: 'openai/gpt-oss-20b',
     timeouts: {
       reasoning:  5000,
       toolCall:  10000,
@@ -175,23 +184,23 @@ function getFastLLMBackend() {
 }
 
 function getAuditBackend() {
-  // Kimi K2 (via OpenRouter) is preferred for S3 audit when the key is present:
-  // better multilingual reasoning + larger context than Llama 3.3 70B, and the
-  // audit stage is latency-insensitive (user sees "Auditing…" spinner, not raw stream).
-  // Falls back to Groq Llama when OPENROUTER_API_KEY is not configured.
-  if (process.env.OPENROUTER_API_KEY) return LLM_BACKENDS.kimi;
+  // S3 audit uses Groq drafter (openai/gpt-oss-120b as of 2026-08-19).
+  // Previously llama-3.3-70b-versatile; Kimi K2 via OpenRouter was tried but
+  // was slower and stricter (more REJECTED/FIXABLE on valid answers).
+  // Kimi is still available as an emergency fallback in groq-client.js
+  // (kimiFirst/GROQ_TO_OPENROUTER) when Groq itself is down.
   return LLM_BACKENDS.drafter;
 }
 
 // ==================== AI Models ====================
 // @source: Groq API - Model availability changes with releases
 // @ref: https://console.groq.com/docs/models
-// @verified: 2026-01-10
+// @verified: 2026-08-19  (Groq retired Llama lineup; updated to new model IDs)
 const AI_MODELS = {
-  TEXT_MODEL: 'llama-3.3-70b-versatile',                   // Groq drafter model (playground)
-  VISION_MODEL: 'meta-llama/llama-4-scout-17b-16e-instruct', // Groq Vision model (2025)
-  VISION: 'meta-llama/llama-4-scout-17b-16e-instruct',       // Alias for backward compatibility
-  AUDIO_MODEL: 'whisper-large-v3-turbo',                     // Groq Whisper model
+  TEXT_MODEL: 'openai/gpt-oss-120b',                        // Groq drafter model (replaced llama-3.3-70b-versatile)
+  VISION_MODEL: 'groq/compound',                             // Groq vision/routing model (llama-4-scout retired 2026-08-19)
+  VISION: 'groq/compound',                                   // Alias for backward compatibility
+  AUDIO_MODEL: 'whisper-large-v3-turbo',                     // Groq Whisper model (unchanged)
   
   // Temperature routing (H₀ protocol — centralized, never hardcode at call sites)
   TEMPERATURE_DETERMINISTIC: 0,    // Tool calls, stock data, structured extraction — zero hallucination

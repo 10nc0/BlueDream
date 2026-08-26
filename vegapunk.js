@@ -26,7 +26,6 @@ if (__dbResolution.attempts.length > 0) {
 }
 console.log(`✅ Database: using ${__dbResolution.source === 'DATABASE_URL' ? 'DATABASE_URL' : 'PG* env vars'} (${__dbResolution.shortHost})`);
 
-const { execSync } = require('child_process');
 const path = require('path');
 const crypto = require('crypto');
 const { AsyncLocalStorage } = require('async_hooks');
@@ -203,8 +202,7 @@ app.use('/manifest.json', express.static(path.join(__dirname, 'public/manifest.j
 // SW must never be cached — browsers check byte-equality to detect updates.
 // If the browser serves a cached sw.js, the version bump never takes effect.
 app.get('/sw.js', (req, res) => {
-  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
-  res.setHeader('Pragma', 'no-cache');
+  noCacheHeaders(res);
   res.setHeader('Service-Worker-Allowed', '/');
   res.sendFile(path.join(__dirname, 'public/sw.js'));
 });
@@ -334,7 +332,7 @@ app.get('/health/deep', async (req, res) => {
         checks.discord.hermes.status = checks.discord.hermes.healthy ? 'ready' : 'disconnected';
     }
     if (typeof thothBot !== 'undefined' && thothBot) {
-        checks.discord.thoth.healthy = thothBot.ready || false;
+        checks.discord.thoth.healthy = thothBot.isReady?.() || false;
         checks.discord.thoth.status = checks.discord.thoth.healthy ? 'ready' : 'disconnected';
     }
     if (typeof idrisBot !== 'undefined' && idrisBot) {
@@ -367,33 +365,40 @@ const allowedOrigins = process.env.ALLOWED_ORIGINS
 
 app.use(cors({
     origin: function (origin, callback) {
-        // Allow requests with no origin (mobile apps, Postman, etc.)
+        // Allow requests with no origin (mobile apps, Postman, curl, etc.)
         if (!origin) return callback(null, true);
-        
-        // Allow localhost for development
-        if (origin.includes('localhost') || origin.includes('127.0.0.1')) {
+
+        // SECURITY: parse the hostname — never use origin.includes() which
+        // allows 'x.replit.dev.attacker.com' to spoof '.replit.dev'.
+        let host;
+        try { host = new URL(origin).hostname; } catch { return callback(new Error('Not allowed by CORS')); }
+
+        // Allow localhost for development (exact host match, no substring)
+        if (host === 'localhost' || host === '127.0.0.1') {
             return callback(null, true);
         }
-        
-        // Allow any Replit domain (for development and production)
-        if (origin.includes('.replit.dev') || origin.includes('.repl.co') || origin.includes('.replit.app')) {
+
+        // Allow any Replit domain — dot prefix enforces the boundary so
+        // 'notreplit.dev' and 'x.replit.dev.evil.com' both correctly fail.
+        const replitSuffixes = ['.replit.dev', '.repl.co', '.replit.app'];
+        if (replitSuffixes.some(s => host === s.slice(1) || host.endsWith(s))) {
             return callback(null, true);
         }
-        
-        // Allow custom domain (APP_DOMAIN)
+
+        // Allow custom domain (APP_DOMAIN) — exact host or *.appDomain subdomain
         const appDomain = config.replit.primaryDomain;
-        if (appDomain && origin.includes(appDomain)) {
+        if (appDomain && (host === appDomain || host.endsWith('.' + appDomain))) {
             return callback(null, true);
         }
-        
-        // Check against whitelist (if configured)
+
+        // Exact-match whitelist (ALLOWED_ORIGINS env var, full origin strings)
         if (allowedOrigins.length > 0 && allowedOrigins.includes(origin)) {
             return callback(null, true);
         }
-        
-        logger.warn({ origin }, 'CORS blocked origin');
-        
-        // SECURITY: Default deny if not in Replit domains or whitelist
+
+        logger.warn({ origin, host }, 'CORS blocked origin');
+
+        // SECURITY: Default deny
         callback(new Error('Not allowed by CORS'));
     },
     credentials: true, // Required for cookie-based auth
@@ -444,7 +449,10 @@ app.use(session({
         maxAge: 7 * 24 * 60 * 60 * 1000, // 1 week
         httpOnly: true,
         secure: isProd, // true in production (REPLIT_DEPLOYMENT=1 or NODE_ENV=production)
-        sameSite: 'none', // Required for cross-site iframe embedding
+        // SameSite=None requires Secure=true — browsers silently drop the cookie
+        // if Secure is false. In local HTTP dev isProd=false, so we fall back to
+        // 'lax' which keeps sessions working without the cross-site requirement.
+        sameSite: isProd ? 'none' : 'lax', // 'none' required for cross-site iframe embedding in prod
         partitioned: true // Required for Safari to accept cookies in iframes (CHIPS)
     },
     name: 'book.sid' // Custom session cookie name
@@ -474,13 +482,13 @@ app.use((req, res, next) => {
 // Serve AI Playground (public, no auth - sovereign gift to the world)
 app.get('/AI', (req, res) => {
     logger.info({ ip: req.ip }, '🎮 AI Playground accessed');
-    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    noCacheHeaders(res);
     res.sendFile(__dirname + '/public/playground.html');
 });
 
 // Serve Account Settings page (auth-gated via client-side check in settings.html)
 app.get('/settings', (req, res) => {
-    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    noCacheHeaders(res);
     res.sendFile(__dirname + '/public/settings.html');
 });
 
@@ -610,20 +618,14 @@ app.get('/api/playground/model-info', (req, res) => {
 // Serve login page without authentication (must come before requireAuth check)
 app.get('/login.html', (req, res) => {
     logger.info({ ip: req.ip, ua: req.get('user-agent') }, '📱 Login page accessed');
-    // Prevent browser caching to ensure latest JavaScript is always loaded
-    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-    res.setHeader('Pragma', 'no-cache');
-    res.setHeader('Expires', '0');
+    noCacheHeaders(res);
     res.sendFile(__dirname + '/public/login.html');
 });
 
 // Serve signup page without authentication
 app.get('/signup.html', (req, res) => {
     logger.info({ ip: req.ip, ua: req.get('user-agent') }, '📝 Signup page accessed');
-    // Prevent browser caching to ensure latest JavaScript is always loaded
-    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-    res.setHeader('Pragma', 'no-cache');
-    res.setHeader('Expires', '0');
+    noCacheHeaders(res);
     res.sendFile(__dirname + '/public/signup.html');
 });
 
@@ -669,18 +671,13 @@ app.get('/api/client-constants.js', (req, res) => {
 
 // Serve main dashboard - client-side JWT auth will handle access control
 app.get('/dashboard', (req, res) => {
-    // Cache-busting headers to ensure UI updates are immediately visible
-    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
-    res.setHeader('Pragma', 'no-cache');
-    res.setHeader('Expires', '0');
+    noCacheHeaders(res);
     res.sendFile(__dirname + '/public/index.html');
 });
 
 // Serve index.html - client-side JWT auth will handle access control
 app.get('/index.html', (req, res) => {
-    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
-    res.setHeader('Pragma', 'no-cache');
-    res.setHeader('Expires', '0');
+    noCacheHeaders(res);
     res.sendFile(__dirname + '/public/index.html');
 });
 
@@ -703,9 +700,7 @@ app.use(express.static(path.join(__dirname, 'public'), {
     setHeaders: (res, path) => {
         // Cache-busting for JS/CSS files to ensure production deployments update immediately
         if (path.endsWith('.js') || path.endsWith('.css')) {
-            res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
-            res.setHeader('Pragma', 'no-cache');
-            res.setHeader('Expires', '0');
+            noCacheHeaders(res);
         }
     }
 }));

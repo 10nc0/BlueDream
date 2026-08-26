@@ -47,7 +47,7 @@ const PSI_EMA_SYSTEM_EXPLANATION = `Ψ-EMA (Psi-Exponential Moving Average) is N
 
 **THREE DIMENSIONS:**
 
-**θ (Theta) - Phase Position**
+**θ (Orientation) - Cycle Position**
 • Formula: atan2(Flow, Stock) → 0° to 360°
 • Measures WHERE in the cycle the system is
 • 0°-90° = Early Expansion 🟢
@@ -55,13 +55,13 @@ const PSI_EMA_SYSTEM_EXPLANATION = `Ψ-EMA (Psi-Exponential Moving Average) is N
 • 180°-270° = Early Contraction 🔴
 • 270°-360° = Late Contraction 🔵
 
-**z (Anomaly) - Deviation from Equilibrium**
+**z (Deviation from Median, in σ)**
 • Formula: Robust z-score using Median Absolute Deviation (MAD)
 • |z| < φ (1.618): Normal range
 • |z| > φ: Alert zone
 • |z| > φ² (2.618): Extreme deviation
 
-**R (Convergence) - Amplitude Ratio**
+**R (Trend Momentum) - Amplitude Ratio**
 • Formula: |z(t)| / |z(t-1)|
 • R < φ⁻¹ (0.618): Decay (weakening)
 • R ∈ [φ⁻¹, φ]: Stable oscillation (sustainable)

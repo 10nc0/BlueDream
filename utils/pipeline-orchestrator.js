@@ -67,7 +67,7 @@ const PIPELINE_STEPS = {
 const { AttachmentIngestion } = require('./attachment-ingestion');
 const { analyzeImageWithGroqVision, processChemistryContent, classifyScholasticDomain } = require('./attachment-cascade');
 const { createQueryTimestamp, buildTemporalContent } = require('./time-format');
-const { buildSeedMetricTable, validateSeedMetricOutput, parseTFR, injectTFRColumn, rescueDroppedSuffix, rescueTotalPrice, rescueIncome, rescuePricePerSqm, validateSeedMetricInvariants, emptyCityRecord } = require('./seed-metric-calculator');
+const { buildSeedMetricTable, buildSeedMetricReading, validateSeedMetricOutput, parseTFR, injectTFRColumn, rescueDroppedSuffix, rescueTotalPrice, rescueIncome, rescuePricePerSqm, validateSeedMetricInvariants, emptyCityRecord } = require('./seed-metric-calculator');
 const { cityToExpectedCurrency, CURRENCY_REGISTRY, normaliseCurrency } = require('./geo-data');
 const { buildCeilingMap } = require('../lib/tools/income-ceiling');
 const { cleanMarkdownJson, EMPTY_TABLE_ROW_REGEX } = require('./parse-helpers');
@@ -772,12 +772,19 @@ class PipelineOrchestrator {
     // Dashboard surface and non-general modes keep today's behaviour.
     // ========================================
     const _isPlayground = input.surface === 'playground';
+    const _needsRealtime = !!state.preflight.routingFlags?.needsRealtimeSearch;
+    // Pull-first: let the LLM choose tools for open-ended general queries.
+    // Excluded when needsRealtimeSearch is true — for live sports scores,
+    // breaking news, etc. the LLM's optionality is wrong because we already
+    // know live data is required. DDG Instant Answer API also returns null
+    // for live scores, so DDG-only warm-up is doubly useless for those queries.
     const _playgroundPullFirst = _isPlayground && state.preflight.mode === 'general'
+      && !_needsRealtime
       && process.env.NYAN_LLM_TOOL_FALLBACK !== 'false';
-    if (_playgroundPullFirst && state.preflight.routingFlags?.needsRealtimeSearch && query) {
-      // Speculative cache warm-up — non-blocking. Pre-populates post-hint
-      // cache keyed by `{tool-name, normalized-args}` so if the LLM picks
-      // duckduckgo/exa with the same query, the result is already warm.
+    // Speculative cache warm-up for playground realtime queries — non-blocking
+    // and intentionally NOT an else-if: the deterministic cascade below must
+    // still run regardless of whether the warm-up fires.
+    if (_isPlayground && _needsRealtime && query) {
       try {
         const postHintCache = require('../lib/tools/post-hint-cache');
         const { getTool: _getTool } = require('../lib/tools/registry');
@@ -787,8 +794,11 @@ class PipelineOrchestrator {
         if (_ddg) postHintCache.warm('duckduckgo', { query: _warmQuery }, () => _ddg.execute(_warmQuery));
         if (_exa) postHintCache.warm('exa', { query: _warmQuery }, () => _exa.execute(_warmQuery));
       } catch (_warmErr) { /* warm-up is best-effort */ }
-      logger.debug(`🪝 Playground pull-first: skipping deterministic realtime cascade, warmed cache for "${query.slice(0, 60)}"`);
-    } else if (state.preflight.routingFlags?.needsRealtimeSearch && query) {
+      logger.debug(`🌐 Playground realtime: cache warmed, running Brave cascade`);
+    }
+    // Deterministic cascade — separate block so the warm-up above cannot
+    // short-circuit it via an else-if branch.
+    if (_needsRealtime && query) {
       logger.debug(`🌐 Real-time cascade: DDG → Brave for general query`);
 
       if (input.onStageChange) {
@@ -863,9 +873,11 @@ SYNTHESIS INSTRUCTIONS:
     // Other surfaces keep the original opt-in (env=true). Window also widens for
     // playground — no length floor, since the LLM is now the *first* picker, not
     // the last-resort one.
-    const _fallbackEnabled = _isPlayground
-      ? (process.env.NYAN_LLM_TOOL_FALLBACK !== 'false')
-      : (process.env.NYAN_LLM_TOOL_FALLBACK === 'true');
+    // Tool fallback: opt-in on both surfaces via NYAN_LLM_TOOL_FALLBACK=true.
+    // Disabled by default until Llama 4 Maverick replaces the drafter — Llama 3.3 70B
+    // intermittently emits XML-style function calls (<function=name{...}>) instead of
+    // proper JSON tool_calls, causing Groq to return 400 tool_use_failed on every call.
+    const _fallbackEnabled = process.env.NYAN_LLM_TOOL_FALLBACK === 'true';
     const _minQueryLen = _isPlayground ? 2 : 8;
     if (
       _fallbackEnabled &&
@@ -1021,7 +1033,7 @@ SYNTHESIS: Use these tool results as the primary evidence. Cite values explicitl
       let stage;
       if (m === 'seed-metric' || m === 'psi-ema') stage = 'Crunching numbers...';
       else if (state.searchContext)               stage = 'Reading sources...';
-      else                                        stage = 'Thinking with Llama...';
+      else                                        stage = `Thinking with ${modelIdToLabel(getLLMBackend().model)}...`;
       input.onStageChange({ type: 'thinking', stage });
     }
 
@@ -1219,9 +1231,9 @@ Do NOT add these units inside the H₀ Physical Audit Advisory section.`;
         const weeklyFidelityPct = getFidelityPct(fidelityW);
         weeklySection = `
 **WEEKLY (7d candles, 13-month window)** [${weeklyGradeEmoji} ${fidelityW.grade || '?'} grade, ${weeklyFidelityPct}% fidelity]
-├─ θ (Phase) = **${fmtTheta(phaseW.current)}** (${phaseLabel(phaseW.current)})
-├─ z (Anomaly) = **${fmt(anomalyW.current)}σ** (${zLabel(anomalyW.current)})
-└─ R (Convergence) = **${fmt(rWeekly)}** (${analysisWeekly.reading?.emoji || '⚪'} ${analysisWeekly.reading?.reading || 'N/A'})`;
+├─ θ (Orientation) = **${fmtTheta(phaseW.current)}** (${phaseLabel(phaseW.current)})
+├─ z (Deviation) = **${fmt(anomalyW.current)}σ** (${zLabel(anomalyW.current)})
+└─ R (Trend Momentum) = **${fmt(rWeekly)}** (${analysisWeekly.reading?.emoji || '⚪'} ${analysisWeekly.reading?.reading || 'N/A'})`;
       } else {
         weeklySection = `
 **WEEKLY (7d candles, 13-month window)**: ⚠️ ${weeklyUnavailableReason || 'Insufficient data'}`;
@@ -1238,12 +1250,12 @@ Do NOT add these units inside the H₀ Physical Audit Advisory section.`;
         : '';
       
       psiEmaInstruction = `
-**Ψ-EMA** (θ=Cycle Position, z=Price Deviation, R=Momentum Ratio): alignment → conviction; conflict → caution.
+**Ψ-EMA** (θ=Orientation, z=Deviation from Median, R=Trend Momentum): alignment → conviction; conflict → caution.
 
 **DAILY (1d candles, 3-month window)** [${dailyGradeEmoji} ${fidelity.grade || '?'} grade, ${dailyFidelityPct}% fidelity]
-├─ θ (Phase) = **${fmtTheta(phase.current)}** (${phaseLabel(phase.current)})
-├─ z (Anomaly) = **${fmt(anomaly.current)}σ** (${zLabel(anomaly.current)})
-└─ R (Convergence) = **${fmt(convergence.currentDisplay ?? convergence.current)}** (${analysis.reading?.emoji || '⚪'} ${analysis.reading?.reading || 'N/A'})${tetralemmaAlert}
+├─ θ (Orientation) = **${fmtTheta(phase.current)}** (${phaseLabel(phase.current)})
+├─ z (Deviation) = **${fmt(anomaly.current)}σ** (${zLabel(anomaly.current)})
+└─ R (Trend Momentum) = **${fmt(convergence.currentDisplay ?? convergence.current)}** (${analysis.reading?.emoji || '⚪'} ${analysis.reading?.reading || 'N/A'})${tetralemmaAlert}
 ${weeklySection}
 
 ${clinicalSection}
@@ -1538,6 +1550,17 @@ User query: ${query}`;
                     if (guarded !== null) {
                       numbeoLcuValue = { value: guarded, currency: detectedCurrency, isSqft };
                       logger.debug(`📡 Numbeo: ${city} LCU price/sqm = ${sym}${guarded} (${detectedCurrency}${isSqft ? ', converted from sqft — Phase 0 BIS anchor skipped' : ', BIS anchor'})`);
+                      // Also write to current.pricePerSqm — the LCU value is already
+                      // sqft-converted and ceiling-guarded. Without this write, cities
+                      // like Tokyo (Numbeo always shows ¥/sqft) have no current price,
+                      // so the post-dog-walk BIS backcast never fires for the historical
+                      // bucket either.
+                      if (!parsedData.cities[city]) parsedData.cities[city] = emptyCityRecord();
+                      if (!parsedData.cities[city].current.pricePerSqm) {
+                        parsedData.cities[city].current.pricePerSqm = { value: guarded, currency: detectedCurrency };
+                        dedupPushUrl(sourceUrls, { title: `Numbeo Property Investment — ${city}`, url: numbeoUrl });
+                        logger.debug(`📡 Numbeo: ${city} current LCU/sqm stored = ${detectedCurrency} ${guarded}`);
+                      }
                     } else {
                       logger.warn({ city, value: raw, currency: detectedCurrency, isSqft }, '🛡️ Numbeo LCU $/sqm exceeded physical ceiling — likely regex bleed, BIS anchor NOT set');
                     }
@@ -1588,6 +1611,35 @@ User query: ${query}`;
           }
         } catch (err) {
           logger.warn({ city, err: err.message }, '📡 IntlHistoricalPrice fetch failed, falling through');
+        }
+
+        // Singapore current price from HDB when Numbeo didn't yield an SGD value.
+        // Numbeo Singapore shows "S$" which our BUY_REGEX captures as plain "$" →
+        // stored as USD, causing a currency mismatch against SGD income → Years N/A.
+        // HDB CKAN (2012-2025) is authoritative and always returns SGD.
+        const existingSingaporePrice = parsedData.cities[city]?.current?.pricePerSqm;
+        // A Numbeo "S$" match is parsed as plain "$" by the generic regex and
+        // lands as USD. Treat that as unresolved: HDB's authoritative SGD
+        // result must replace it so the price can be compared to SGD income.
+        if (cityKey === 'singapore' && (!existingSingaporePrice || existingSingaporePrice.currency !== 'SGD')) {
+          try {
+            const { fetchSgpHdbPricePerSqm } = require('../lib/tools/sgp-hdb');
+            const thisYear = new Date().getFullYear();
+            // Try last full year first (HDB covers to 2025), then the year before.
+            const hdbCurrent = (await fetchSgpHdbPricePerSqm(thisYear - 1))
+              ?? (await fetchSgpHdbPricePerSqm(thisYear - 2));
+            if (hdbCurrent) {
+              const guarded = rescuePricePerSqm(hdbCurrent.value, hdbCurrent.currency);
+              if (guarded !== null) {
+                if (!parsedData.cities[city]) parsedData.cities[city] = emptyCityRecord();
+                parsedData.cities[city].current.pricePerSqm = { value: guarded, currency: hdbCurrent.currency };
+                dedupPushUrl(sourceUrls, { title: `Singapore HDB Resale Flat Prices (current)`, url: hdbCurrent.sourceUrl });
+                logger.debug({ city, year: thisYear - 1, value: guarded }, '🇸🇬 SGP HDB: current price/sqm stored');
+              }
+            }
+          } catch (err) {
+            logger.warn({ city, err: err.message }, '🇸🇬 SGP HDB current fetch failed');
+          }
         }
       }
     });
@@ -2286,6 +2338,7 @@ Rules:
       : '';
 
     const fullOutput = `${serverTable}${sourcesBlock}`;
+    const deterministicReading = buildSeedMetricReading(parsedData, tfrCapsule);
 
     state.didSearch = true;
     state.seedMetricDirectOutput = true;
@@ -2334,8 +2387,10 @@ Rules:
       console.warn(`⚠️ Seed Metric coda failed: ${err.message} — skipping coda`);
     }
 
-    state.seedMetricCoda = coda;
-    state.draftAnswer = this._insertSeedMetricCoda(fullOutput, coda);
+    // The reading is derived from validated table inputs and is always shown.
+    // The creative coda remains optional voice, never the only explanation.
+    state.seedMetricCoda = [deterministicReading, coda].filter(Boolean).join('\n\n');
+    state.draftAnswer = this._insertSeedMetricCoda(fullOutput, state.seedMetricCoda);
   }
 
   async _fetchTFRData(cities, historicalDecade, clientIp, cityToCountry = {}) {

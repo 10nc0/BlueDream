@@ -36,15 +36,20 @@ const CAT_CONFIG = Object.freeze({
     }
 });
 
-// Initialize cat animation (universe frame transcendental)
-// This function can be called from any page
+const PUPIL_ROW_WIDTHS = Object.freeze([0.6, 0.9, 1.2, 1.4, 1.2, 0.9, 0.6]);
+
+let catInitialized = false;
+
+// Initialize cat animation. Safe to call from any page or loader.
 function initHopAnimation() {
+    if (catInitialized) return;
+
     const canvas = document.getElementById(CAT_CONFIG.CANVAS_ID);
     if (!canvas) {
         console.warn('⚠️ Cat canvas not found! Include cat-animation.html component.');
         return;
     }
-    console.log('🐱 Initializing transcendental cat animation...');
+    catInitialized = true;
     
     const ctx = canvas.getContext('2d');
     // Read actual canvas dimensions dynamically (supports 100x100, 125x125, etc.)
@@ -56,7 +61,6 @@ function initHopAnimation() {
     let mouseY = -1000;
     let lastTouchTime = 0;
     let lastInteractionTime = 0;
-    let _lastBlinkState = null; // Track blink state to avoid per-frame DOM mutations
     let blinkUntil = 0;
     let nextBlink = Date.now() + 5000 + Math.random() * 3000;
     // Tail: phase accumulator — smooth, no phase jumps on speed changes
@@ -117,11 +121,24 @@ function initHopAnimation() {
         wasNear = false; // prevent stuck edge-detector
     });
     
-    function drawPixelCat(frameNum, offsetX = 0, offsetY = 0, fleeing = false) {
+    function drawPupil(x, scale, offsetX, offsetY, centerX, centerY) {
+        for (let row = 0; row < PUPIL_ROW_WIDTHS.length; row++) {
+            const width = PUPIL_ROW_WIDTHS[row];
+            ctx.fillRect(
+                (x + (2 - width) / 2) * scale + offsetX + centerX,
+                (16.95 + row * 0.3) * scale + offsetY + centerY,
+                width * scale,
+                0.3 * scale
+            );
+        }
+    }
+
+    function drawPixelCat(frameNum, offsetX = 0, offsetY = 0, now = Date.now()) {
         ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
         
         const scale = parseFloat(canvas.dataset.scale) || (canvas.width / CAT_CONFIG.CANONICAL_SIZE) * CAT_CONFIG.SCALE;
-        const isJump = Math.floor(frameNum / CAT_CONFIG.JUMP_FRAME_INTERVAL) % 2 === 0;
+        // Start grounded on frame zero, then alternate grounded/jumping phases.
+        const isJump = Math.floor(frameNum / CAT_CONFIG.JUMP_FRAME_INTERVAL) % 2 === 1;
         const yOffset = isJump ? -CAT_CONFIG.JUMP_HEIGHT * scale : 0;
         
         // Center the cat in the canvas (above time & date)
@@ -153,18 +170,24 @@ function initHopAnimation() {
         ctx.fillRect(22.75 * scale + offsetX + centerX, 12.5 * scale + yOffset + offsetY + centerY, 1.5 * scale, 2 * scale);
 
         // Tail: phase-accumulator driven — tailSwing updated each frame in animate()
-        // Root barely moves; tip sweeps wide (x: 11→29 in coord space = ~30→70px on canvas)
+        // Three segments linearly interpolate x from root to tip so the tail
+        // stays visually connected at all swing angles (two-rect design gapped
+        // up to 54px on the 250px auth canvas at peak swing).
         ctx.fillStyle = CAT_CONFIG.COLORS.BODY;
-        // Root: x≈24, barely moves
-        ctx.fillRect((24 + tailSwing * 0.4) * scale + offsetX + centerX, 24 * scale + yOffset + offsetY + centerY, 2 * scale, 5 * scale);
-        // Tip: x = 20 ± 9, swings clearly left and right of body
-        ctx.fillRect((20 + tailSwing * 9) * scale + offsetX + centerX, 26 * scale + yOffset + offsetY + centerY, 2 * scale, 3 * scale);
+        const _tailRootX = 24 + tailSwing * 0.4; // anchored near body, barely moves
+        const _tailTipX  = 20 + tailSwing * 9;   // wide sweep left/right
+        const _tailMidX  = _tailRootX + (_tailTipX - _tailRootX) * 0.5;
+        const _ty = yOffset + offsetY + centerY;
+        const _tx = offsetX + centerX;
+        ctx.fillRect(_tailRootX * scale + _tx, 24 * scale + _ty, 2 * scale, 2 * scale); // base
+        ctx.fillRect(_tailMidX  * scale + _tx, 26 * scale + _ty, 2 * scale, 2 * scale); // mid
+        ctx.fillRect(_tailTipX  * scale + _tx, 28 * scale + _ty, 2 * scale, 2 * scale); // tip
 
         // Blink state (passive check — no side effects, no setTimeout)
-        const isBlinking = Date.now() < blinkUntil;
-        if (Date.now() > nextBlink && !isBlinking) {
-            blinkUntil = Date.now() + 260;
-            nextBlink = Date.now() + 5000 + Math.random() * 3000;
+        const isBlinking = now < blinkUntil;
+        if (now > nextBlink && !isBlinking) {
+            blinkUntil = now + 260;
+            nextBlink = now + 5000 + Math.random() * 3000;
         }
 
         // Eyes (green glow)
@@ -176,22 +199,8 @@ function initHopAnimation() {
         // Eye pupil (vertical ellipse: symmetrical, filled)
         if (!isBlinking) {
             ctx.fillStyle = CAT_CONFIG.COLORS.EYE_HIGHLIGHT;
-            // Left eye
-            ctx.fillRect((17 + (2 - 0.6) / 2) * scale + offsetX + centerX, 16.95 * scale + yOffset + offsetY + centerY, 0.6 * scale, 0.3 * scale);
-            ctx.fillRect((17 + (2 - 0.9) / 2) * scale + offsetX + centerX, 17.25 * scale + yOffset + offsetY + centerY, 0.9 * scale, 0.3 * scale);
-            ctx.fillRect((17 + (2 - 1.2) / 2) * scale + offsetX + centerX, 17.55 * scale + yOffset + offsetY + centerY, 1.2 * scale, 0.3 * scale);
-            ctx.fillRect((17 + (2 - 1.4) / 2) * scale + offsetX + centerX, 17.85 * scale + yOffset + offsetY + centerY, 1.4 * scale, 0.3 * scale);
-            ctx.fillRect((17 + (2 - 1.2) / 2) * scale + offsetX + centerX, 18.15 * scale + yOffset + offsetY + centerY, 1.2 * scale, 0.3 * scale);
-            ctx.fillRect((17 + (2 - 0.9) / 2) * scale + offsetX + centerX, 18.45 * scale + yOffset + offsetY + centerY, 0.9 * scale, 0.3 * scale);
-            ctx.fillRect((17 + (2 - 0.6) / 2) * scale + offsetX + centerX, 18.75 * scale + yOffset + offsetY + centerY, 0.6 * scale, 0.3 * scale);
-            // Right eye
-            ctx.fillRect((21 + (2 - 0.6) / 2) * scale + offsetX + centerX, 16.95 * scale + yOffset + offsetY + centerY, 0.6 * scale, 0.3 * scale);
-            ctx.fillRect((21 + (2 - 0.9) / 2) * scale + offsetX + centerX, 17.25 * scale + yOffset + offsetY + centerY, 0.9 * scale, 0.3 * scale);
-            ctx.fillRect((21 + (2 - 1.2) / 2) * scale + offsetX + centerX, 17.55 * scale + yOffset + offsetY + centerY, 1.2 * scale, 0.3 * scale);
-            ctx.fillRect((21 + (2 - 1.4) / 2) * scale + offsetX + centerX, 17.85 * scale + yOffset + offsetY + centerY, 1.4 * scale, 0.3 * scale);
-            ctx.fillRect((21 + (2 - 1.2) / 2) * scale + offsetX + centerX, 18.15 * scale + yOffset + offsetY + centerY, 1.2 * scale, 0.3 * scale);
-            ctx.fillRect((21 + (2 - 0.9) / 2) * scale + offsetX + centerX, 18.45 * scale + yOffset + offsetY + centerY, 0.9 * scale, 0.3 * scale);
-            ctx.fillRect((21 + (2 - 0.6) / 2) * scale + offsetX + centerX, 18.75 * scale + yOffset + offsetY + centerY, 0.6 * scale, 0.3 * scale);
+            drawPupil(17, scale, offsetX, yOffset + offsetY, centerX, centerY);
+            drawPupil(21, scale, offsetX, yOffset + offsetY, centerX, centerY);
         }
 
         // Nose (pink)
@@ -245,8 +254,6 @@ function initHopAnimation() {
 
         let offsetX = 0;
         let offsetY = 0;
-        let fleeing = false;
-
         // Idle timeout — reset cursor; wasNear resets naturally next frame
         const isIdle = (now - lastInteractionTime) > IDLE_RESET_TIME;
         if (isIdle && (mouseX !== -1000 || mouseY !== -1000)) {
@@ -265,10 +272,13 @@ function initHopAnimation() {
 
             if (distance < fleeDistance) {
                 isNear = true;
-                fleeing = true;
                 const strength = fleeStrength * (1 - distance / fleeDistance);
-                offsetX = -(dx / distance) * strength;
-                offsetY = -(dy / distance) * strength;
+                // At the exact center the direction is undefined. Keep the cat
+                // visible instead of passing NaN coordinates to canvas.
+                if (distance > 0) {
+                    offsetX = -(dx / distance) * strength;
+                    offsetY = -(dy / distance) * strength;
+                }
                 // No clamping. The cat is transcendental — it may drift beyond the canvas edge
                 // under strong provocation, but offsetX/offsetY reset to 0 the moment the
                 // cursor withdraws. The calibration point (NyanBook center, 0^0 = I_n) is
@@ -284,7 +294,7 @@ function initHopAnimation() {
 
         // Date/time breathing animation handled purely by CSS (breathe-datetime keyframes)
 
-        drawPixelCat(frame, offsetX, offsetY, fleeing);
+        drawPixelCat(frame, offsetX, offsetY, now);
         frame++;
         requestAnimationFrame(animate);
     }
@@ -357,19 +367,8 @@ function initDateTimeTicker() {
 // ========================================
 // AUTO-INITIALIZATION (Self-Starting)
 // ========================================
-// Both cat animation and date/time ticker auto-start on DOMContentLoaded
-// Each detects its own elements independently
-
-let _catInitialized = false;
-
-// Wrap original initHopAnimation with singleton guard
-const _originalInitHopAnimation = initHopAnimation;
-initHopAnimation = function() {
-    if (_catInitialized) return; // Prevent double-init
-    _catInitialized = true;
-    _originalInitHopAnimation();
-};
-
+// Both cat animation and date/time ticker auto-start on DOMContentLoaded.
+// Each detects its own elements independently.
 document.addEventListener('DOMContentLoaded', () => {
     // Auto-init cat animation if canvas exists
     if (document.getElementById('hopCanvas')) {

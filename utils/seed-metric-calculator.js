@@ -371,6 +371,73 @@ function buildSeedMetricTable(parsedData, historicalDecade = String(new Date().g
 }
 
 /**
+ * Build a concise, deterministic reading from the same validated values used
+ * in the Seed Metric table. This is deliberately independent of the optional
+ * LLM coda: a provider timeout must not turn a generational comparison into a
+ * table with no explanation of land burden or fertility.
+ */
+function buildSeedMetricReading(parsedData, tfrCapsule = null) {
+  const readings = [];
+  const cities = Object.entries(parsedData?.cities || {}).slice(0, 3);
+
+  for (const [city, data] of cities) {
+    const cityTitle = (CITY_EXPAND[city] || city)
+      .replace(/\b\w/g, c => c.toUpperCase())
+      .replace(/\bDc\b/g, 'DC');
+    const history = data?.historical || {};
+    const current = data?.current || {};
+    const histPriceCurrency = normaliseCurrency(history.pricePerSqm?.currency);
+    const histIncomeCurrency = normaliseCurrency(history.income?.currency);
+    const currPriceCurrency = normaliseCurrency(current.pricePerSqm?.currency);
+    const currIncomeCurrency = normaliseCurrency(current.income?.currency);
+    const histMetric = calculateSeedMetric(
+      history.pricePerSqm?.value,
+      histPriceCurrency && histPriceCurrency === histIncomeCurrency ? history.income?.value : null
+    );
+    const currMetric = calculateSeedMetric(
+      current.pricePerSqm?.value,
+      currPriceCurrency && currPriceCurrency === currIncomeCurrency ? current.income?.value : null
+    );
+    const tfr = tfrCapsule?.[cityTitle] || tfrCapsule?.[city];
+    const hasHistYears = histMetric.years != null;
+    const hasCurrYears = currMetric.years != null;
+    const hasHistTfr = tfr?.historical != null;
+    const hasCurrTfr = tfr?.current != null;
+
+    if (hasHistYears && hasCurrYears) {
+      let sentence = `${cityTitle}'s modeled 700sqm land-price burden moved from ${histMetric.years.toFixed(0)} to ${currMetric.years.toFixed(0)} single-earner years.`;
+      if (hasHistTfr && hasCurrTfr) {
+        sentence += ` Over the same comparison, TFR moved from ${tfr.historical.toFixed(1)} to ${tfr.current.toFixed(1)}.`;
+      } else {
+        sentence += ' TFR data is unavailable for one or both periods, so no fertility trend is inferred.';
+      }
+      readings.push(sentence);
+      continue;
+    }
+
+    if (hasCurrYears) {
+      let sentence = `${cityTitle}'s current modeled 700sqm land-price burden is ${currMetric.years.toFixed(0)} single-earner years.`;
+      if (hasCurrTfr) sentence += ` Current TFR is ${tfr.current.toFixed(1)}.`;
+      sentence += ' The historical comparison remains unavailable, so no trend is inferred.';
+      readings.push(sentence);
+      continue;
+    }
+
+    let sentence = `${cityTitle}'s price and income inputs cannot yet produce a same-currency years reading, so no land-burden trend is inferred.`;
+    if (hasHistTfr && hasCurrTfr) {
+      sentence += ` TFR moved from ${tfr.historical.toFixed(1)} to ${tfr.current.toFixed(1)} across the available comparison.`;
+    } else if (hasCurrTfr) {
+      sentence += ` Current TFR is ${tfr.current.toFixed(1)}.`;
+    }
+    readings.push(sentence);
+  }
+
+  return readings.length > 0
+    ? `**Reading:** ${readings.join(' ')}`
+    : '**Reading:** No city data was available for a Seed Metric comparison.';
+}
+
+/**
  * Validate Seed Metric output format
  * @param {string} output - LLM-generated output
  * @returns {object} { valid: boolean, issues: string[] }
@@ -855,6 +922,7 @@ module.exports = {
   calculateSeedMetric,
   formatCurrency,
   buildSeedMetricTable,
+  buildSeedMetricReading,
   validateSeedMetricOutput,
   parseTFR,
   injectTFRColumn,

@@ -96,16 +96,13 @@ TENANT_ISOLATION*.md
 AUTH_DOCUMENTATION.md
 GITHUB_SECURITY_CHECKLIST.md
 .IP_VAULT_README.md
-*.sql
-.env
-node_modules/
-sessions/
-*.sql
 .env
 node_modules/
 sessions/
 notebook.md
+
+# SQL dumps and scratch queries do not belong in the repository. Schema
+# migrations do: a clean clone needs them to initialize an empty database.
 *.sql
-.env
-node_modules/
-sessions/
+!migrations/
+!migrations/**/*.sql

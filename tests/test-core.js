@@ -20,6 +20,7 @@ const { EmailOutpipe } = require('../lib/outpipes/email');
 
 const PORT = process.env.PORT || 5000;
 const HOST = 'localhost';
+const REQUEST_TIMEOUT_MS = 30000;
 
 const TEST_TS = Date.now();
 const TEST_EMAIL_A = `alice_${TEST_TS}@test.com`;
@@ -75,7 +76,7 @@ function httpRequest({ method, path, body, headers = {} }) {
             path,
             method,
             headers: { 'Content-Type': 'application/json', ...headers },
-            timeout: 10000,
+            timeout: REQUEST_TIMEOUT_MS,
         };
         const req = http.request(opts, (res) => {
             let data = '';
@@ -930,7 +931,7 @@ const tenantIsolationTests = [
             path: '/api/books',
             headers: { 'Authorization': `Bearer ${evilToken}` },
         });
-        assert([400, 403, 500].includes(res.status), `crafted tenantId should be rejected, got ${res.status}`);
+        assert([400, 401, 403, 500].includes(res.status), `crafted tenantId should be rejected, got ${res.status}`);
         const check = await pool.query(`SELECT count(*) FROM ${SCHEMA_A}.books`);
         assert(parseInt(check.rows[0].count) >= 0, 'tables should still exist after injection attempt');
     }),

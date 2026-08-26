@@ -35,7 +35,7 @@
 
 /* Gentle breathing animation for all date/time elements - globally consistent tempo */
 /* φ-asymmetric timing: 61.8% inhale (accumulation), 38.2% exhale (release) */
-/* Total duration: 4000ms * (1 + φ) ≈ 10472ms */
+/* Total duration: 6s (Zen constant — tune here, propagates everywhere via --breathe-datetime-duration) */
 :root {
     --breathe-datetime-duration: 6s; /* Zen constant — one place to tune across all pages */
 }
@@ -51,6 +51,14 @@
     font-variant-numeric: tabular-nums; /* Monospace digits for stable width */
     color: #94a3b8; /* Base color - works on both light/dark backgrounds */
     animation: breathe-datetime var(--breathe-datetime-duration) ease-in-out infinite;
+}
+
+/* Respect reduced-motion preference — pulse is mild but runs infinite */
+@media (prefers-reduced-motion: reduce) {
+    #currentTime,
+    #currentTimeCompact {
+        animation: none;
+    }
 }
 
 /* Playground date-time-display - tight width to snap to buttons while preventing digit-change jitter */
