@@ -97,6 +97,9 @@ OLLAMA_MODEL=llama3.2
 
 | Groq model | Ollama equivalent |
 |------------|------------------|
+| `openai/gpt-oss-120b` | `llama3.3` (best available local approximation) |
+| `openai/gpt-oss-20b` | `llama3.2` |
+| `groq/compound` | `llama3.3` (compound routes internally; use heaviest local model) |
 | `llama-3.3-70b-versatile` | `llama3.3` |
 | `llama-3.1-70b-versatile` | `llama3.1` |
 | `llama3-70b-8192` | `llama3` |
@@ -105,6 +108,27 @@ OLLAMA_MODEL=llama3.2
 | `gemma2-9b-it` | `gemma2:9b` |
 
 Any model not in this table falls back to `OLLAMA_MODEL` (or `llama3.2`). You can override everything with `OLLAMA_MODEL`.
+
+---
+
+### LLM Version History
+
+Groq's model lineup has changed without notice twice. This table is the authoritative changelog so operators — especially anyone running local Ollama — know what was preferred at each point and why it changed.
+
+| Period | Role | Groq model | Ollama equivalent | Notes |
+|--------|------|------------|-------------------|-------|
+| 2026-08-19 → present | Drafter (S2/S4/audit) | `openai/gpt-oss-120b` | `llama3.3` | Groq retired entire Llama lineup; gpt-oss-120b is heaviest available text model on new lineup |
+| 2026-08-19 → present | Fast path (grammar bridge, memory summariser, stock ticker) | `openai/gpt-oss-20b` | `llama3.2` | Replaced llama-3.1-8b-instant |
+| 2026-08-19 → present | Vision / compound | `groq/compound` | `llama3.3` | llama-4-scout retired same day; compound is Groq's routing model — best available fallback |
+| 2026-01-10 → 2026-08-19 | Drafter (S2/S4/audit) | `llama-3.3-70b-versatile` | `llama3.3` | Primary workhorse; retired when Groq removed Llama lineup |
+| 2026-01-10 → 2026-08-19 | Fast path | `llama-3.1-8b-instant` | `llama3.2` | Sub-second latency; used for grammar bridge, memory summariser, stock ticker extraction |
+| 2026-01-10 → 2026-08-19 | Vision | `meta-llama/llama-4-scout-17b-16e-instruct` | *(no Ollama equivalent — Groq Vision only)* | PDF/image analysis, attachment cascade; retired 2026-08-19 |
+| (legacy, pre-2026) | Drafter | `llama-3.1-70b-versatile` | `llama3.1` | Predates this codebase; kept in fallback maps for BYOK callers |
+| (legacy, pre-2026) | Various | `llama3-70b-8192`, `mixtral-8x7b-32768`, `gemma2-9b-it` | see mapping table above | Kept in fallback maps for backward compat |
+
+**Audio model** (`whisper-large-v3-turbo`) has been stable across all periods — Groq did not retire it.
+
+**Why this table exists:** Groq does not provide migration notices. The 2026-08-19 retirement was discovered only when every playground request returned `404 model not found`. If you are running Ollama as a local replica of a past production config, pull the Ollama equivalent listed in the row for your target period and set `OLLAMA_MODEL` accordingly. The fallback maps in `utils/groq-client.js` keep all legacy Groq model IDs as valid keys so BYOK callers passing old strings still route correctly.
 
 **Sovereignty guarantee:** Ollama runs entirely on infrastructure you control. No data leaves your network. The API shape is OpenAI-compatible — the same request format Groq and OpenRouter use. If Ollama is your only provider, the node is fully air-gapped from cloud AI dependencies.
 

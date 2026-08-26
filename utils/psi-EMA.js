@@ -12,9 +12,9 @@
  *   • Physics: Charge/mass (stock) vs force field (phase relationships)
  * 
  * The THREE DIMENSIONS (θ, z, R) are substrate-independent measurements:
- *   θ (Phase):       Cycle position via atan2(Δprice, price) - 0° true north, +θ rising, -θ falling
- *   z (Anomaly):     Deviation from equilibrium via robust MAD z-score - universal
- *   R (Convergence): Amplitude ratio z(t)/z(t-1) - scale-free convergence metric
+ *   θ (Orientation):    Cycle position via atan2(Δprice, price) - 0° true north, +θ rising, -θ falling
+ *   z (Deviation):      Deviation from median, in σ, via robust MAD z-score - universal
+ *   R (Trend Momentum): Amplitude ratio z(t)/z(t-1) - scale-free momentum of the deviation itself
  * 
  * All bounds and thresholds derive from φ (1.618), the golden ratio from x = 1 + 1/x.
  * ═════════════════════════════════════════════════════════════════════════════
@@ -24,14 +24,14 @@
  * ├─────────────────┬──────────────────────────┬────────────────┬──────────────────────────────┤
  * │ Dimension       │ Formula                  │ φ-Bounds       │ Classification Rule          │
  * ├─────────────────┼──────────────────────────┼────────────────┼──────────────────────────────┤
- * │ θ (Phase)       │ atan2(Δprice, price)     │ 0°=true north  │ +θ rising, -θ falling        │
+ * │ θ (Orientation) │ atan2(Δprice, price)     │ 0°=true north  │ +θ rising, -θ falling        │
  * │ Cycle Position  │                          │                │ (Stock-Flow phase angle)     │
  * ├─────────────────┼──────────────────────────┼────────────────┼──────────────────────────────┤
- * │ z (Anomaly)     │ (Value - Median) / MAD   │ See bounds     │ |z| > φ² flags anomaly      │
- * │ Signal Deviation│                          │ below          │ (deviation from equilibrium) │
+ * │ z (Deviation)   │ (Value - Median) / MAD   │ See bounds     │ |z| > φ² flags anomaly      │
+ * │ from Median (σ) │                          │ below          │ (deviation from equilibrium) │
  * ├─────────────────┼──────────────────────────┼────────────────┼──────────────────────────────┤
- * │ R (Convergence) │ z(t) / z(t-1)            │ φ-Orbital      │ R ∈ [φ⁻¹, φ] = BREATHING     │
- * │ Amplitude Ratio │                          │ Model          │ (golden rhythm, sustainable) │
+ * │ R (Trend        │ z(t) / z(t-1)            │ φ-Orbital      │ R ∈ [φ⁻¹, φ] = BREATHING     │
+ * │ Momentum)       │                          │ Model          │ (golden rhythm, sustainable) │
  * └─────────────────┴──────────────────────────┴────────────────┴──────────────────────────────┘
  * 
  * R THRESHOLDS (φ-Orbital Model - Orbital Mechanics Analogy):
@@ -172,7 +172,7 @@ const FIB_PERIODS = {
   SLOW_THETA: 55   // 10th Fibonacci number
 };
 
-// R (Convergence) Regime Bounds - φ-Derived from x = 1 + 1/x
+// R (Trend Momentum) Regime Bounds - φ-Derived from x = 1 + 1/x
 // Classification: Amplitude ratio near φ indicates self-similar oscillations
 const R_BOUNDS = {
   LOWER: 0.618,      // φ⁻¹: R < 0.618 → decaying orbit
@@ -180,7 +180,7 @@ const R_BOUNDS = {
   TOLERANCE: 0.382   // φ⁻²: band for regime classification
 };
 
-// Z (Anomaly) Thresholds - φ-Derived from x = 1 + 1/x
+// z (Deviation) Thresholds - φ-Derived from x = 1 + 1/x
 // Classification: Deviation from equilibrium measured in MAD units
 //
 // Four-tier system — each key is the LOWER BOUND for that tier's >= check:
@@ -235,7 +235,7 @@ function stdDev(arr) {
  * - R ≥ φ → Bull Trend Signal (|z|≤φ² and θ>0) or False Positive Bull Signal
  * 
  * @param {Object} params - Analysis parameters
- * @param {number|null} params.R - Convergence ratio (z(t)/z(t-1))
+ * @param {number|null} params.R - Trend momentum ratio (z(t)/z(t-1))
  * @param {number} params.z - Current z-score (anomaly)
  * @param {number} params.theta - Current phase angle in degrees
  * @returns {Object} { reading, emoji, description }
@@ -2577,22 +2577,22 @@ class PsiEMADashboard {
     lines.push(`## Ψ-EMA DASHBOARD ANALYSIS`);
     lines.push('');
     
-    // Phase
-    lines.push(`### Phase θ (Cycle Position)`);
+    // Orientation
+    lines.push(`### θ (Orientation) — Cycle Position`);
     lines.push(`Current: ${phase.current?.toFixed(1)}° ${phase.interpretation?.emoji || ''}`);
     lines.push(`EMA-34: ${phase.ema34?.toFixed(1)}° | EMA-55: ${phase.ema55?.toFixed(1)}°`);
     lines.push('');
     
-    // Anomaly
-    lines.push(`### Anomaly z (Deviation Strength)`);
+    // Deviation
+    lines.push(`### z (Deviation from Median, in σ)`);
     lines.push(`Current: ${anomaly.current?.toFixed(2)}σ ${anomaly.alert?.emoji || ''}`);
     lines.push(`Level: **${anomaly.alert?.level}**`);
     lines.push('');
     
-    // Convergence - use currentDisplay for always-available R
+    // Trend Momentum - use currentDisplay for always-available R
     if (convergence.regime) {
       const rVal = convergence.currentDisplay ?? convergence.current;
-      lines.push(`### Convergence R (Momentum Ratio)`);
+      lines.push(`### R (Trend Momentum)`);
       lines.push(`Current R: ${rVal?.toFixed(3) ?? 'N/A'} | φ = ${PHI.toFixed(3)}`);
       lines.push('');
     }
@@ -2746,7 +2746,7 @@ When stock data is provided below, you MUST:
 
 ### The Three Orthogonal Dimensions (φ-Derived):
 
-**1. Phase θ (Cycle Position)** — EMA-34/EMA-55 (Circular Mean)
+**1. θ (Orientation) — Cycle Position** — Circular Mean of EMA-34/EMA-55
    θ = atan2(EMA(sin(θ)), EMA(cos(θ)))
    - 0°-90° = Early Expansion 🟢
    - 90°-180° = Late Expansion 🟡
@@ -2755,24 +2755,24 @@ When stock data is provided below, you MUST:
    - Golden Cross = Fast EMA > Slow EMA
    - Death Cross = Fast EMA < Slow EMA
 
-**2. Anomaly z (Deviation Strength)** — EMA-21/EMA-34
+**2. z (Deviation from Median, in σ)**
    z = (Price - Median) / MAD
    H₀: |z| < φ⁻¹ (${Z_BOUNDS.ELEVATED.toFixed(3)}) = NORMAL
    H₀: φ⁻¹ ≤ |z| < φ (${Z_BOUNDS.ELEVATED.toFixed(3)}–${Z_BOUNDS.ALERT.toFixed(3)}) = ELEVATED
    H₀: φ ≤ |z| < φ² (${Z_BOUNDS.ALERT.toFixed(3)}–${Z_BOUNDS.EXTREME.toFixed(3)}) = ALERT
    H₀: |z| ≥ φ² (${Z_BOUNDS.EXTREME.toFixed(3)}) = EXTREME
 
-**3. Convergence R (Amplitude Ratio)** — EMA-13/EMA-21
+**3. R (Trend Momentum) — Amplitude Ratio**
    R = z(t) / z(t-1)
    H₀: R < φ⁻¹ (${R_BOUNDS.LOWER.toFixed(3)}) = DECAY
    H₀: φ⁻¹ ≤ R ≤ φ = CONVERGENCE (self-similar)
    H₀: R > φ (${R_BOUNDS.UPPER.toFixed(3)}) = AMPLIFICATION
 
-### Fibonacci EMA Periods (Self-Similar Under φ):
-- Phase: 34/55 (F₉/F₁₀)
-- Anomaly: 21/34 (F₈/F₉)
-- Convergence: 13/21 (F₇/F₈)
-- Ratio: F(n+1)/F(n) → φ as n → ∞
+### Fibonacci EMA Periods (Confirmation/Smoothing Signals — NOT part of the z/R formulas above):
+- θ (Orientation): EMA-34/EMA-55 — feeds directly into θ's circular-mean formula (Golden/Death Cross)
+- z (Deviation): EMA-21/EMA-34 — smooths the z-series for fidelity scoring only; z itself is MAD-based, no EMA
+- R (Trend Momentum): EMA-13/EMA-21 — smooths the R-ratio series for crossover detection only; R itself is z(t)/z(t-1), no EMA
+- Ratio: F(n+1)/F(n) → φ as n → ∞ (Fibonacci self-similarity)
 
 ### Constants (φ-Derived):
 - φ ≈ 1.618 (golden ratio, x = 1 + 1/x)
