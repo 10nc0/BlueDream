@@ -816,8 +816,19 @@ class PipelineOrchestrator {
       // Seed Metric owns a separate structured-data cadence and must never
       // inherit the generic TinyFish-first provider order.
       const liveSearchTier = state.preflight.mode === 'seed-metric' ? 'premium' : 'generic';
+      // TinyFish's news index is higher-signal for explicit news intent. Keep
+      // prices, scores, weather, and other realtime lookups on the broad web
+      // index even when their temporal volatility is high.
+      const tinyfishDomainType = /\b(news|headlines?|breaking|berita|kabar)\b/i.test(searchQuery)
+        ? 'news'
+        : 'web';
       const cascadeResult = this.searchKernel
-        ? await this.searchKernel.search({ query: searchQuery, tier: liveSearchTier, clientIp })
+        ? await this.searchKernel.search({
+            query: searchQuery,
+            tier: liveSearchTier,
+            clientIp,
+            domainType: tinyfishDomainType
+          })
         : this.searchCascade
           ? await this.searchCascade({ query: searchQuery, strategy: 'ddg-first', clientIp })
           : { result: null, provider: null };

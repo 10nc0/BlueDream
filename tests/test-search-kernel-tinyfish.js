@@ -7,7 +7,7 @@ const { SearchKernel } = require('../lib/tools/search-kernel');
 const { ascribeSource } = require('../utils/source-ascriber');
 
 const originalEnv = {
-  MONID_API: process.env.MONID_API,
+  TINYFISH_API_KEY: process.env.TINYFISH_API_KEY,
   PLAYGROUND_BRAVE_API: process.env.PLAYGROUND_BRAVE_API
 };
 
@@ -50,16 +50,36 @@ function makeKernel(calls, values = {}) {
 }
 
 async function run() {
-  process.env.MONID_API = 'test-monid-key';
+  process.env.TINYFISH_API_KEY = 'test-tinyfish-key';
   process.env.PLAYGROUND_BRAVE_API = 'test-brave-key';
 
   {
     const calls = [];
     const kernel = makeKernel(calls, { tinyfish: 'tinyfish result', brave: 'brave result' });
-    const result = await kernel.search({ query: 'latest AI news', tier: 'generic' });
+    let receivedOptions;
+    kernel._providers.tinyfish.execute = async (_query, opts) => {
+      calls.push('tinyfish');
+      receivedOptions = opts;
+      return 'tinyfish result';
+    };
+    const result = await kernel.search({ query: 'latest AI news', tier: 'generic', domainType: 'news' });
     assert.strictEqual(result.provider, 'tinyfish');
     assert.strictEqual(result.result, 'tinyfish result');
+    assert.strictEqual(receivedOptions.domainType, 'news');
     assert.deepStrictEqual(calls, ['tinyfish']);
+  }
+
+  {
+    const calls = [];
+    const kernel = makeKernel(calls, { tinyfish: 'tinyfish result' });
+    let receivedOptions;
+    kernel._providers.tinyfish.execute = async (_query, opts) => {
+      calls.push('tinyfish');
+      receivedOptions = opts;
+      return 'tinyfish result';
+    };
+    await kernel.search({ query: 'invalid domain type', tier: 'generic', domainType: 'blogs' });
+    assert.strictEqual(receivedOptions.domainType, 'web');
   }
 
   {
@@ -80,7 +100,7 @@ async function run() {
   }
 
   {
-    delete process.env.MONID_API;
+    delete process.env.TINYFISH_API_KEY;
     const calls = [];
     const kernel = makeKernel(calls, { tinyfish: 'must be skipped', brave: 'brave result' });
     const result = await kernel.search({ query: 'current pricing', tier: 'generic' });
@@ -89,25 +109,23 @@ async function run() {
   }
 
   {
-    process.env.MONID_API = 'test-monid-key';
-    const originalPost = axios.post;
-    axios.post = async (url, body) => {
-      assert.strictEqual(url, 'https://api.monid.ai/v1/run');
-      assert.strictEqual(body.provider, 'tinyfish');
-      assert.strictEqual(body.endpoint, '/search');
-      assert.strictEqual(body.input.queryParams.query, 'registry object call');
+    process.env.TINYFISH_API_KEY = 'test-tinyfish-key';
+    const originalGet = axios.get;
+    axios.get = async (url, config) => {
+      assert.strictEqual(url, 'https://api.search.tinyfish.ai');
+      assert.strictEqual(config.headers['X-API-Key'], 'test-tinyfish-key');
+      assert.strictEqual(config.params.query, 'registry object call');
+      assert.strictEqual(config.params.domain_type, 'web');
+      assert.match(config.params.purpose, /current, credible sources/);
       return {
         data: {
-          status: 'COMPLETED',
-          output: {
-            results: [{
-              title: 'Current source',
-              url: 'https://example.com/current',
-              snippet: 'Current evidence',
-              date: 'today',
-              site_name: 'example.com'
-            }]
-          }
+          results: [{
+            title: 'Current source',
+            url: 'https://example.com/current',
+            snippet: 'Current evidence',
+            date: 'today',
+            site_name: 'example.com'
+          }]
         }
       };
     };
@@ -137,7 +155,65 @@ async function run() {
         'TinyFish URL must reach the canonical source ascriber'
       );
     } finally {
-      axios.post = originalPost;
+      axios.get = originalGet;
+    }
+  }
+
+  {
+    process.env.TINYFISH_API_KEY = 'test-tinyfish-key';
+    const originalGet = axios.get;
+    axios.get = async (_url, config) => {
+      assert.strictEqual(config.params.recency_minutes, 1440);
+      assert.strictEqual(config.params.after_date, undefined);
+      assert.strictEqual(config.params.before_date, undefined);
+      assert.strictEqual(config.params.location, 'ID');
+      assert.strictEqual(config.params.language, 'id');
+      assert.strictEqual(config.params.domain_type, 'news');
+      return { data: { results: [{ title: 'Fresh', url: 'https://example.com/fresh', snippet: 'Fresh result' }] } };
+    };
+    try {
+      const tinyfish = require('../lib/tools/tinyfish-search');
+      const result = await tinyfish.execute('fresh Jakarta news', {
+        format: 'json',
+        recencyMinutes: 1440,
+        afterDate: '2026-01-01',
+        beforeDate: '2026-09-20',
+        location: 'id',
+        language: 'ID',
+        domainType: 'news'
+      });
+      assert.strictEqual(JSON.parse(result)[0].title, 'Fresh');
+    } finally {
+      axios.get = originalGet;
+    }
+  }
+
+  {
+    process.env.TINYFISH_API_KEY = 'test-tinyfish-key';
+    const originalGet = axios.get;
+    axios.get = async (_url, config) => {
+      assert.strictEqual(config.params.domain_type, 'research_paper');
+      assert.strictEqual(config.params.recency_minutes, undefined);
+      assert.strictEqual(config.params.after_date, undefined);
+      assert.strictEqual(config.params.before_date, undefined);
+      assert.strictEqual(config.params.pub_year_min, 2020);
+      assert.strictEqual(config.params.pub_year_max, 2026);
+      return { data: { results: [{ title: 'Paper', url: 'https://example.com/paper', snippet: 'Research' }] } };
+    };
+    try {
+      const tinyfish = require('../lib/tools/tinyfish-search');
+      const result = await tinyfish.execute('AI safety evaluation', {
+        format: 'json',
+        domainType: 'research_paper',
+        recencyMinutes: 1440,
+        afterDate: '2026-01-01',
+        beforeDate: '2026-09-20',
+        pubYearMin: 2020,
+        pubYearMax: 2026
+      });
+      assert.strictEqual(JSON.parse(result)[0].title, 'Paper');
+    } finally {
+      axios.get = originalGet;
     }
   }
 
