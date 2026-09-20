@@ -162,6 +162,17 @@ const LLM_BACKENDS = {
       extract:    10000    // not used by auditor
     }
   },
+  llamaAuditor: {
+    url: 'https://openrouter.ai/api/v1/chat/completions',
+    model: 'meta-llama/llama-3.3-70b-instruct',
+    // OpenRouter Llama restores an independent auditor with reliable JSON mode.
+    timeouts: {
+      reasoning: 45000,
+      toolCall:  45000,
+      audit:     45000,
+      extract:   15000
+    }
+  },
   kimi: {
     url: 'https://openrouter.ai/api/v1/chat/completions',
     model: 'moonshotai/kimi-k2',
@@ -184,12 +195,9 @@ function getFastLLMBackend() {
 }
 
 function getAuditBackend() {
-  // S3 audit uses Groq drafter (openai/gpt-oss-120b as of 2026-08-19).
-  // Previously llama-3.3-70b-versatile; Kimi K2 via OpenRouter was tried but
-  // was slower and stricter (more REJECTED/FIXABLE on valid answers).
-  // Kimi is still available as an emergency fallback in groq-client.js
-  // (kimiFirst/GROQ_TO_OPENROUTER) when Groq itself is down.
-  return LLM_BACKENDS.drafter;
+  // S3 uses an independent Llama auditor through OpenRouter. GPT-OSS remains
+  // the Groq fallback in two-pass-verification when OpenRouter is unavailable.
+  return LLM_BACKENDS.llamaAuditor;
 }
 
 // ==================== AI Models ====================

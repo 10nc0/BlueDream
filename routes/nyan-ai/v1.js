@@ -488,7 +488,7 @@ function registerV1Routes(app, deps) {
                             token_index:  'integer — position in the request books[] array',
                             fractal_id:   'string — unique book identifier',
                             title:        'string|null — book display name',
-                            tags:         'string[] — tenant-assigned tags',
+                            tags:         'string[] — reserved compatibility field; currently always empty',
                             stats: {
                                 message_count:   'integer',
                                 last_message_at: 'ISO8601|null'
@@ -520,7 +520,7 @@ function registerV1Routes(app, deps) {
                                 bootstrap_at: '2026-05-24T09:00:00.000Z',
                                 total_books: 2,
                                 books: [
-                                    { token_index: 0, fractal_id: 'book_t1_...', title: 'Alpha Book', tags: ['vehicle'], stats: { message_count: 42, last_message_at: '...' }, messages: ['...'] },
+                                    { token_index: 0, fractal_id: 'book_t1_...', title: 'Alpha Book', tags: [], stats: { message_count: 42, last_message_at: '...' }, messages: ['...'] },
                                     { token_index: 1, fractal_id: 'book_t2_...', title: 'Beta Book',  tags: [],          stats: { message_count: 7,  last_message_at: null }, messages: [] }
                                 ]
                             }

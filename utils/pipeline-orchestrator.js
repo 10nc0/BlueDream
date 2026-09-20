@@ -184,9 +184,11 @@ class PipelineOrchestrator {
     this.isIdentityQuery = config.isIdentityQuery;
     this.groqWithRetry = config.groqWithRetry;
     const llm = getLLMBackend();
+    const auditLlm = getAuditBackend();
     this.llmUrl = llm.url;
     this.llmModel = llm.model;
     this.llmTimeouts = llm.timeouts;
+    this.auditTimeout = auditLlm.timeouts.audit;
   }
   
   /**
@@ -794,12 +796,12 @@ class PipelineOrchestrator {
         if (_ddg) postHintCache.warm('duckduckgo', { query: _warmQuery }, () => _ddg.execute(_warmQuery));
         if (_exa) postHintCache.warm('exa', { query: _warmQuery }, () => _exa.execute(_warmQuery));
       } catch (_warmErr) { /* warm-up is best-effort */ }
-      logger.debug(`🌐 Playground realtime: cache warmed, running Brave cascade`);
+      logger.debug(`🌐 Playground realtime: cache warmed, running generic live-search cascade`);
     }
     // Deterministic cascade — separate block so the warm-up above cannot
     // short-circuit it via an else-if branch.
     if (_needsRealtime && query) {
-      logger.debug(`🌐 Real-time cascade: DDG → Brave for general query`);
+      logger.debug(`🌐 Real-time cascade: TinyFish → Brave → DDG for general query`);
 
       if (input.onStageChange) {
         input.onStageChange({ type: 'thinking', stage: 'Searching the web...' });
@@ -811,8 +813,11 @@ class PipelineOrchestrator {
         searchQuery = `${searchQuery} ${state.preflight.digestGeo}`;
         logger.debug(`🌍 Geo search: appended "${state.preflight.digestGeo}" to search query`);
       }
+      // Seed Metric owns a separate structured-data cadence and must never
+      // inherit the generic TinyFish-first provider order.
+      const liveSearchTier = state.preflight.mode === 'seed-metric' ? 'premium' : 'generic';
       const cascadeResult = this.searchKernel
-        ? await this.searchKernel.search({ query: searchQuery, tier: 'standard', clientIp })
+        ? await this.searchKernel.search({ query: searchQuery, tier: liveSearchTier, clientIp })
         : this.searchCascade
           ? await this.searchCascade({ query: searchQuery, strategy: 'ddg-first', clientIp })
           : { result: null, provider: null };
@@ -2685,7 +2690,7 @@ Output ONLY the corrected table and summary lines:`;
                   'Authorization': `Bearer ${this.groqToken}`,
                   'Content-Type': 'application/json'
                 },
-                timeout: this.llmTimeouts.audit
+                timeout: this.auditTimeout
               }
             }, 2, 'text');
             
@@ -2810,7 +2815,7 @@ Output ONLY the corrected table and summary lines:`;
           // Unified timestamp from pipeline state (single source of truth)
           timestamps: state.queryTimestamp
         },
-        this.llmTimeouts.audit
+        this.auditTimeout
       );
       const _auditLabel = getAuditBackend().model.includes('kimi') ? 'Kimi K2' : 'Llama';
       const _confStr = state.auditResult.confidence !== null && state.auditResult.confidence !== undefined
@@ -2901,8 +2906,11 @@ Output ONLY the corrected table and summary lines:`;
     logger.debug(`🔄 Retry ${state.retryCount}: Searching for better data...`);
     
     const searchQuery = await this.extractCoreQuestion(safeQuery, sanitizedHistory, getUrlAnchors(clientIp));
+    // Preserve Seed Metric's legacy Brave → DDG fallback. All other retry
+    // searches use the generic TinyFish → Brave → DDG cadence.
+    const retryTier = state.mode === 'seed-metric' ? 'premium' : 'generic';
     const retrySearch = this.searchKernel
-      ? await this.searchKernel.search({ query: searchQuery, tier: 'premium', clientIp })
+      ? await this.searchKernel.search({ query: searchQuery, tier: retryTier, clientIp })
       : this.searchCascade
         ? await this.searchCascade({ query: searchQuery, strategy: 'brave-first', clientIp })
         : { result: null, provider: null };

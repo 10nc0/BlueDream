@@ -76,19 +76,29 @@ Perform the dialectical audit and output JSON only.`;
     const auditBackend = getAuditBackend();
     const isReasoner = auditBackend.model.includes('reasoner');
     const isOpenRouter = auditBackend.url.includes('openrouter.ai');
-    const _auditLabel = isReasoner ? 'DeepSeek R1' : isOpenRouter ? 'Kimi K2' : 'Groq Llama';
+    // Groq's GPT-OSS models currently return HTTP 400/json_validate_failed
+    // when response_format=json_object is enabled. They do reliably follow
+    // JSON-only instructions, so treat them like other text-JSON backends.
+    const isGptOss = auditBackend.model.includes('gpt-oss');
+    const isKimi = auditBackend.model.includes('kimi');
+    const usesTextJson = isReasoner || isKimi || isGptOss;
+    const _auditLabel = isReasoner
+      ? 'DeepSeek R1'
+      : auditBackend.model.includes('llama')
+        ? 'Llama 3.3 70B'
+        : isKimi
+          ? 'Kimi K2'
+          : 'GPT-OSS 120B';
 
-    // OpenRouter (Kimi K2) does NOT support response_format — sending it
-    // causes an HTTP 400 Bad Request. Kimi follows JSON instructions from
-    // the system prompt, so we extract the JSON block from its text output.
-    // Groq does support response_format, so keep it for Llama.
+    // Kimi and GPT-OSS use text JSON. OpenRouter's Llama 3.3 explicitly
+    // supports response_format, so it keeps strict JSON mode.
     const requestBody = {
       model: auditBackend.model,
       messages: auditMessages,
       max_tokens: 800,
       ...(isReasoner
         ? { temperature: AI_MODELS.TEMPERATURE_DEEPSEEK }
-        : isOpenRouter
+        : usesTextJson
           ? { temperature: AI_MODELS.TEMPERATURE_PRECISE }
           : { temperature: AI_MODELS.TEMPERATURE_PRECISE, response_format: { type: 'json_object' } }
       )
@@ -112,6 +122,7 @@ Perform the dialectical audit and output JSON only.`;
     };
 
     let response;
+    let responseUsesTextJson = usesTextJson;
     try {
       response = await _doAuditCall(
         auditBackend.url, requestBody, auditHeaders,
@@ -126,20 +137,23 @@ Perform the dialectical audit and output JSON only.`;
         || primaryErr.code === 'ECONNRESET';
       if (isTimeout) throw primaryErr;   // let outer catch handle it
 
-      const { GROQ_API_KEY, PLAYGROUND_AI_KEY, PLAYGROUND_GROQ_TOKEN } = process.env;
-      const fallbackToken = GROQ_API_KEY || PLAYGROUND_AI_KEY || PLAYGROUND_GROQ_TOKEN;
+      const { resolveAIToken } = require('./groq-client');
+      const fallbackToken = resolveAIToken('audit') || resolveAIToken('playground');
       const { getLLMBackend } = require('../config/constants');
       const fallbackBackend = getLLMBackend();   // Groq Llama drafter config
 
       if (!fallbackToken || fallbackBackend.url === auditBackend.url) throw primaryErr;
 
       logger.warn(`⚠️ Audit primary (${_auditLabel}) failed [${primaryErr.message}] — retrying on Groq Llama`);
+      const fallbackUsesTextJson = fallbackBackend.model.includes('reasoner')
+        || fallbackBackend.url.includes('openrouter.ai')
+        || fallbackBackend.model.includes('gpt-oss');
       const fallbackBody = {
         model: fallbackBackend.model,
         messages: auditMessages,
         max_tokens: 800,
         temperature: AI_MODELS.TEMPERATURE_PRECISE,
-        response_format: { type: 'json_object' }
+        ...(!fallbackUsesTextJson ? { response_format: { type: 'json_object' } } : {})
       };
       const fallbackHeaders = {
         'Authorization': `Bearer ${fallbackToken}`,
@@ -149,14 +163,15 @@ Perform the dialectical audit and output JSON only.`;
         fallbackBackend.url, fallbackBody, fallbackHeaders,
         timeout || fallbackBackend.timeouts.audit
       );
+      responseUsesTextJson = fallbackUsesTextJson;
     }
 
     let rawContent = response.data.choices?.[0]?.message?.content || '{}';
 
-    // For non-JSON-mode providers (reasoner, OpenRouter/Kimi) extract the
+    // For non-JSON-mode providers extract the
     // JSON block from the text — they may wrap it in markdown fences.
-    if (isReasoner || isOpenRouter) {
-      const jsonMatch = rawContent.match(/```json\s*([\s\S]*?)```/) ||
+    if (responseUsesTextJson) {
+      const jsonMatch = rawContent.match(/```json\s*([\s\S]*?)```/i) ||
                         rawContent.match(/(\{[\s\S]*\})/);
       rawContent = jsonMatch ? jsonMatch[1].trim() : rawContent;
     }

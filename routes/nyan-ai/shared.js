@@ -4,13 +4,19 @@ const { resolveAIToken, groqWithRetry } = require('../../utils/groq-client');
 const { isIdentityQuery } = require('../../utils/query-classifiers');
 const { extractPsiEma } = require('../../utils/psi-ema-extract');
 const { createPipelineOrchestrator, fastStreamPersonality } = require('../../utils/pipeline-orchestrator');
-const { AI_MODELS, getLLMBackend } = require('../../config/constants');
+const { AI_MODELS, getLLMBackend, getAuditBackend } = require('../../config/constants');
 const { loadTools, getTool } = require('../../lib/tools/registry');
 const { cascade: searchCascade, cascadeMulti: searchCascadeMulti } = require('../../lib/tools/search-cascade');
 const { searchKernel } = require('../../lib/tools/search-kernel');
 
 const _llm = getLLMBackend();
+const _auditLlm = getAuditBackend();
 const PLAYGROUND_GROQ_TOKEN = resolveAIToken('playground');
+const AUDIT_TOKEN = _auditLlm.url.includes('openrouter.ai')
+    ? process.env.OPENROUTER_API_KEY
+    : _auditLlm.url.includes('deepseek.com')
+        ? process.env.DEEPSEEK_API
+        : (resolveAIToken('audit') || resolveAIToken('playground'));
 
 const API_UNITS = {
     'psi-ema': {
@@ -109,9 +115,8 @@ async function extractCoreQuestion(message, conversationHistory = [], urlAnchors
 
 const orchestrator = createPipelineOrchestrator({
     groqToken: resolveAIToken('playground'),
-    // S3 audit: uses Groq Llama (drafter backend). Do NOT include OPENROUTER_API_KEY
-    // here — sending an OpenRouter token to Groq's endpoint always returns 401.
-    auditToken: resolveAIToken('audit') || resolveAIToken('playground'),
+    // S3 audit token follows the independently selected audit backend.
+    auditToken: AUDIT_TOKEN,
     groqVisionToken: resolveAIToken('vision'),
     searchKernel,
     // Deprecated — kept for one-release backward compat; kernel takes precedence

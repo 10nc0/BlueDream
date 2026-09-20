@@ -23,6 +23,7 @@
 
 const { detectSeedMetricIntent } = require('../prompts/seed-metric');
 const { detectForexPair, isForexQuery }  = require('../utils/forex-fetcher');
+const { shouldSearchDDG } = require('../utils/preflight-router');
 
 let passed = 0;
 let failed = 0;
@@ -246,6 +247,33 @@ test('USD/JPY rate → forex', () => {
 
 test('dollar to euro → forex', () => {
     assert(routeQuery('dollar to euro') === 'forex', 'expected forex');
+});
+
+test('arithmetic beginning with "what is 1" → not forex', () => {
+    const query = 'What is 17 multiplied by 6?';
+    assert(!isForexQuery(query), 'arithmetic must not trigger forex intent');
+    assert(!detectForexPair(query), 'arithmetic must not produce a forex pair');
+    assert(routeQuery(query) !== 'forex', 'arithmetic must not route to forex');
+});
+
+test('"how much is" without a currency → not forex', () => {
+    const query = 'How much is 144 divided by 12?';
+    assert(!isForexQuery(query), 'generic arithmetic language must not trigger forex');
+});
+
+test('"convert" without a currency → not forex', () => {
+    assert(!isForexQuery('Convert this temperature to Celsius'), 'non-currency conversion must not trigger forex');
+});
+
+test('how much is 1 euro in dollars → forex', () => {
+    assert(isForexQuery('How much is 1 euro in dollars?'), 'currency conversion must trigger forex');
+    assert(routeQuery('How much is 1 euro in dollars?') === 'forex', 'currency conversion must route to forex');
+});
+
+test('deterministic arithmetic → no generic web search', () => {
+    assert(!shouldSearchDDG('What is 17 multiplied by 6?'), 'simple arithmetic must not trigger web search');
+    assert(!shouldSearchDDG('Calculate 144 divided by 12'), 'simple division must not trigger web search');
+    assert(!shouldSearchDDG('Compute 9 × 8'), 'symbolic arithmetic must not trigger web search');
 });
 
 // ----------------------------------------------------------------

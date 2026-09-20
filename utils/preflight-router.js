@@ -97,6 +97,7 @@ const ABSTRACT_TOPIC_PATTERNS = [
   /\b(prove\s+that|proof\s+of|theorem|lemma|corollary|axiom|postulate|QED)\b/i,
   /\b(integral|derivative|eigenvalue|eigenvector|determinant|matrix\s+multiplication|polynomial\s+division)\b/i,
   /\b(solve\s+for\s+[xyz]|factor|simplif|expand\s+the\s+expression|evaluate\s+the\s+(limit|sum|integral))\b/i,
+  /\b(?:what\s+is|calculate|compute|evaluate)\s+[-+]?\d+(?:\.\d+)?\s*(?:[+×x*÷/−-]|plus|minus|times|multiplied\s+by|divided\s+by)\s*[-+]?\d+(?:\.\d+)?\b/i,
   /\b(write\s+(?:me\s+)?(?:a\s+)?(?:poem|song|story|essay|haiku|limerick|sonnet|novel|script|screenplay))\b/i,
   /\b(imagine|creative\s+writing|fictional|roleplay|pretend|hypothetical\s+scenario)\b/i,
   /\b(hello|hi|hey|good\s+(morning|afternoon|evening)|how\s+are\s+you|what'?s?\s+up|thanks|thank\s+you)\b/i,

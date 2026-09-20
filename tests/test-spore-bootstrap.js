@@ -66,7 +66,7 @@ function makeMockPool(queryHandler) {
 
 /**
  * Default mock pool that serves all three query types for a given set of books.
- * bookData map: fractal_id → { tags, message_count, last_message_at, messages[] }
+ * bookData map: fractal_id → { title, message_count, last_message_at, messages[] }
  */
 function makeDefaultPool(bookData) {
     bookData = bookData || {};
@@ -81,9 +81,9 @@ function makeDefaultPool(bookData) {
         const fractalId = params[0];
         const data = bookData[fractalId] || {};
 
-        // Books table (title + tags)
-        if (sql.includes('.books') && sql.includes('tags')) {
-            return { rows: [{ name: data.title || 'Untitled', tags: data.tags || [] }] };
+        // Books table (book-level tags were removed; the wire field remains [])
+        if (sql.includes('.books') && sql.includes('SELECT name')) {
+            return { rows: [{ name: data.title || 'Untitled' }] };
         }
 
         // Stats (COUNT + MAX)
@@ -228,7 +228,6 @@ async function main() {
         const pool = makeDefaultPool({
             [FRACTAL_A]: {
                 title: 'Alpha Book',
-                tags:  ['vehicle', 'repair'],
                 message_count: 42,
                 last_message_at: new Date(msgTs),
                 messages: [
@@ -245,7 +244,7 @@ async function main() {
             assertEqual(book.fractal_id, FRACTAL_A);
             assertEqual(book.title, 'Alpha Book');
             assert(Array.isArray(book.tags), 'tags must be array');
-            assert(book.tags.includes('vehicle'), 'tags must include vehicle');
+            assertEqual(book.tags.length, 0, 'book-level tags were removed; compatibility field must be empty');
             assertEqual(book.stats.message_count, 42);
             assert(book.stats.last_message_at, 'last_message_at should be present');
             assertEqual(book.messages.length, 1);
@@ -352,8 +351,8 @@ async function main() {
             if (sql.includes('core.book_registry')) {
                 return { rows: [REGISTRY[0]] };
             }
-            if (sql.includes('.books') && sql.includes('tags')) {
-                return { rows: [{ name: 'A', tags: [] }] };
+            if (sql.includes('.books') && sql.includes('SELECT name')) {
+                return { rows: [{ name: 'A' }] };
             }
             if (sql.includes('COUNT(*)')) {
                 return { rows: [{ message_count: 0, last_message_at: null }] };
@@ -385,7 +384,7 @@ async function main() {
         let capturedLimit = null;
         const pool = makeMockPool(function(sql, params) {
             if (sql.includes('core.book_registry')) return { rows: [REGISTRY[0]] };
-            if (sql.includes('.books') && sql.includes('tags')) return { rows: [{ name: 'A', tags: [] }] };
+            if (sql.includes('.books') && sql.includes('SELECT name')) return { rows: [{ name: 'A' }] };
             if (sql.includes('COUNT(*)')) return { rows: [{ message_count: 0, last_message_at: null }] };
             if (sql.includes('sender_name')) { capturedLimit = params[1]; return { rows: [] }; }
             return { rows: [] };

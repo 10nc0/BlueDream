@@ -169,17 +169,20 @@ function detectForexPair(query) {
  */
 function isForexQuery(query) {
   if (!query) return false;
-  const lower = query.toLowerCase();
-  
-  const forexKeywords = [
-    'forex', 'fx', 'currency', 'exchange rate', 'exchange rates',
-    'usd', 'jpy', 'eur', 'gbp', 'dollar', 'yen', 'euro', 'pound',
-    'to yen', 'to dollar', 'to euro', 'vs dollar', 'vs yen',
-    'dollar rate', 'yen rate', 'forex rate', 'currency rate',
-    'how much is', 'what is 1', 'convert'
-  ];
-  
-  return forexKeywords.some(kw => lower.includes(kw));
+  const text = String(query);
+
+  // Explicit market intent is sufficient on its own.
+  if (/\b(?:forex|foreign\s+exchange|fx\s+(?:rate|rates|market)|currenc(?:y|ies)|exchange\s+rates?)\b/i.test(text)) {
+    return true;
+  }
+
+  // Generic conversion language is only forex when an actual currency is
+  // present. Broad substrings such as "what is 1" made arithmetic questions
+  // like "What is 17 multiplied by 6?" look like currency requests.
+  const hasCurrency = /\b(?:usd|jpy|eur|gbp|aud|cad|nzd|chf|sgd|hkd|cny|krw|inr|idr|dollars?|bucks?|yen|euros?|pounds?|sterling|francs?|yuan|renminbi|won|rupees?|rupiah)\b/i.test(text);
+  const hasConversionIntent = /\b(?:convert|conversion|exchange|rates?|worth|against|versus|vs|to|in)\b/i.test(text);
+
+  return hasCurrency && hasConversionIntent;
 }
 
 /**
