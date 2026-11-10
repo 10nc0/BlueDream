@@ -41,8 +41,17 @@ async function transcribeAudioList(audioItems, clientIp, opts = {}) {
 }
 
 async function fetchUrlsFromMessage(message, extractedContent, opts = {}) {
-    const { sseStage, isClientDisconnected } = opts;
+    const { sseStage, isClientDisconnected, publicReader } = opts;
     const detectedUrls = extractUrls(message || '');
+    if (publicReader) {
+        const { formatEvidence } = require('../../lib/public-reader');
+        publicReader.admitSources(detectedUrls);
+        for (const url of detectedUrls.slice(0, 3)) {
+            if (isClientDisconnected?.() || publicReader.signal.aborted) break;
+            extractedContent.push(formatEvidence(await publicReader.read({ url })));
+        }
+        return;
+    }
     for (const rawUrl of detectedUrls.slice(0, 3)) {
         if (isClientDisconnected?.()) break;
         if (sseStage) {

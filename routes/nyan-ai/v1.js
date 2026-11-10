@@ -71,6 +71,7 @@ function registerV1Routes(app, deps) {
         const auth = authenticateApiKey(req);
         if (auth.error) return res.status(auth.error).json({ error: auth.message });
         const matchedLabel = auth.label;
+        req.aiApplication = matchedLabel;
 
         const { message, mode, photos, documents, byok } = req.body || {};
         if (!message || typeof message !== 'string' || message.trim().length === 0) {
@@ -98,6 +99,7 @@ function registerV1Routes(app, deps) {
             byokToken = byok.api_key.trim();
             byokModel = byok.model.trim();
             byokUrl   = byok.base_url ? byok.base_url.trim() : null;
+            req.aiByokToken = byokToken;
         }
 
         const photoList = [];
@@ -137,6 +139,7 @@ function registerV1Routes(app, deps) {
         const clientIp = req.ip || '127.0.0.1';
 
         try {
+            await require('../../utils/ai-capacity').admission(photoList.length ? 'vision' : 'text');
             const mediaInfo = [];
             if (photoList.length > 0) mediaInfo.push(`${photoList.length} photo(s)`);
             if (docList.length > 0) mediaInfo.push(`${docList.length} doc(s)`);
@@ -248,9 +251,10 @@ function registerV1Routes(app, deps) {
 
         } catch (error) {
             logger.error({ err: error }, '❌ Nyan API v1 error');
-            res.status(500).json({
+            if (error.code === 'AI_CAPACITY') res.set('Retry-After', String(error.retryAfter || 60));
+            res.status(error.code === 'AI_CAPACITY' ? error.status : 500).json({
                 success: false,
-                error: 'Internal processing error',
+                error: error.code === 'AI_CAPACITY' ? error.message : 'Internal processing error',
                 processingMs: Date.now() - startTime
             });
         }

@@ -1,5 +1,5 @@
         console.log('🚀 Main script loading...');
-        
+
         // ===================================================================
         // MODULAR ARCHITECTURE
         // StateService, AuthService, DataSync, BooksModule, MessagesModule loaded before dashboard.js
@@ -2835,6 +2835,13 @@
                                         📚 Searching all authorized books
                                     </div>
                                     
+                                    <div id="nyanAuditImagesOption" style="margin-top: 0.75rem; padding: 0.5rem 0.75rem; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 6px; flex-shrink: 0;">
+                                        <label for="nyanAuditIncludeImages" style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; color: #e2e8f0; font-size: 0.8rem; font-weight: 600;">
+                                            <input id="nyanAuditIncludeImages" type="checkbox" aria-describedby="nyanAuditIncludeImagesHelp" style="width: 1rem; height: 1rem; margin: 0; accent-color: #a855f7; cursor: pointer;" />
+                                            <span>Include images and scanned pages</span>
+                                        </label>
+                                        <div id="nyanAuditIncludeImagesHelp" style="margin: 0.3rem 0 0 1.5rem; color: #94a3b8; font-size: 0.7rem; line-height: 1.4;">Uses extra shared vision budget. Checks up to 3 selected images/pages.</div>
+                                    </div>
                                     
                                     <button id="nyanAuditCheckBtn" class="form-button" style="width: 100%; margin-top: 0.75rem; padding: 0.75rem; background: linear-gradient(135deg, #a855f7, #ec4899); border: none; border-radius: 8px; color: white; font-weight: 600; cursor: pointer; transition: opacity 0.2s; flex-shrink: 0;">
                                         🔮 Run AI Check
@@ -2888,6 +2895,9 @@
             }
             
             document.getElementById('nyanAuditMessage').value = '';
+            const includeImagesBox = document.getElementById('nyanAuditIncludeImages');
+            if (includeImagesBox) { includeImagesBox.checked = false; includeImagesBox.disabled = false; }
+            window.nyanAuditInFlight = false;
             
             const resultContent = document.getElementById('nyanAuditResultContent');
             const emptyState = document.createElement('div');
@@ -3107,9 +3117,87 @@
             return matchedBooks;
         }
         
-        async function runNyanAuditCheck() {
+        function buildNyanImageAuditSection(imageAudit, includeImages) {
+            const box = document.createElement('div');
+            box.className = 'nyan-image-audit';
+            box.setAttribute('data-testid', 'nyan-image-audit');
+            box.style.cssText = 'padding: 0.625rem 0.75rem; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 8px; margin-bottom: 0.75rem; font-size: 0.75rem; color: #cbd5e1;';
+            const title = document.createElement('div');
+            title.style.cssText = 'font-weight: 600; color: #94a3b8; margin-bottom: 0.35rem;';
+            title.textContent = 'Image and scanned page check';
+            box.appendChild(title);
+            const line = (text, cls, color) => {
+                const d = document.createElement('div');
+                d.className = cls;
+                d.style.cssText = 'margin-bottom: 0.25rem;' + (color ? ' color: ' + color + ';' : '');
+                d.textContent = text;
+                box.appendChild(d);
+                return d;
+            };
+            if (!imageAudit || typeof imageAudit !== 'object') {
+                line(includeImages ? 'Images were requested, but the server returned no image audit details. Original images were not confirmed as checked.' : 'Text only. Original images and scanned pages were not checked.', 'nyan-image-audit-mode', '#f59e0b');
+                return box;
+            }
+            const mode = imageAudit.mode === 'visual' ? 'visual' : 'text_only';
+            const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
+            const inspected = num(imageAudit.inspected), available = num(imageAudit.available), skipped = num(imageAudit.skipped);
+            line(mode === 'visual' ? 'Mode: visual (images inspected)' : 'Mode: text only (original images not checked)', 'nyan-image-audit-mode', mode === 'visual' ? '#22d3ee' : '#f59e0b');
+            const covParts = ['Inspected ' + inspected + ' of ' + available + ' available', 'skipped ' + skipped];
+            if (imageAudit.coverage !== undefined && imageAudit.coverage !== null && imageAudit.coverage !== '') covParts.push('coverage: ' + String(imageAudit.coverage));
+            line(covParts.join(' · '), 'nyan-image-audit-counts');
+            if (mode === 'visual' && (skipped > 0 || inspected < available)) {
+                line('Partial coverage: not every image or page was inspected.', 'nyan-image-audit-partial', '#f59e0b');
+            }
+            if (imageAudit.verdict) line('Visual verdict: ' + String(imageAudit.verdict), 'nyan-image-audit-verdict');
+            if (imageAudit.model) line('Vision model: ' + String(imageAudit.model), 'nyan-image-audit-model', '#64748b');
+            const limits = Array.isArray(imageAudit.limitations) ? imageAudit.limitations.filter(l => l !== null && l !== undefined && String(l).trim()) : [];
+            if (limits.length) {
+                const ul = document.createElement('ul');
+                ul.className = 'nyan-image-audit-limitations';
+                ul.setAttribute('aria-label', 'Image audit limitations');
+                ul.style.cssText = 'margin: 0.25rem 0 0.35rem 1rem; padding: 0; color: #fbbf24;';
+                limits.forEach(l => { const li = document.createElement('li'); li.textContent = String(l); ul.appendChild(li); });
+                box.appendChild(ul);
+            }
+            const evidence = Array.isArray(imageAudit.evidence) ? imageAudit.evidence : [];
+            if (evidence.length) {
+                const ul = document.createElement('ul');
+                ul.className = 'nyan-image-audit-evidence';
+                ul.setAttribute('aria-label', 'Image sources');
+                ul.style.cssText = 'margin: 0.25rem 0 0 1rem; padding: 0;';
+                evidence.forEach((ev, i) => {
+                    if (!ev || typeof ev !== 'object') return;
+                    const li = document.createElement('li');
+                    li.style.cssText = 'margin-bottom: 0.2rem;';
+                    const label = [ev.bookName ? String(ev.bookName) : 'Source ' + (i + 1), ev.messageId ? 'message ' + String(ev.messageId) : '', ev.page !== undefined && ev.page !== null ? 'page ' + String(ev.page) : ''].filter(Boolean).join(', ');
+                    const url = typeof ev.citationUrl === 'string' ? ev.citationUrl : '';
+                    // Same-origin relative paths only
+                    if (url.startsWith('/') && !url.startsWith('//')) {
+                        const a = document.createElement('a');
+                        a.className = 'nyan-image-audit-citation';
+                        a.href = url;
+                        a.target = '_blank';
+                        a.rel = 'noopener noreferrer';
+                        a.style.cssText = 'color: #22d3ee; text-decoration: underline;';
+                        a.textContent = label;
+                        li.appendChild(a);
+                    } else {
+                        li.appendChild(document.createTextNode(label));
+                    }
+                    if (ev.status) li.appendChild(document.createTextNode(' (' + String(ev.status) + ')'));
+                    ul.appendChild(li);
+                });
+                box.appendChild(ul);
+            }
+            return box;
+        }
+
+        async function runNyanAuditCheck(frozenIncludeImages) {
             const message = document.getElementById('nyanAuditMessage').value.trim();
             const btn = document.getElementById('nyanAuditCheckBtn');
+            const includeImagesBox = document.getElementById('nyanAuditIncludeImages');
+            if (window.nyanAuditInFlight) return;
+            const includeImages = typeof frozenIncludeImages === 'boolean' ? frozenIncludeImages : !!(includeImagesBox && includeImagesBox.checked);
             const resultContent = document.getElementById('nyanAuditResultContent');
             const selectedBookIds = window.auditSelectedBooks ? Array.from(window.auditSelectedBooks) : [];
             
@@ -3120,6 +3208,9 @@
             
             btn.disabled = true;
             btn.textContent = '🌈 Analyzing...';
+            window.nyanAuditInFlight = true;
+            if (includeImagesBox) { includeImagesBox.checked = includeImages; includeImagesBox.disabled = true; }
+            let retryScheduled = false;
             
             const loadingDiv = document.createElement('div');
             loadingDiv.style.cssText = 'display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; text-align: center; padding: 2rem 1rem;';
@@ -3145,11 +3236,13 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ 
                         query: message,
-                        bookIds: selectedBookIds
+                        bookIds: selectedBookIds,
+                        includeImages: includeImages
                     })
                 });
                 
-                const data = await response.json();
+                let data;
+                try { data = await response.json(); } catch (_) { data = {}; }
 
                 if (response.status === 503 && data.code === 'warming_up') {
                     const warmupDiv = document.createElement('div');
@@ -3163,14 +3256,14 @@
                     warmupText.textContent = 'Still warming up — retrying in 5 seconds...';
                     warmupDiv.appendChild(warmupText);
                     resultContent.replaceChildren(warmupDiv);
-                    btn.disabled = false;
-                    btn.textContent = '🔮 Run AI Check';
-                    setTimeout(() => runNyanAuditCheck(), 5000);
+                    retryScheduled = true;
+                    window.nyanAuditInFlight = false;
+                    setTimeout(() => runNyanAuditCheck(includeImages), 5000);
                     return;
                 }
 
                 if (!response.ok) {
-                    throw new Error(data.error || 'AI audit failed');
+                    throw new Error(data.error || data.message || ('AI audit failed (HTTP ' + response.status + ')'));
                 }
                 
                 const bookInfo = data.bookContext 
@@ -3205,6 +3298,7 @@
                 answerP.textContent = data.answer;
                 answerBox.appendChild(answerP);
                 fragment.appendChild(answerBox);
+                fragment.appendChild(buildNyanImageAuditSection(data.imageAudit, typeof data.includeImages === 'boolean' ? data.includeImages : includeImages));
                 
                 const modelDiv = document.createElement('div');
                 modelDiv.style.cssText = 'font-size: 0.7rem; color: #64748b; text-align: right;';
@@ -3233,8 +3327,12 @@
                 errorDiv.appendChild(errorText);
                 resultContent.replaceChildren(errorDiv);
             } finally {
-                btn.disabled = false;
-                btn.textContent = '🔮 Run AI Check';
+                if (!retryScheduled) {
+                    btn.disabled = false;
+                    btn.textContent = '🔮 Run AI Check';
+                    if (includeImagesBox) includeImagesBox.disabled = false;
+                }
+                if (!retryScheduled) window.nyanAuditInFlight = false;
             }
         }
         
@@ -3486,6 +3584,25 @@
                 truncatedIndicator.textContent = '⚠ response truncated at source';
                 bodyWrap.appendChild(truncatedIndicator);
                 card.appendChild(bodyWrap);
+
+                {
+                    const ia = parsed.imageAudit || (parsed.data_extracted && parsed.data_extracted.imageAudit) || null;
+                    const iaDiv = document.createElement('div');
+                    iaDiv.className = 'audit-log-image-audit';
+                    iaDiv.style.cssText = 'font-size: 0.7rem; margin-top: 0.375rem;';
+                    if (ia && typeof ia === 'object') {
+                        const visual = ia.mode === 'visual';
+                        const n = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
+                        let t = visual ? 'Images: visual check, inspected ' + n(ia.inspected) + ' of ' + n(ia.available) : 'Images: text only, original images not checked';
+                        if (ia.coverage !== undefined && ia.coverage !== null && ia.coverage !== '') t += ' (coverage: ' + String(ia.coverage) + ')';
+                        iaDiv.style.color = visual ? '#22d3ee' : '#f59e0b';
+                        iaDiv.textContent = t;
+                    } else {
+                        iaDiv.style.color = '#64748b';
+                        iaDiv.textContent = 'Images: original images not checked';
+                    }
+                    card.appendChild(iaDiv);
+                }
 
                 if (confidence) {
                     const confDiv = document.createElement('div');

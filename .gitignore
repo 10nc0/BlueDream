@@ -106,3 +106,6 @@ notebook.md
 *.sql
 !migrations/
 !migrations/**/*.sql
+
+# Generated evaluations/test output are not application assets.
+/generated-artifacts/

@@ -154,6 +154,7 @@ async function executeCompoundQuery(compoundParts, opts) {
             extractedContent: part.includeDocuments ? (extractedContent || []) : [],
             history: history || [],
             clientIp,
+            ...(opts.publicReader && { publicReader: opts.publicReader, signal: opts.signal }),
             sessionLens: carriedSessionLens,
             isVisionRequest: !!(part.includePhotos && photoList?.length > 0),
             ...(sseStage && { streaming: true, onStageChange: sseStage }),

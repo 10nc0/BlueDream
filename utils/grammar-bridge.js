@@ -173,7 +173,7 @@ async function bridgeQuery(rawQuery, sessionLens = {}, groqToken = null) {
   const intent = detectIntent(rawQuery);
 
   try {
-    const fields = await extractStructuredFields(rawQuery, groqToken || process.env.PLAYGROUND_GROQ_TOKEN || process.env.GROQ_API_KEY);
+    const fields = await extractStructuredFields(rawQuery, groqToken || process.env.OPENROUTER_API_KEY);
 
     const lens = fields.lens && typeof fields.lens === 'string' && fields.lens.length > 0 ? fields.lens : null;
     const updatedSessionLens = updateSessionLens(sessionLens, lens);

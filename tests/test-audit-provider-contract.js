@@ -44,16 +44,16 @@ async function run() {
     );
 
     assert(capturedBody, 'audit request body must be sent');
-    assert.strictEqual(capturedBody.model, 'meta-llama/llama-3.3-70b-instruct');
+    assert.strictEqual(capturedBody.model, 'meta/muse-ember');
     assert.strictEqual(
       Object.prototype.hasOwnProperty.call(capturedBody, 'response_format'),
       true,
-      'OpenRouter Llama audit requests must use supported JSON mode'
+      'Muse Ember audit requests must use supported JSON mode'
     );
     assert.deepStrictEqual(capturedBody.response_format, { type: 'json_object' });
     assert.strictEqual(result.verdict, 'APPROVED');
     assert.strictEqual(result.confidence, 97);
-    console.log('✅ OpenRouter Llama audit contract test passed');
+    console.log('Muse Ember audit contract test passed');
   } finally {
     axios.post = originalPost;
   }

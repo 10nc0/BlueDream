@@ -480,6 +480,23 @@
             margin-left: calc(32px + 0.75rem);
         }
 
+        .cat-loader-note,
+        .cat-loader-trail {
+            color: #64748b;
+            font-size: 0.7rem;
+            margin-left: calc(32px + 0.75rem);
+            max-width: calc(100% - 32px - 0.75rem);
+            overflow-wrap: anywhere;
+        }
+        .cat-loader-note { color: #94a3b8; }
+        .cat-loader-trail {
+            list-style: none;
+            padding: 0;
+            margin-top: 0.1rem;
+            opacity: 0.75;
+        }
+        .cat-loader-trail li::before { content: "\2022\00a0"; }
+
         /* Accessibility: respect the system reduced-motion preference. */
         @media (prefers-reduced-motion: reduce) {
             *, *::before, *::after {
@@ -1127,7 +1144,7 @@
     <!-- JSZip removed - server handles compression, client sends uncompressed -->
     <script src="/js/ui/cat-animation.js?v=20260826"></script>
     <script src="/js/constants.js?v=20260326"></script>
-    <script src="/js/playground.js?v=20260819"></script>
+    <script src="/js/playground.js?v=20261023-progress"></script>
     <script src="/js/sw-register.js?v=20260326"></script>
 </body>
 </html>

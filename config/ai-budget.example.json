@@ -1,0 +1,22 @@
+{
+  "global": { "tokens": null, "usd": null },
+  "tenant": { "tokens": null, "usd": null },
+  "principal": { "tokens": null, "usd": null },
+  "providers": {},
+  "maxConcurrency": 4,
+  "maxAuditConcurrency": 2,
+  "models": {
+    "meta/muse-ember": {
+      "inputUsdPerMillion": 0.1,
+      "outputUsdPerMillion": 0.5,
+      "imageTokens": 8192
+    }
+  },
+  "services": {},
+  "bookVision": {
+    "enabled": false,
+    "model": "meta/muse-ember",
+    "contractApproved": false,
+    "dataHandlingApproved": false
+  }
+}

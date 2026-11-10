@@ -258,7 +258,7 @@ async function analyzePageWithGroqVision(imageBase64, pageNum, GROQ_TOKEN) {
         const response = await groqWithRetry(() => axios.post(
             GROQ_API_URL,
             {
-                model: 'groq/compound', // vision/routing model (llama-4-scout retired 2026-08-19)
+                model: AI_MODELS.VISION_MODEL,
                 messages: [
                     {
                         role: 'user',
@@ -361,7 +361,7 @@ VERIFICATION: After counting, verify by recount. If complex tricyclic, explain r
 }
 
 async function analyzePDFVisualContent(buffer, fileName, options = {}) {
-    const PLAYGROUND_GROQ_VISION_TOKEN = process.env.PLAYGROUND_GROQ_VISION_TOKEN;
+    const PLAYGROUND_GROQ_VISION_TOKEN = process.env.OPENROUTER_API_KEY;
     
     if (!PLAYGROUND_GROQ_VISION_TOKEN) {
         logger.warn('⚠️ PLAYGROUND_GROQ_VISION_TOKEN not configured - skipping PDF visual analysis');

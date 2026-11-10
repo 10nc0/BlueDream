@@ -1036,37 +1036,98 @@ function createCatLoader(parent, opening) {
 
     const emoji = document.createElement('span');
     emoji.className = 'cat-thinking';
+    emoji.setAttribute('aria-hidden', 'true');
     emoji.textContent = opening?.emoji || '🐾';
 
+    // Current stage — the only live region; announced on change, never on tick.
     const status = document.createElement('span');
     status.className = 'cat-loader-text';
+    status.setAttribute('role', 'status');
+    status.setAttribute('aria-live', 'polite');
+    status.setAttribute('aria-atomic', 'true');
     status.textContent = opening?.text || 'Routing your message...';
 
     row.appendChild(emoji);
     row.appendChild(status);
 
+    // Elapsed metadata — not live (would spam screen readers every tick).
     const ticker = document.createElement('div');
     ticker.className = 'cat-loader-ticker';
-    ticker.textContent = '🐾 0.0s';
+    ticker.setAttribute('aria-hidden', 'true');
+    ticker.textContent = 'Total 0s';
+
+    const note = document.createElement('div');
+    note.className = 'cat-loader-note';
+    note.hidden = true;
+
+    const trail = document.createElement('ol');
+    trail.className = 'cat-loader-trail';
+    trail.setAttribute('aria-label', 'Recent activity');
+    trail.hidden = true;
 
     wrap.appendChild(row);
     wrap.appendChild(ticker);
+    wrap.appendChild(note);
+    wrap.appendChild(trail);
     parent.appendChild(wrap);
 
+    const MAX_TRAIL = 3;
+    const SLOW_MS = 12000;
+    const fmt = (ms) => {
+        const sec = Math.floor(ms / 1000);
+        return sec < 60 ? sec + 's' : Math.floor(sec / 60) + 'm ' + String(sec % 60).padStart(2, '0') + 's';
+    };
     const startedAt = performance.now();
-    const tickerInterval = setInterval(() => {
-        const elapsed = (performance.now() - startedAt) / 1000;
-        ticker.textContent = `🐾 ${elapsed.toFixed(1)}s`;
-    }, 100);
+    let stageAt = startedAt;
+    let stageText = status.textContent;
+    let hasRealStage = false;
+    const done = [];
+    let stopped = false;
+
+    function render() {
+        const now = performance.now();
+        const inStage = now - stageAt;
+        ticker.textContent = hasRealStage
+            ? 'This step ' + fmt(inStage) + ' · total ' + fmt(now - startedAt)
+            : 'Total ' + fmt(now - startedAt);
+        const slow = inStage >= SLOW_MS;
+        if (slow !== !note.hidden) {
+            note.hidden = !slow;
+            note.textContent = slow
+                ? 'Still waiting on this step. Slower source or model responses can take longer.'
+                : '';
+        }
+    }
+    const tickerInterval = setInterval(render, 1000);
 
     return {
         el: wrap,
         setStage(stage) {
+            if (stopped) return;
             const p = stageToPersona(stage);
+            const text = String(p.text || '').slice(0, 160);
+            if (!text || text === stageText) return; // no duplicate-stage spam
+            const now = performance.now();
+            if (hasRealStage) {
+                done.push({ text: stageText, ms: now - stageAt });
+                while (done.length > MAX_TRAIL) done.shift();
+                trail.textContent = '';
+                for (const d of done) {
+                    const li = document.createElement('li');
+                    li.textContent = d.text + ' · ' + fmt(d.ms);
+                    trail.appendChild(li);
+                }
+                trail.hidden = false;
+            }
+            hasRealStage = true;
+            stageText = text;
+            stageAt = now;
             emoji.textContent = p.emoji;
-            status.textContent = p.text;
+            status.textContent = text;
+            render();
         },
         stop() {
+            stopped = true;
             clearInterval(tickerInterval);
             wrap.remove();
         }

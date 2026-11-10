@@ -1,6 +1,7 @@
 const CITY_EXPAND = { 'la': 'los angeles', 'ny': 'new york', 'nyc': 'new york city', 'sf': 'san francisco', 'dc': 'washington dc', 'hk': 'hong kong', 'kl': 'kuala lumpur' };
 
 const COUNTRY_TO_CITY = {
+  'saudi arabia': 'riyadh', 'south africa': 'johannesburg',
   'united kingdom': 'london', 'united states': 'new york', 'south korea': 'seoul',
   'united arab emirates': 'dubai', 'vietnam': 'hanoi', 'korea': 'seoul',
   'japan': 'tokyo', 'china': 'beijing', 'indonesia': 'jakarta',
@@ -44,6 +45,7 @@ const _CITY_STATES = {
   'hongkong':  'Hong Kong',
   'dubai':     'United Arab Emirates',
   'abu dhabi': 'United Arab Emirates',
+  'jeddah':    'Saudi Arabia',
   'monaco':    'Monaco',
   'macau':     'Macao',
   'macao':     'Macao',
@@ -71,6 +73,8 @@ for (const _city of [
 }
 
 const COUNTRY_CITY_MAP = {
+  'saudi arabia': ['riyadh'], 'south africa': ['johannesburg'],
+  'united kingdom': ['london'],
   'vietnam': ['hanoi', 'ho chi minh'],
   'korea': ['seoul'], 'south korea': ['seoul'],
   'japan': ['tokyo'], 'china': ['beijing', 'shanghai'],
@@ -91,11 +95,14 @@ const COUNTRY_CITY_MAP = {
   'chile': ['santiago'], 'peru': ['lima'],
 };
 
-const KNOWN_CITIES_REGEX = /\b(tokyo|singapore|hong kong|hongkong|london|new york|ny|nyc|sydney|paris|berlin|shanghai|beijing|seoul|taipei|osaka|mumbai|bombay|delhi|new delhi|bangkok|jakarta|manila|kuala lumpur|kl|ho chi minh|saigon|hanoi|san francisco|sf|los angeles|la|chicago|toronto|vancouver|melbourne|auckland|dubai|abu dhabi|munich|frankfurt|amsterdam|madrid|barcelona|rome|milan|vienna|zurich|geneva|stockholm|copenhagen|oslo|helsinki|brussels|prague|warsaw|budapest|moscow|st petersburg|sao paulo|rio de janeiro|mexico city|buenos aires|bogota|lima|santiago|johannesburg|cape town|cairo|tel aviv|istanbul|athens|lisbon|dublin|edinburgh|manchester|birmingham|seattle|boston|washington dc|miami|dallas|houston|denver|phoenix|atlanta|detroit|philadelphia|minneapolis|portland|austin|san diego|honolulu|anchorage|montreal|calgary|ottawa|perth|brisbane|adelaide|wellington|christchurch|chengdu|shenzhen|guangzhou|hangzhou|nanjing|wuhan|xian|chongqing|tianjin|suzhou|qingdao|dalian|xiamen|fuzhou|ningbo|changsha|zhengzhou|jinan|shenyang|harbin|kunming|nanchang|hefei|taiyuan|shijiazhuang|lanzhou|urumqi|guiyang|nanning|haikou|lhasa|hohhot|yinchuan|xining)\b/gi;
+const KNOWN_CITIES_REGEX = /\b(riyadh|jeddah|tokyo|singapore|hong kong|hongkong|london|new york|ny|nyc|sydney|paris|berlin|shanghai|beijing|seoul|taipei|osaka|mumbai|bombay|delhi|new delhi|bangkok|jakarta|manila|kuala lumpur|kl|ho chi minh|saigon|hanoi|san francisco|sf|los angeles|la|chicago|toronto|vancouver|melbourne|auckland|dubai|abu dhabi|munich|frankfurt|amsterdam|madrid|barcelona|rome|milan|vienna|zurich|geneva|stockholm|copenhagen|oslo|helsinki|brussels|prague|warsaw|budapest|moscow|st petersburg|sao paulo|rio de janeiro|mexico city|buenos aires|bogota|lima|santiago|johannesburg|cape town|cairo|tel aviv|istanbul|athens|lisbon|dublin|edinburgh|manchester|birmingham|seattle|boston|washington dc|miami|dallas|houston|denver|phoenix|atlanta|detroit|philadelphia|minneapolis|portland|austin|san diego|honolulu|anchorage|montreal|calgary|ottawa|perth|brisbane|adelaide|wellington|christchurch|chengdu|shenzhen|guangzhou|hangzhou|nanjing|wuhan|xian|chongqing|tianjin|suzhou|qingdao|dalian|xiamen|fuzhou|ningbo|changsha|zhengzhou|jinan|shenyang|harbin|kunming|nanchang|hefei|taiyuan|shijiazhuang|lanzhou|urumqi|guiyang|nanning|haikou|lhasa|hohhot|yinchuan|xining)\b/gi;
 
 const COUNTRY_CITY_MAP_KEYS_PATTERN = '\\b(' + Object.keys(COUNTRY_CITY_MAP).join('|') + ')\\b';
 
 const CURRENCY_REGISTRY = {
+  ARS: { symbols: ['ARS', 'AR$'], cities: ['buenos aires', 'argentina'] },
+  RUB: { symbols: ['RUB', '₽'], cities: ['moscow', 'st petersburg', 'russia'] },
+  SAR: { symbols: ['SAR', 'riyal'], cities: ['riyadh', 'jeddah', 'saudi arabia'] },
   USD: { symbols: ['USD', '$'],                    cities: ['los angeles', 'la', 'new york', 'nyc', 'chicago', 'san francisco', 'sf', 'seattle', 'boston', 'miami', 'houston', 'dallas', 'denver', 'atlanta', 'phoenix', 'portland', 'austin', 'san diego', 'washington dc', 'philadelphia', 'minneapolis', 'detroit', 'honolulu', 'usa', 'united states'] },
   EUR: { symbols: ['EUR', '€'],                    cities: ['paris', 'berlin', 'vienna', 'amsterdam', 'munich', 'rome', 'madrid', 'milan', 'brussels', 'lisbon', 'dublin', 'hamburg', 'frankfurt', 'europe', 'eurozone'] },
   GBP: { symbols: ['GBP', '£'],                    cities: ['london', 'manchester', 'birmingham', 'edinburgh', 'uk', 'united kingdom'] },
@@ -163,6 +170,7 @@ const FRED_MSA_CODES = {
 };
 
 const COUNTRY_ISO2 = {
+  'saudi arabia': 'SA',
   'united states': 'US', 'usa': 'US', 'united states of america': 'US',
   'japan': 'JP',
   'united kingdom': 'GB', 'uk': 'GB', 'britain': 'GB', 'england': 'GB',

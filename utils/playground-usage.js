@@ -160,7 +160,7 @@ function cleanupOldBuckets() {
 }
 
 function registerWithHeartbeat(heartbeat) {
-    heartbeat.subscribe('usage-cleanup', 60 * 60 * 1000, cleanupOldBuckets);
+    heartbeat.subscribe('usage-cleanup', 60 * 60 * 1000, cleanupOldBuckets, { local: true });
 }
 
 module.exports = {

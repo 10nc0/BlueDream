@@ -1,4 +1,3 @@
-const archiver = require('archiver');
 const axios = require('axios');
 const crypto = require('crypto');
 const { buildCsvFromMessages } = require('../../utils/book-csv-export');
@@ -205,7 +204,7 @@ function register(app, deps) {
             const sha256 = (data) => crypto.createHash('sha256').update(data).digest('hex');
             const fileHashes = [];
 
-            const archive = archiver('zip', { zlib: { level: 9 } });
+            const archive = require('archiver')('zip', { zlib: { level: 9 } });
 
             res.attachment(`${book.name.replace(/[^a-z0-9]/gi, '_')}_export.zip`);
             res.setHeader('Content-Type', 'application/zip');

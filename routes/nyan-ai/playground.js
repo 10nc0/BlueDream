@@ -6,10 +6,26 @@ const { processAndCacheDocList } = require('../../utils/doc-cache');
 const { AttachmentIngestion } = require('../../utils/attachment-ingestion');
 const { recordInMemory } = require('../../utils/context-extractor');
 const { detectCompoundQuery } = require('../../utils/preflight-router');
-const { fetchUrl, extractUrls } = require('../../lib/url-fetcher');
+const { extractUrls } = require('../../lib/url-fetcher');
 const { addAnchor, tickAnchors, clearAnchors } = require('../../utils/url-anchor-store');
 const capacityManager = require('../../utils/playground-capacity');
 const usageTracker = require('../../utils/playground-usage');
+const { PublicReader } = require('../../lib/public-reader');
+
+function requestReader(res, onProgress) {
+    const controller = new AbortController();
+    const abort = () => controller.abort();
+    res.once('close', abort);
+    const reader = new PublicReader({ signal: controller.signal, onProgress });
+    return {
+        reader,
+        signal: controller.signal,
+        async close() {
+            res.removeListener('close', abort);
+            await reader.dispose();
+        }
+    };
+}
 
 const playgroundLimiter = rateLimit({
     windowMs: 60 * 1000,
@@ -17,6 +33,7 @@ const playgroundLimiter = rateLimit({
     validate: { xForwardedForHeader: false },
     handler: (req, res) => {
         logger.warn({ ip: req.ip }, '⚠️ Playground rate limit exceeded');
+        res.status(429);
         res.setHeader('Content-Type', 'text/event-stream');
         res.write(`data: ${JSON.stringify({ type: 'error', message: 'Too many requests. Please wait a moment before trying again.' })}\n\n`);
         res.end();
@@ -88,8 +105,9 @@ function registerPlaygroundRoutes(app, deps) {
         }
     });
 
-    app.post('/api/playground', async (req, res) => {
+    app.post('/api/playground', playgroundLimiter, async (req, res) => {
         const clientIp = req.ip || req.connection.remoteAddress;
+        const research = requestReader(res);
 
         capacityManager.recordActivity(clientIp);
 
@@ -114,13 +132,14 @@ function registerPlaygroundRoutes(app, deps) {
                 finalPrompt = finalPrompt ? `${finalPrompt} ${spoken}` : spoken;
             }
 
-            await fetchUrlsFromMessage(message, extractedContent);
+            await fetchUrlsFromMessage(message, extractedContent, { publicReader: research.reader });
             for (const u of extractUrls(message || '').slice(0, 3)) addAnchor(clientIp, u);
 
             const photoList = normalizePhotoList(photos, photo);
 
             const capacityCheck = await capacityManager.consumeToken(clientIp, photoList.length > 0 ? 'vision' : 'text');
             if (!capacityCheck.allowed) {
+                res.set('Retry-After', String(capacityCheck.retryAfter || 60));
                 return res.status(429).json({
                     error: capacityCheck.reason,
                     remaining: capacityCheck.remaining,
@@ -139,6 +158,8 @@ function registerPlaygroundRoutes(app, deps) {
                 clientIp,
                 isVisionRequest: photoList.length > 0,
                 contextAttachments,
+                publicReader: research.reader,
+                signal: research.signal,
                 surface: 'playground'
             };
 
@@ -159,8 +180,14 @@ function registerPlaygroundRoutes(app, deps) {
             });
 
         } catch (error) {
+            if (research.signal.aborted) return;
             logger.error({ err: error }, '❌ Playground error');
-            res.status(500).json({ error: 'An error occurred. Please try again.' });
+            if (error.code === 'AI_CAPACITY') res.set('Retry-After', String(error.retryAfter || 60));
+            res.status(error.code === 'AI_CAPACITY' ? error.status : 500).json({
+                error: error.code === 'AI_CAPACITY' ? error.message : 'An error occurred. Please try again.'
+            });
+        } finally {
+            await research.close();
         }
     });
 
@@ -169,12 +196,17 @@ function registerPlaygroundRoutes(app, deps) {
         if (!url || typeof url !== 'string') {
             return res.status(400).json({ error: 'url is required' });
         }
+        const research = requestReader(res);
         try {
-            const result = await fetchUrl(url.trim());
-            return res.json({ ok: true, title: result.title, sourceLabel: result.sourceLabel, text: result.text });
+            research.reader.admitSources([url.trim()]);
+            const result = await research.reader.read({ url: url.trim() });
+            if (!result.ok) return res.status(422).json({ ...result, error: result.limitation });
+            return res.json({ ...result, sourceLabel: result.finalUrl, text: result.evidence.text });
         } catch (err) {
             logger.warn({ url, err: err.message }, '🔗 Explicit fetch-url failed');
             return res.status(422).json({ error: err.message });
+        } finally {
+            await research.close();
         }
     });
 
@@ -184,6 +216,7 @@ function registerPlaygroundRoutes(app, deps) {
         capacityManager.recordActivity(clientIp);
 
         const { isClientDisconnected, sseStage, cleanup } = setupSSE(res);
+        const research = requestReader(res, sseStage);
 
         try {
             let { message, photo, audio, document, documentName, photos, audios, documents, history, zipData, contextAttachments, cachedFileHashes } = req.body;
@@ -211,7 +244,7 @@ function registerPlaygroundRoutes(app, deps) {
                 message = message ? `${message} ${spoken}` : spoken;
             }
 
-            await fetchUrlsFromMessage(message, extractedContent, { sseStage, isClientDisconnected });
+            await fetchUrlsFromMessage(message, extractedContent, { sseStage, isClientDisconnected, publicReader: research.reader });
             for (const u of extractUrls(message || '').slice(0, 3)) addAnchor(clientIp, u);
 
             if (isClientDisconnected()) return;
@@ -251,6 +284,7 @@ function registerPlaygroundRoutes(app, deps) {
 
                 const compound = await executeCompoundQuery(compoundParts, {
                     extractedContent, photoList, docList, history, clientIp, contextAttachments, sseStage, isClientDisconnected,
+                    publicReader: research.reader, signal: research.signal,
                     surface: 'playground'
                 });
 
@@ -283,6 +317,8 @@ function registerPlaygroundRoutes(app, deps) {
                     contextAttachments,
                     streaming: true,
                     onStageChange: sseStage,
+                    publicReader: research.reader,
+                    signal: research.signal,
                     surface: 'playground'
                 };
 
@@ -340,9 +376,14 @@ function registerPlaygroundRoutes(app, deps) {
             }
 
         } catch (error) {
+            if (research.signal.aborted) return;
             logger.error({ err: error }, '❌ Streaming error');
-            sseStage({ type: 'error', message: 'An error occurred. Please try again.' });
+            sseStage({ type: 'error', code: error.code === 'AI_CAPACITY' ? 'AI_CAPACITY' : undefined,
+                retryAfter: error.code === 'AI_CAPACITY' ? error.retryAfter : undefined,
+                message: error.code === 'AI_CAPACITY' ? error.message : 'An error occurred. Please try again.' });
             cleanup();
+        } finally {
+            await research.close();
         }
     });
 }

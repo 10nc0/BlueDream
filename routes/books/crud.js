@@ -3,6 +3,7 @@ const crypto = require('crypto');
 const bcrypt = require('bcrypt');
 const { validate, schemas } = require('../../lib/validators');
 const { validateOutpipeConfig } = require('../../lib/outpipes/router');
+const { LIVE_SHARE_SQL } = require('../../lib/access-expiry');
 const {
     BOOK_LIST_COLS,
     _getCachedBooks,
@@ -211,7 +212,7 @@ function register(app, deps) {
                     SELECT DISTINCT bs.book_fractal_id, br.tenant_schema
                     FROM core.book_shares bs
                     JOIN core.book_registry br ON br.fractal_id = bs.book_fractal_id AND br.status = 'active'
-                    WHERE bs.shared_with_email = $1 AND bs.revoked_at IS NULL
+                    WHERE bs.shared_with_email = $1 AND bs.revoked_at IS NULL AND ${LIVE_SHARE_SQL}
                 `, [user.email.toLowerCase()]);
 
                 const sharedBySchema = {};

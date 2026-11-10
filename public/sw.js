@@ -1,4 +1,4 @@
-const CACHE_NAME = 'nyanbook-v9';
+const CACHE_NAME = 'nyanbook-v10';
 const STATIC_ASSETS = [
   '/',
   '/index.html',

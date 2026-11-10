@@ -82,16 +82,9 @@ Perform the dialectical audit and output JSON only.`;
     const isGptOss = auditBackend.model.includes('gpt-oss');
     const isKimi = auditBackend.model.includes('kimi');
     const usesTextJson = isReasoner || isKimi || isGptOss;
-    const _auditLabel = isReasoner
-      ? 'DeepSeek R1'
-      : auditBackend.model.includes('llama')
-        ? 'Llama 3.3 70B'
-        : isKimi
-          ? 'Kimi K2'
-          : 'GPT-OSS 120B';
+    const _auditLabel = auditBackend.model;
 
-    // Kimi and GPT-OSS use text JSON. OpenRouter's Llama 3.3 explicitly
-    // supports response_format, so it keeps strict JSON mode.
+    // Muse Ember supports response_format, so keep strict JSON mode.
     const requestBody = {
       model: auditBackend.model,
       messages: auditMessages,

@@ -27,7 +27,7 @@ function hashSessionId(sessionId) {
   return crypto.createHash('sha256').update(`${sessionId}:nyan-memory`).digest('hex').slice(0, 16);
 }
 
-const SUMMARY_MODEL = 'openai/gpt-oss-20b'; // fast model (llama-3.1-8b-instant retired 2026-08-19)
+const SUMMARY_MODEL = AI_MODELS.TEXT_MODEL;
 const MAX_WINDOW = 8;
 const SUMMARY_TRIGGER_INTERVAL = 2;
 const MAX_SUMMARY_SENTENCES = 5;
@@ -176,9 +176,9 @@ ${attachmentMentions}
 Write the summary as natural prose, not a list. Focus on what a helpful assistant would need to remember to continue this conversation naturally.`;
 
     try {
-      const groqToken = process.env.PLAYGROUND_AI_KEY || process.env.PLAYGROUND_GROQ_TOKEN;
+      const groqToken = process.env.OPENROUTER_API_KEY;
       if (!groqToken) {
-        console.warn('⚠️ No GROQ token for memory summarization');
+        console.warn('OPENROUTER_API_KEY not configured for memory summarization');
         return this.currentSummary;
       }
       

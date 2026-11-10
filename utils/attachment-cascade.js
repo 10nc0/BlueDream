@@ -1,8 +1,9 @@
 const logger = require('../lib/logger');
 const { parsePDFHybrid, analyzePDFVisualContent, groqWithRetry } = require('./pdf-handler');
+const { groqWithRetry: requestLLM } = require('./groq-client');
 const crypto = require('crypto');
 const axios = require('axios');
-const { GROQ_API_URL, GROQ_AUDIO_URL } = require('../config/constants');
+const { GROQ_API_URL, AI_MODELS } = require('../config/constants');
 const { analyzeFinancialDocument, formatPhysicsAnalysis, getFinancialPhysicsSeed, quickNonFinancialCheck } = require('./financial-physics');
 // Harmonized imports from data-package for shared caching
 const { globalDocCache, computeDocHash } = require('./data-package');
@@ -1596,7 +1597,7 @@ async function extractWordImages(buffer, options = {}) {
 }
 
 async function analyzeDocumentVisuals(buffer, fileName, options = {}) {
-    const PLAYGROUND_GROQ_VISION_TOKEN = process.env.PLAYGROUND_GROQ_VISION_TOKEN;
+    const PLAYGROUND_GROQ_VISION_TOKEN = process.env.OPENROUTER_API_KEY;
     
     if (!PLAYGROUND_GROQ_VISION_TOKEN) {
         logger.warn('⚠️ PLAYGROUND_GROQ_VISION_TOKEN not configured - skipping document visual analysis');
@@ -1637,7 +1638,7 @@ async function analyzeDocumentVisuals(buffer, fileName, options = {}) {
             const response = await axios.post(
                 GROQ_API_URL,
                 {
-                    model: 'groq/compound', // vision/routing model (llama-4-scout retired 2026-08-19)
+                    model: AI_MODELS.VISION_MODEL,
                     messages: [
                         {
                             role: 'user',
@@ -1790,32 +1791,32 @@ async function convertDocumentToImages(buffer, fileName) {
 }
 
 async function transcribeAudio(buffer, fileName, options) {
-    const PLAYGROUND_GROQ_TOKEN = process.env.PLAYGROUND_AI_KEY || process.env.PLAYGROUND_GROQ_TOKEN;
+    const PLAYGROUND_GROQ_TOKEN = process.env.OPENROUTER_API_KEY;
     if (!PLAYGROUND_GROQ_TOKEN) {
-        return { success: false, error: 'Groq token not configured' };
+        return { success: false, error: 'OPENROUTER_API_KEY not configured' };
     }
     
     try {
-        const FormData = require('form-data');
-        const axios = require('axios');
-        
-        const form = new FormData();
-        form.append('file', buffer, { filename: fileName });
-        form.append('model', 'whisper-large-v3-turbo');
-        
-        const response = await axios.post(
-            GROQ_AUDIO_URL,
-            form,
-            {
-                headers: {
-                    ...form.getHeaders(),
-                    'Authorization': `Bearer ${PLAYGROUND_GROQ_TOKEN}`
-                },
-                timeout: 60000
-            }
-        );
-        
-        return { success: true, data: { text: response.data.text || '', type: 'transcription' } };
+        const extension = String(fileName || '').split('.').pop().toLowerCase();
+        const format = { m4a: 'm4a', mp4: 'mp4', mp3: 'mp3', wav: 'wav', ogg: 'ogg',
+            oga: 'ogg', opus: 'ogg', webm: 'webm', flac: 'flac', aac: 'aac' }[extension];
+        if (!format) return { success: false, error: 'Unsupported audio format for transcription' };
+        const response = await requestLLM({
+            url: GROQ_API_URL,
+            data: {
+                model: AI_MODELS.AUDIO_MODEL,
+                messages: [{ role: 'user', content: [
+                    { type: 'text', text: 'Transcribe this audio verbatim in its original language. Output only the transcription, with no commentary.' },
+                    { type: 'input_audio', input_audio: { data: buffer.toString('base64'), format } }
+                ] }],
+                temperature: AI_MODELS.TEMPERATURE_DETERMINISTIC,
+                max_tokens: 4096
+            },
+            config: { timeout: 60000, signal: options?.signal }
+        }, 1, 'vision');
+        const text = response.data.choices?.[0]?.message?.content;
+        if (typeof text !== 'string' || !text.trim()) throw new Error('Audio transcription returned no text');
+        return { success: true, data: { text, type: 'transcription' } };
     } catch (error) {
         return { success: false, error: error.message };
     }
@@ -1831,7 +1832,7 @@ async function extractPDFVisualContent(buffer, fileName, options = {}) {
         if (isImage) {
             // Handle standalone images directly
             logger.debug(`🖼️ Image Visual: Analyzing ${fileName} with Groq Vision...`);
-            const PLAYGROUND_GROQ_VISION_TOKEN = process.env.PLAYGROUND_GROQ_VISION_TOKEN;
+            const PLAYGROUND_GROQ_VISION_TOKEN = process.env.OPENROUTER_API_KEY;
             
             if (!PLAYGROUND_GROQ_VISION_TOKEN) {
                 return { success: false, error: 'Vision token not configured' };
@@ -2233,6 +2234,7 @@ async function processDocumentForAI(buffer, fileName, mimeType, options = {}) {
 }
 
 module.exports = {
+    transcribeAudio,
     FILE_TYPES,
     DATA_STRUCTURES,
     COST_TIERS,

@@ -3,7 +3,6 @@
 // Permissions: MANAGE_THREADS only
 // Security: Cannot read messages, only create/manage threads
 
-const { Client, GatewayIntentBits, ChannelType } = require('discord.js');
 const logger = require('../lib/logger');
 
 class HermesBot {
@@ -26,6 +25,7 @@ class HermesBot {
         }
 
         try {
+            const { Client, GatewayIntentBits } = require('discord.js');
             this.client = new Client({
                 intents: [
                     GatewayIntentBits.Guilds,
@@ -147,7 +147,7 @@ class HermesBot {
                 name: threadName,
                 autoArchiveDuration: 10080,
                 reason: `Auto-created thread for book: ${bookName}`,
-                type: ChannelType.PublicThread
+                type: require('discord.js').ChannelType.PublicThread
             });
 
             logger.info({ threadName, threadId: thread.id }, '🧵 Hermes created thread');

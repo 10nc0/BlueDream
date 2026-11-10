@@ -8,11 +8,7 @@ const CIRCUIT_BREAKER_COOLDOWN_MS = 30 * 60 * 1000; // 30 minute cooldown (longe
 const FORGIVENESS_WINDOW_MS = 60 * 60 * 1000; // 1 hour of good behavior resets abuse counter
 const MIN_VIABLE_RATE = 2; // Minimum 2 queries/hour even at extreme scale
 
-const SERVICE_CONFIGS = {
-    text: { poolPerHour: 240, costMultiplier: 1 },
-    vision: { poolPerHour: 120, costMultiplier: 3 },
-    brave: { poolPerHour: 360, costMultiplier: 1 }
-};
+const SERVICE_CONFIGS = require('./ai-capacity').POLICY;
 
 const activeIPs = new Map();
 const ipBuckets = new Map();
@@ -185,6 +181,20 @@ function calculateReplenishmentTime(bucket, config, reputationMultiplier) {
 }
 
 async function consumeToken(ip, serviceType) {
+    // Compatibility facade: the transport reserves provider spend separately.
+    // Admission is shared once per logical request, not once per nested stage.
+    if (dbPool) {
+        const common = require('./ai-capacity');
+        const ctx = common.context.getStore();
+        if (ctx?.req) ctx.req.aiReputationMultiplier = await getReputationMultiplier(ip);
+        try {
+            await common.admission(serviceType);
+            return { allowed: true, shared: true };
+        } catch (error) {
+            return { allowed: false, error: error.message, reason: error.message, retryAfter: error.retryAfter || 60,
+                replenishMinutes: 1, resetIn: 60 };
+        }
+    }
     // Development environment: skip all rate limiting
     if (process.env.NODE_ENV === 'development') {
         return { allowed: true, exempt: true, devMode: true };

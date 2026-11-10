@@ -53,13 +53,14 @@ function toToolDef(tool) {
 async function callWithTools({
   groqCall, url, model, token, timeout = 30000,
   messages, tools, toolChoice = 'auto',
-  temperature = 0.15, maxTokens = 800
+  temperature = 0.15, maxTokens = 800, signal
 }) {
   const response = await groqCall({
     url,
     data: { model, messages, tools, tool_choice: toolChoice, temperature, max_tokens: maxTokens },
     config: {
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      ...(signal && { signal }),
       timeout
     }
   }, 3, 'text');

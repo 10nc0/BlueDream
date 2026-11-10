@@ -4,7 +4,6 @@
 // Security: Can only read messages, cannot create/modify/delete
 // Purpose: Read-only bot for fetching Nyan AI audit logs
 
-const { Client, GatewayIntentBits } = require('discord.js');
 const logger = require('../lib/logger');
 
 class HorusBot {
@@ -26,6 +25,7 @@ class HorusBot {
         }
 
         try {
+            const { Client, GatewayIntentBits } = require('discord.js');
             this.client = new Client({
                 intents: [
                     GatewayIntentBits.Guilds,
@@ -215,6 +215,20 @@ class HorusBot {
             };
         }
 
+        if (type === 'audit') {
+            const visualField = firstEmbed?.fields?.find(f => f.name === 'Image Audit');
+            if (visualField) {
+                try {
+                    const value = JSON.parse(visualField.value);
+                    if (['text_only', 'visual'].includes(value.mode)) {
+                        value.evidence = firstEmbed.fields.filter(f => /^Image Source [1-3]$/.test(f.name)).flatMap(f => {
+                            try { return [JSON.parse(f.value)]; } catch { return []; }
+                        });
+                        log.parsed.imageAudit = value;
+                    }
+                } catch { /* Legacy and malformed metadata never imply a visual check. */ }
+            }
+        }
         return log;
     }
 

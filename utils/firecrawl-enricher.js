@@ -1,14 +1,18 @@
 'use strict';
 
 const logger = require('../lib/logger');
+const { awaitWithSignal } = require('../lib/fetch-retry');
 
 // Lazy-loaded client — only instantiated when FIRECRAWL_API_KEY is present
 let _client = null;
+let _clientTimeoutMs;
 
-function _getClient() {
-    if (_client) return _client;
+function _getClient(timeoutMs) {
+    if (_client && _clientTimeoutMs === timeoutMs) return _client;
     const { FirecrawlClient } = require('@mendable/firecrawl-js');
-    _client = new FirecrawlClient({ apiKey: process.env.FIRECRAWL_API_KEY });
+    // In this SDK maxRetries counts total HTTP attempts (zero sends nothing).
+    _client = new FirecrawlClient({ apiKey: process.env.FIRECRAWL_API_KEY, timeoutMs, maxRetries: 1 });
+    _clientTimeoutMs = timeoutMs;
     return _client;
 }
 
@@ -21,10 +25,13 @@ function _getClient() {
  * @param {object}  [opts]
  * @param {number}  [opts.timeoutMs=8000] - Per-URL timeout in milliseconds
  * @param {number}  [opts.maxCharsPerUrl=2000] - Truncate each page markdown to this length
+ * @param {AbortSignal} [opts.signal] - Caller cancellation; stops waiting/starting work.
  * @returns {Promise<Map<string, string>>} - Map of url → markdown (only successfully enriched URLs)
  */
-async function enrichUrls(urls, { timeoutMs = 8000, maxCharsPerUrl = 2000 } = {}) {
+async function enrichUrls(urls, { timeoutMs = 8000, maxCharsPerUrl = 2000, signal } = {}) {
+    signal?.throwIfAborted();
     if (!Array.isArray(urls) || urls.length === 0) return new Map();
+    if (!Number.isFinite(timeoutMs) || timeoutMs < 1) throw new RangeError('Enrichment timeout must be positive.');
 
     const FIRECRAWL_API_KEY = process.env.FIRECRAWL_API_KEY;
     if (!FIRECRAWL_API_KEY) return new Map();
@@ -33,23 +40,28 @@ async function enrichUrls(urls, { timeoutMs = 8000, maxCharsPerUrl = 2000 } = {}
     const deduped = [...new Set(urls.filter(u => typeof u === 'string' && u.startsWith('http')))];
     if (deduped.length === 0) return new Map();
 
-    const client = _getClient();
+    const client = _getClient(timeoutMs);
     const results = new Map();
 
     await Promise.all(deduped.map(async (url) => {
-        const timeoutPromise = new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('timeout')), timeoutMs)
-        );
+        signal?.throwIfAborted();
         try {
-            const doc = await Promise.race([
-                client.scrape(url, { formats: ['markdown'], onlyMainContent: true }),
-                timeoutPromise
-            ]);
+            // Native transport timeout closes the local HTTP request; no
+            // uncancellable Promise.race timer. autoResume otherwise permits
+            // minutes of SDK retries after a processing_continues response.
+            // The public scrape API has no AbortSignal: caller abort only stops
+            // waiting here; remote processing may continue until its own limits.
+            // Do not set scrape.timeout: this SDK overrides transport timeout
+            // with that server timeout + 5 seconds.
+            const doc = await awaitWithSignal(client.scrape(url, {
+                formats: ['markdown'], onlyMainContent: true, autoResume: false
+            }), signal);
             const md = (doc?.markdown || '').trim();
             if (md.length > 100) {
                 results.set(url, md.substring(0, maxCharsPerUrl));
             }
         } catch (err) {
+            signal?.throwIfAborted();
             logger.debug({ url: url.substring(0, 60), err: err.message }, '🕷️ Firecrawl: URL enrichment failed, skipping');
         }
     }));

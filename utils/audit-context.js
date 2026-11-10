@@ -377,9 +377,17 @@ async function buildAuditContext(bookIds, fallbackTenantSchema, query, options =
     const tenantExistenceCache = new Map();
 
     const books = [];
+    let discoveryLimited = false;
+    const scanLimit = options.maxScanMessages
+        ? Math.max(1, Math.floor(options.maxScanMessages / bookIds.length)) : 5000;
     for (const bookId of bookIds) {
         // Parse tenant from bookId, fallback to provided schema
         const targetSchema = parseTenantFromBookId(bookId) || fallbackTenantSchema;
+        const inferredSchema = parseTenantFromBookId(bookId);
+        if (inferredSchema && inferredSchema !== fallbackTenantSchema && !options.authorizedSchemas?.includes(inferredSchema)) {
+            throw Object.assign(new Error('Book is outside the current tenant.'), { status: 403 });
+        }
+        require('../lib/validators').assertValidSchemaName(targetSchema);
         
         if (!targetSchema) {
             console.warn(`🌈 Audit: Cannot determine tenant for book ${bookId}`);
@@ -445,13 +453,13 @@ async function buildAuditContext(bookIds, fallbackTenantSchema, query, options =
             let allDiscordMessages = [];
             let lastId = null;
             while (true) {
-                const fetchOptions = { limit: 100 };
+                const fetchOptions = { limit: Math.min(100, scanLimit - allDiscordMessages.length) };
                 if (lastId) fetchOptions.before = lastId;
                 const fetched = await thread.messages.fetch(fetchOptions);
                 if (fetched.size === 0) break;
                 allDiscordMessages = allDiscordMessages.concat(Array.from(fetched.values()));
                 lastId = fetched.last().id;
-                if (allDiscordMessages.length >= 5000) break;
+                if (allDiscordMessages.length >= scanLimit) { discoveryLimited = true; break; }
             }
 
             // Year/month filter on Discord stream: when the query carried any
@@ -476,6 +484,11 @@ async function buildAuditContext(bookIds, fallbackTenantSchema, query, options =
                     return {
                         id: msg.id,
                         content: content,
+                        bookId: book.fractal_id,
+                        sender: msg.author?.username || null,
+                        attachments: options.includeImages ? [...(msg.attachments?.values() || [])].map(a => ({
+                            id: a.id, name: a.name, url: a.url, size: a.size, contentType: a.contentType
+                        })) : [],
                         timestamp: msg.createdAt.toISOString(),
                         createdAt: msg.createdAt,
                         bookName: book.name
@@ -501,7 +514,7 @@ async function buildAuditContext(bookIds, fallbackTenantSchema, query, options =
                     targetSchema,
                     book.fractal_id,
                     queryKeywords,
-                    { limit: maxMessages, datePatterns: queryDatePatterns, rawTokens }
+                    { limit: Math.min(maxMessages, scanLimit), datePatterns: queryDatePatterns, rawTokens }
                 );
                 if (dbMessages.length > 0) {
                     dbMessages = dbMessages.map(m => ({ ...m, bookName: book.name, createdAt: new Date(m.timestamp) }));
@@ -581,6 +594,7 @@ async function buildAuditContext(bookIds, fallbackTenantSchema, query, options =
             dateRange: b.dateRange
         })),
         totalMessages: allMessages.length,
+        discoveryLimited,
         allMessages: allMessages,
         recentMessages: sampledMessages,
         sampledCount: sampledMessages.length,

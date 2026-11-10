@@ -3,15 +3,30 @@
 // his consciousness into satellite bodies while maintaining a pure core.
 // This kernel orchestrates 4 modular routes (satellites) via dependency injection.
 
+const { StartupState, featureGate } = require('./lib/startup-state');
+const { MaintenanceQueue } = require('./lib/maintenance-queue');
+const startup = new StartupState(message => console.log(message));
+startup.mark('process-start', 0);
+
+(async function boot() {
+
 // EARLY GUARD — resolve a working PostgreSQL source before any module loads.
 // Tries DATABASE_URL first (with a real handshake), falls back to discrete PG*
 // vars on network/auth failure. Fails closed only when both sources are
 // unavailable. NOTE: intentional console.error — runs before logger init.
-const { resolveDatabase, setActiveResolution } = require('./lib/db-resolver');
+const { resolveRuntimePool } = require('./lib/db-resolver');
 let __dbResolution;
+let runtimePool;
 try {
-    __dbResolution = resolveDatabase();
-    setActiveResolution(__dbResolution);
+    const resolved = await resolveRuntimePool({
+        // Keep total kernel + isolated-heartbeat capacity at 20 connections.
+        max: 19, min: 2, idleTimeoutMillis: 30000, statement_timeout: 30000,
+        query_timeout: 30000, idle_in_transaction_session_timeout: 30000
+    });
+    __dbResolution = resolved.resolution;
+    runtimePool = resolved.pool;
+    startup.queries = 1;
+    startup.mark('database-handshake');
 } catch (err) {
     console.error(err.message);
     console.error('');
@@ -26,6 +41,7 @@ if (__dbResolution.attempts.length > 0) {
 }
 console.log(`✅ Database: using ${__dbResolution.source === 'DATABASE_URL' ? 'DATABASE_URL' : 'PG* env vars'} (${__dbResolution.shortHost})`);
 
+startup.mark('imports-start');
 const path = require('path');
 const crypto = require('crypto');
 const { AsyncLocalStorage } = require('async_hooks');
@@ -33,11 +49,9 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors');
 const helmet = require('helmet');
-const { Pool } = require('pg');
 const session = require('express-session');
 const connectPg = require('connect-pg-simple');
 const logger = require('./lib/logger');
-const twilio = require('twilio');
 const authService = require('./lib/auth-service');
 const TenantManager = require('./lib/tenant-manager');
 const { setTenantContext, getAllTenantSchemas, sanitizeForRole } = require('./lib/tenant-middleware');
@@ -47,32 +61,26 @@ const IdrisBot = require('./bots/idris-bot');
 const HorusBot = require('./bots/horus-bot');
 const fractalId = require('./utils/fractal-id');
 const genesisCounter = require('./server/genesis-counter');
-const { extractTextFromDocument, getDocumentPrompt } = require('./utils/document-parser');
-const { identifyFileType, executeExtractionCascade, formatJSONForGroq, getFinancialPhysicsSeed, intelligentChunking, buildMultiDocContext } = require('./utils/attachment-cascade');
 const CONSTANTS = require('./config/constants');
 const { modelIdToLabel } = require('./prompts/pharma-analysis');
-const { getLegalAnalysisSeed, detectLegalDocument, LEGAL_KEYWORDS_REGEX } = require('./prompts/legal-analysis');
-const { formatAuditBadge, runAuditPass } = require('./utils/two-pass-verification');
-const { preflightRouter } = require('./utils/preflight-router');
-const { createPipelineOrchestrator, PIPELINE_STEPS, fastStreamPersonality, applyPersonalityFormat } = require('./utils/pipeline-orchestrator');
-const { recordInMemory, clearSessionMemory } = require('./utils/context-extractor');
-const { getMemoryManager, cleanupOldSessions } = require('./utils/memory-manager');
+const { cleanupOldSessions } = require('./utils/memory-manager');
 
 const { initialize: initDeps, setMiddleware: setDepsMiddleware, deps } = require('./lib/deps');
 const { createAuthMiddleware, registerAuthRoutes } = require('./routes/auth');
-const { registerBooksRoutes } = require('./routes/books');
-const { registerPipeRoutes } = require('./routes/pipe');
-const { registerNyanAIRoutes, capacityManager, usageTracker } = require('./routes/nyan-ai');
-const { register: registerAccountRoutes } = require('./routes/account');
+// Admission state is mandatory; route implementations and their search/media
+// integrations are not prerequisites for the isolated counter publisher.
+const capacityManager = require('./utils/playground-capacity');
+const usageTracker = require('./utils/playground-usage');
 const { healQueue } = require('./lib/heal-queue');
 const phiBreathe = require('./lib/phi-breathe');
 const { runMonthlyEmail } = require('./lib/monthly-email');
 const { runMonthlyClosing } = require('./lib/monthly-closing');
 const { createSendToLedger } = require('./lib/discord-webhooks');
 const { createErrorHandler, notFoundHandler } = require('./lib/error-handler');
-const { config, buildConnectionString, getDbHost } = require('./config');
+const { config } = require('./config');
 const { createSessionRecord: _createSessionRecord, logAudit: _logAudit } = require('./lib/session-utils');
 const { createDbInit } = require('./lib/db-init');
+startup.mark('imports-ready');
 
 // ============================================================================
 // SECURITY: Fail-Closed Secret Guards (Critical Infrastructure Only)
@@ -105,20 +113,15 @@ if (missingCriticalSecrets.length > 0) {
     process.exit(1);
 }
 
-// LLM provider: at least one of Groq, OpenRouter, or Ollama must be configured.
-// Flat PLAYGROUND_AI_KEY requirement removed — Ollama (sovereign mode) and OpenRouter
-// are valid sole providers. groq-client.js already handles the three-tier cascade.
-const LLM_PROVIDER_KEYS = ['PLAYGROUND_AI_KEY', 'PLAYGROUND_GROQ_TOKEN', 'OPENROUTER_API_KEY', 'OLLAMA_BASE_URL'];
+// All application-managed model roles use Meta Muse Ember through OpenRouter.
+const LLM_PROVIDER_KEYS = ['OPENROUTER_API_KEY'];
 const hasLLMProvider = LLM_PROVIDER_KEYS.some(k => process.env[k]);
 if (!hasLLMProvider) {
     console.error('❌ CRITICAL: No LLM provider configured (fail-closed)');
     console.error('');
-    console.error('   Set at least one of:');
-    console.error('   • PLAYGROUND_AI_KEY / PLAYGROUND_GROQ_TOKEN — Groq cloud (groq.com, free tier)');
-    console.error('   • OPENROUTER_API_KEY                        — OpenRouter cloud failover (openrouter.ai, free tier)');
-    console.error('   • OLLAMA_BASE_URL                           — local/self-hosted sovereign AI (ollama.ai)');
+    console.error('   Set OPENROUTER_API_KEY for Meta Muse Ember.');
     console.error('');
-    console.error('🛑 Server will NOT start until at least one LLM provider is configured.');
+    console.error('Server will NOT start until OPENROUTER_API_KEY is configured.');
     process.exit(1);
 }
 
@@ -137,21 +140,11 @@ const isProd = process.env.REPLIT_DEPLOYMENT === '1' || process.env.NODE_ENV ===
 // for PgBouncer-style hosts (Supabase pooler, Neon pooler, *.pgbouncer.*) and
 // turns SSL off for loopback / RFC1918 / single-label hosts. Custom CA via
 // DATABASE_CA_CERT is honored when present.
-const poolBaseConfig = {
-    ssl: __dbResolution.ssl,
-    max: 20,
-    min: 2,
-    connectionTimeoutMillis: 30000,
-    idleTimeoutMillis: 30000,
-    statement_timeout: 30000,
-    query_timeout: 30000,
-    idle_in_transaction_session_timeout: 30000,
-};
-const pool = new Pool(
-    __dbResolution.source === 'DATABASE_URL'
-        ? { ...poolBaseConfig, connectionString: __dbResolution.connectionString }
-        : { ...poolBaseConfig, ...__dbResolution.pgConfig }
-);
+const pool = runtimePool;
+startup.instrumentPool(pool);
+const maintenance = new MaintenanceQueue({ pool, concurrency: 1,
+    onError: (name, error) => logger.warn({ name, code: error.code }, `Startup maintenance retry: ${name}`) });
+phiBreathe.setMaintenanceQueue(maintenance);
 
 // CONNECTION POOL MONITORING: Track connection lifecycle
 pool.on('connect', () => {
@@ -191,6 +184,8 @@ function noCacheHeaders(res) {
 const requestContext = new AsyncLocalStorage();
 
 const app = express();
+// Common admission context for all application routes and provider transports.
+require('./utils/ai-capacity').install(app, pool);
 
 // EARLY STATIC — serve CSS/JS/icons before any auth or DB middleware
 // These assets have zero DB dependency. A DB crash must never ghost the UI.
@@ -297,6 +292,16 @@ app.get('/health', async (req, res) => {
             });
         }
     }
+});
+
+app.get('/health/ready', (req, res) => {
+    res.status(serverReady && !startup.stopping ? 200 : 503).json({
+        status: serverReady && !startup.stopping ? 'ready' : 'starting',
+        schema: startup.phases['schema-ready'] !== undefined, services: startup.services,
+        counterReady: phiBreathe.isCounterReady(), leader: !!phiBreathe.isLeader(),
+        phasesMs: startup.phases, databaseRoundtrips: startup.queries,
+        heartbeatTiming: phiBreathe.heartbeatTiming
+    });
 });
 
 app.get('/health/deep', async (req, res) => {
@@ -710,7 +715,7 @@ app.use(express.static(path.join(__dirname, 'public'), {
 let serverReady = false;
 app.use('/api/', (req, res, next) => {
     if (!serverReady) {
-        return res.status(503).json({
+        return res.set('Retry-After', '5').status(503).json({
             code: 'warming_up',
             message: 'Server is starting up, please retry in a few seconds.',
             retryAfter: 5
@@ -718,6 +723,10 @@ app.use('/api/', (req, res, next) => {
     }
     next();
 });
+app.use('/api/', featureGate({
+    get hermes() { return hermesBot; }, get thoth() { return thothBot; },
+    get idris() { return idrisBot; }, get horus() { return horusBot; }
+}));
 
 // Apply tenant context middleware to all API routes (except auth routes)
 app.use('/api/books', setTenantContext);
@@ -834,7 +843,16 @@ const createSessionRecord = (userId, sessionId, req, tenantSchema) =>
 
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, '0.0.0.0', async () => {
+const server = app.listen(PORT, '0.0.0.0', () => {
+    initializeKernel().catch(error => {
+        startup.services.schema = 'failed';
+        logger.error(`Startup failed (${error.code || error.name}) — required schema or routes unavailable`);
+        gracefulShutdown('startup_failure', 1);
+    });
+});
+server.on('error', () => gracefulShutdown('listener_failure', 1));
+async function initializeKernel() {
+    startup.mark('listener');
     logger.info({ port: PORT }, '🌐 Dashboard listening');
     
     // TRINITY ARCHITECTURE: Hermes (φ - Creator) + Thoth (0 - Mirror)
@@ -847,33 +865,73 @@ app.listen(PORT, '0.0.0.0', async () => {
     idrisBot = new IdrisBot();
     horusBot = new HorusBot();
     
-    // ── Parallel startup ────────────────────────────────────────────────────
-    // Discord bots (network: WebSocket handshake + Discord READY event) and
-    // database init (network: PostgreSQL) are fully independent — run together.
-    // Total time = max(bot_login, db_init) instead of their sum.
-    // Bots are only needed for authenticated users / inpipe webhooks, so they
-    // are always ready before the first such request can arrive.
-    logger.info('⚡ Parallel startup: bots + DB (all 4 bots ∥ DB init)...');
+    // Schema/budget setup precedes the worker's first observation. Optional
+    // Discord connections start afterward, independently of API readiness.
+    // Bot-dependent features and workers check actual service readiness.
+    logger.info('⚡ Required schema and budget first; optional bot connections deferred until heartbeat...');
 
-    const initBots = async () => {
-        try {
-            await Promise.all([
-                hermesBot.initialize(),
-                thothBot.initialize(),
-                idrisBot.initialize(),
-                horusBot.initialize()
-            ]);
-            logger.info('🤖 All bots ready: Hermes (φ) + Thoth (0) + Idris (ι) + Horus (Ω)');
-        } catch (error) {
-            logger.error({ err: error }, 'Bot initialization failed — Discord features may be unavailable');
-        }
+    const botEntries = [['hermes', hermesBot], ['thoth', thothBot], ['idris', idrisBot], ['horus', horusBot]];
+    const isBotReady = bot => bot.client?.isReady ? bot.client.isReady() : bot.isReady?.();
+    let healingStarted = false;
+    const startHealing = () => {
+        if (startup.stopping || healingStarted || !startup.phases['schema-ready'] || !isBotReady(hermesBot)) return;
+        healingStarted = true;
+        maintenance.enqueue('heal-recovery', async () => {
+            if (startup.stopping || !isBotReady(hermesBot)) { healingStarted = false; return; }
+            healQueue.setDependencies(pool, hermesBot);
+            await healQueue.initialize();
+            if (!startup.stopping) healQueue.start(20000);
+            startup.mark('heal-ready');
+        }).catch(() => { healingStarted = false; });
     };
+    const wireBot = (name, bot) => {
+        if (!bot.client || bot.client._startupWired) return;
+        bot.client._startupWired = true;
+        const ready = () => {
+            if (startup.stopping) return bot.client?.destroy?.();
+            startup.services[name] = 'ready';
+            startup.mark(`bot-${name}-ready`);
+            phiBreathe.updateNodeStatus(name, true);
+            if (name === 'hermes') startHealing();
+            if (name === 'idris') phiBreathe.retryMonthlyClosing();
+        };
+        bot.client.on('ready', ready);
+        bot.client.on('clientReady', ready);
+        bot.client.on('shardDisconnect', () => {
+            startup.services[name] = 'disconnected';
+            phiBreathe.deregisterNode(name);
+        });
+        bot.client.on('error', () => { startup.services[name] = 'unavailable'; });
+    };
+    const startBots = () => { for (const [name, bot] of botEntries) {
+        startup.services[name] = 'starting';
+        bot.client?.on('ready', () => {
+            if (startup.stopping) return bot.client.destroy?.();
+            startup.services[name] = 'ready';
+            startup.mark(`bot-${name}-ready`);
+            if (name === 'hermes') startHealing();
+        });
+        Promise.resolve().then(() => {
+            const initialized = bot.initialize();
+            wireBot(name, bot);
+            return initialized;
+        }).then(() => {
+            if (startup.stopping) return bot.client?.destroy?.();
+            startup.services[name] = isBotReady(bot) ? 'ready' : 'unavailable';
+            if (isBotReady(bot)) startup.mark(`bot-${name}-ready`);
+            if (name === 'hermes') startHealing();
+        }).catch(error => {
+            startup.services[name] = 'unavailable';
+            logger.warn({ code: error.code, service: name }, `Optional startup service unavailable: ${name}`);
+        });
+    } };
 
     const { initializeDatabase, initUsageTable, migrationRunner } = createDbInit(pool, tenantManager);
     tenantManager.setMigrationRunner(migrationRunner);
 
     const initDb = async () => {
         await initializeDatabase();
+        startup.mark('schema-ready');
 
         // Initialize Discord webhook factories (DI pattern)
         sendToLedger = createSendToLedger(pool, NYANBOOK_LEDGER_WEBHOOK);
@@ -885,42 +943,44 @@ app.listen(PORT, '0.0.0.0', async () => {
             capacityManager.initReputationTable(),
             initUsageTable()
         ]);
+        startup.mark('budget-ready');
         // hydrateAllCircuitBreakers + loadTodayUsageFromDb are NOT awaited here —
         // they are fired as background tasks after the boot gate clears (see below).
     };
 
-    await Promise.all([initBots(), initDb()]);
+    await initDb();
+    if (startup.stopping) return;
+    startHealing();
 
     // Background hydration — neither job is required before serving requests.
     // Circuit breakers default to inactive and self-correct on first abuse event.
     // Usage buckets start at 0 and self-correct on the next write.
-    Promise.all([
-        capacityManager.hydrateAllCircuitBreakers(),
-        usageTracker.loadTodayUsageFromDb()
-    ]).catch(err => logger.warn({ err: err.message }, 'Background hydration error (non-fatal)'));
+    const deferredBootstrap = [
+        maintenance.enqueue('circuit-hydration', () => capacityManager.hydrateAllCircuitBreakers()),
+        maintenance.enqueue('usage-hydration', () => usageTracker.loadTodayUsageFromDb()),
 
     // One-shot migration shims — parallelized and not awaited.
     // Each self-retires (writes a core.boot_flags row) after completing with
     // zero work, so subsequent boots skip them entirely (O(1) flag check).
     // If the flag is absent (fresh DB / restored checkpoint) they run normally.
-    Promise.all([
-        (async () => {
+        maintenance.enqueue('agent-token-backfill', async () => {
             try {
                 const { backfillAgentTokens } = require('./lib/backfill-agent-tokens');
                 await backfillAgentTokens(pool, logger);
             } catch (err) {
                 logger.warn({ err }, 'Agent token backfill failed (non-fatal)');
             }
-        })(),
-        (async () => {
+        }),
+        maintenance.enqueue('output-normalization', async () => {
             try {
                 const { normalizeOutputCredentials } = require('./lib/normalize-output-credentials');
                 await normalizeOutputCredentials(pool);
             } catch (err) {
                 logger.warn({ err: err.message }, 'Output credentials normalizer failed (non-fatal)');
             }
-        })()
-    ]).catch(() => {});
+        })
+    ];
+    Promise.allSettled(deferredBootstrap).then(() => startup.mark('maintenance-ready'));
 
     // Register all bots in the NyanMesh node registry (in-memory, snapshotted to DB at 86-breath).
     // Initial status reflects actual bot readiness (may be 'offline' if token missing).
@@ -950,10 +1010,28 @@ app.listen(PORT, '0.0.0.0', async () => {
             logger.info({ node: name }, '🔌 NyanMesh: bot reconnected — %s', name);
             phiBreathe.updateNodeStatus(name, true);
         });
+        wireBot(name, bot);
     }
 
     // Server is now ready for requests
     logger.info('🌸 Multi-tenant NyanBook~ ready');
+    phiBreathe.setPool(pool);
+    phiBreathe.setBots({ hermes: hermesBot, thoth: thothBot, idris: idrisBot, horus: horusBot });
+    phiBreathe.setCleanupFunctions({ cleanupOldSessions });
+    phiBreathe.setStartupObserver(timing => startup.observeBreath(timing));
+    const heartbeat = phiBreathe.startPhiBreathe();
+    // Wait for a real worker observation before synchronous optional imports.
+    // The API gate stays closed until all routes are registered; the packet
+    // queue still requires the worker's nonzero, fresh, fenced counter.
+    await heartbeat;
+    if (startup.stopping) return;
+    startup.mark('optional-work-start');
+    startBots();
+    const { registerBooksRoutes } = require('./routes/books');
+    const { registerPipeRoutes } = require('./routes/pipe');
+    const { registerNyanAIRoutes } = require('./routes/nyan-ai');
+    const { register: registerAccountRoutes } = require('./routes/account');
+    startup.mark('route-imports-ready');
     
     // Initialize dependency injection container with all dependencies
     // SECURITY: Compartmentalized secrets - each route receives only what it needs
@@ -1114,15 +1192,12 @@ app.listen(PORT, '0.0.0.0', async () => {
             [['FIRECRAWL_API_KEY'],
              '🕷️', 'Firecrawl source enrichment',
              'Audit sources use raw HTML — set FIRECRAWL_API_KEY for clean markdown context (firecrawl.dev, 500/month free)'],
-            [['NYANBOOK_AI_KEY'],
+            [['OPENROUTER_API_KEY'],
              '🧠', 'Dashboard AI audit (Nyan AI)',
-             'Book audit features disabled — set NYANBOOK_AI_KEY (Groq API key)'],
+             'Book audit features disabled — set OPENROUTER_API_KEY'],
             [['OPENROUTER_API_KEY'],
              '🔀', 'OpenRouter LLM fallback',
              'Groq-only mode — set OPENROUTER_API_KEY to enable LLM failover (openrouter.ai, free account)'],
-            [['OLLAMA_BASE_URL'],
-             '🦙', 'Ollama offline LLM (sovereign tier)',
-             'Cloud-only AI mode — set OLLAMA_BASE_URL (e.g. http://192.168.1.10:11434) to enable local/self-hosted sovereign AI fallback (ollama.ai)'],
             [['FRACTAL_SALT'],
              '🔐', 'Fractal ID salt',
              'Using weak dev default — set FRACTAL_SALT to a 64-char random hex in production'],
@@ -1161,23 +1236,13 @@ app.listen(PORT, '0.0.0.0', async () => {
 
     // All routes and error handlers registered — open the gate
     serverReady = true;
+    startup.mark('api-ready');
     logger.info('🟢 Server ready — accepting API requests');
     
     // BACKGROUND STARTUP: Non-blocking init for background systems.
     // No setTimeout needed — DB pool is already proven alive by initializeDatabase().
     (async () => {
-        if (hermesBot !== null && hermesBot !== undefined && typeof hermesBot.isReady === 'function' && hermesBot.isReady()) {
-            try {
-                logger.info('🏥 Auto-healing: initializing heal queue...');
-                healQueue.setDependencies(pool, hermesBot);
-                await healQueue.initialize();
-                healQueue.start(20000);
-            } catch (error) {
-                logger.error({ err: error }, 'Auto-heal initialization failed');
-            }
-        } else {
-            logger.warn('Hermes not ready — skipping auto-heal');
-        }
+        startHealing();
 
         const { worker: outboxWorker } = require('./lib/outpipes/worker');
         outboxWorker.setPool(pool);
@@ -1193,10 +1258,6 @@ app.listen(PORT, '0.0.0.0', async () => {
             logger.warn('⚠️ RESEND_API_KEY not set — monthly summary emails will not send until this secret is configured');
         }
 
-        phiBreathe.setPool(pool);
-        phiBreathe.setBots({ hermes: hermesBot, thoth: thothBot, idris: idrisBot, horus: horusBot });
-        phiBreathe.setCleanupFunctions({ cleanupOldSessions });
-
         phiBreathe.setHeartbeatCallback((breathCount) => {
             console.log('\n' + formatPulseLog(registeredSatellites, 'online') + '\n');
             // Refresh NyanMesh node statuses — use Discord.js client.isReady() (checks WS READY state)
@@ -1207,7 +1268,8 @@ app.listen(PORT, '0.0.0.0', async () => {
             phiBreathe.updateNodeStatus('horus',  horusBot.client?.isReady()  ?? false);
         });
 
-        await phiBreathe.startPhiBreathe();
+        await heartbeat;
+        if (startup.stopping) return;
         await phiBreathe.orchestrateStartup();
 
         usageTracker.registerWithHeartbeat(phiBreathe);
@@ -1224,23 +1286,36 @@ app.listen(PORT, '0.0.0.0', async () => {
             _lastBackupRunHour = hourKey;
             await runBackup(pool);
         });
-    })();
-});
+    })().catch(error => logger.error({ code: error.code }, 'Background startup failed; core remains available'));
+}
 
 // Graceful shutdown — stop the queue processor and wait for the current
 // in-flight message to finish before exiting, so mid-ledger-write Discord
 // calls are not abandoned. A 5s timeout guards against a hung item.
-async function gracefulShutdown(signal) {
+async function gracefulShutdown(signal, code = 0) {
+    if (startup.stopping) return;
+    startup.close();
+    serverReady = false;
+    server.close();
     logger.info({ signal }, 'Graceful shutdown: stopping queue processor...');
+    healQueue.stop();
+    genesisCounter.stop();
+    require('./lib/outpipes/worker').worker.stop();
     try {
         await Promise.race([
-            stopQueueProcessor(),
+            Promise.allSettled([stopQueueProcessor(), phiBreathe.shutdown(), maintenance.stop()]),
             new Promise(resolve => setTimeout(resolve, 5000))
         ]);
     } catch (_) {}
+    for (const bot of [hermesBot, thothBot, idrisBot, horusBot]) bot?.client?.destroy?.();
+    await Promise.race([pool.end(), new Promise(resolve => setTimeout(resolve, 1000))]);
     logger.info('Graceful shutdown complete');
-    process.exit(0);
+    process.exit(code);
 }
 
 process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 process.on('SIGINT',  () => gracefulShutdown('SIGINT'));
+})().catch(error => {
+    console.error(`Startup failed: ${error.code || 'INITIALIZATION_ERROR'}`);
+    process.exit(1);
+});

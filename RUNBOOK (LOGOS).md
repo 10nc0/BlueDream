@@ -28,6 +28,45 @@ Run after every fresh deployment or major environment change.
 
 ## Optional Features
 
+### Pull-only public research
+
+The playground's public reader is documented in [Public reader operating
+boundary](docs/public-reader.md). It uses an IP-pinned anonymous HTTP transport,
+then optional **offline static** Playwright Chromium rendering. It does not
+support live page scripts, logins, forms, arbitrary clicks, accounts, downloads,
+CAPTCHA bypass or writes. No approval can grant write authority. Page content is
+untrusted evidence, not instructions; retrieval alone is not verification.
+
+Runtime dependencies: `playwright`, `cheerio`, `ipaddr.js`. Install the matching
+Playwright Chromium build and required OS libraries in the target environment;
+run `node scripts/check-public-reader.js` there before rollout. Do not disable the
+Chromium sandbox to make a failing check pass. Missing or unusable Chromium
+returns `browser_unavailable`; useful direct text can still be returned with that
+limitation. There is no remote rendering fallback. Do not assume development
+browser binaries or caches will be present in an autoscale image.
+
+Budget per request: 3 documents, 2 following hops per starting source, 45 seconds
+from the first read, 2 scroll passes per document, 2 MiB per transfer, 30,000
+extracted characters. Shared per-process concurrency defaults to 1; optional
+`PUBLIC_READER_CONCURRENCY` is clamped to 1–2 (autoscale replicas each have their
+own cap). Busy readers fail immediately; there is no pending job queue. Existing
+public playground rate limits also cover non-streaming reading. Stop or
+disconnect cancels transfers and closes rendering resources. Browser results
+are request-local, never stored in the shared URL/post-hint caches.
+
+Plan at least 512 MiB extra headroom per rendering slot and measure CPU, startup
+time and peak memory in the target runtime. Static retrieval has no remote
+automation fee; normal search-provider costs remain. Website operators can log
+every request. GET is not a universal guarantee of no server-side changes:
+action-like and uncertain routes are denied, but arbitrary third-party server
+semantics cannot be proven. Unknown reading routes and query-bearing links are
+intentionally unsupported, including some legitimate sources.
+
+Verification: `node --test tests/test-public-reader.js`, followed by
+`npm run test:unit`. The deterministic suite uses inert local fixtures and
+intercepted sockets, never a private-network exception in production policy.
+Publication requires a separate operator decision; this task does not publish.
+
 | Feature | Secret / Config | Cost |
 |---------|----------------|------|
 | Web search in Playground | `PLAYGROUND_BRAVE_API` — [brave.com/search/api](https://brave.com/search/api) | Free (2k queries/mo) |

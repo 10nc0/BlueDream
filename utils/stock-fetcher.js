@@ -667,8 +667,8 @@ function calculateDataAge(endDate) {
  */
 async function extractTickerWithAI(query) {
   if (!query || typeof query !== 'string') return null;
-  if (!process.env.NYANBOOK_AI_KEY && !process.env.GROQ_API_KEY) {
-    logger.warn('⚠️ AI ticker extraction skipped: No NYANBOOK_AI_KEY');
+  if (!process.env.OPENROUTER_API_KEY) {
+    logger.warn('AI ticker extraction skipped: OPENROUTER_API_KEY not configured');
     return null;
   }
   
@@ -676,7 +676,7 @@ async function extractTickerWithAI(query) {
     const response = await axios.post(
       GROQ_API_URL,
       {
-        model: 'openai/gpt-oss-20b', // fast model (llama-3.1-8b-instant retired 2026-08-19)
+        model: AI_MODELS.TEXT_MODEL,
         messages: [
           {
             role: 'system',
@@ -705,7 +705,7 @@ EXAMPLES:
       },
       {
         headers: {
-          'Authorization': `Bearer ${process.env.NYANBOOK_AI_KEY || process.env.GROQ_API_KEY}`,
+          'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
           'Content-Type': 'application/json'
         },
         timeout: 5000

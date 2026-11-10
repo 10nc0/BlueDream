@@ -4,7 +4,6 @@
 // Security: Can only create threads and post via webhook, cannot read messages
 // Purpose: Write-only bot for Nyan AI audit log posting
 
-const { Client, GatewayIntentBits, ChannelType } = require('discord.js');
 const axios = require('axios');
 const { AUDIT } = require('../config/constants');
 const { splitMessageIntoChunks } = require('../lib/discord-webhooks');
@@ -37,6 +36,7 @@ class IdrisBot {
         }
 
         try {
+            const { Client, GatewayIntentBits } = require('discord.js');
             this.client = new Client({
                 intents: [
                     GatewayIntentBits.Guilds,
@@ -125,7 +125,7 @@ class IdrisBot {
                 name: threadName,
                 autoArchiveDuration: 10080,
                 reason: `Auto-created AI audit log thread for tenant: ${tenantId}`,
-                type: ChannelType.PublicThread
+                type: require('discord.js').ChannelType.PublicThread
             });
 
             logger.info({ threadName, threadId: thread.id }, '📝 Idris created AI log thread');
@@ -192,7 +192,7 @@ class IdrisBot {
             name: threadName,
             autoArchiveDuration: 10080,
             reason: `Auto-created AI audit thread for book: ${fractalId}`,
-            type: ChannelType.PublicThread
+            type: require('discord.js').ChannelType.PublicThread
         });
 
         logger.info({ threadName, threadId: thread.id, fractalId }, '📖 Idris created book audit thread');
@@ -214,7 +214,7 @@ class IdrisBot {
     }
 
     async postAuditResult(threadId, auditResult, query, bookName = null) {
-        const EMBED_DESC_LIMIT = 4096;
+        const EMBED_DESC_LIMIT = auditResult.data_extracted?.imageAudit ? 2600 : 4096;
         const CONT_CHUNK_SIZE  = 1900;
 
         const emoji  = AUDIT.STATUS_EMOJI[auditResult.status] || '❓';
@@ -234,6 +234,22 @@ class IdrisBot {
         ];
         if (bookName) {
             fields.push({ name: '📚 Book', value: bookName, inline: false });
+        }
+        const visualAudit = auditResult.data_extracted?.imageAudit;
+        if (visualAudit) {
+            // Bounded metadata only; no private URLs, pixels, OCR text, or findings.
+            fields.push({ name: 'Image Audit', value: JSON.stringify({
+                requested: !!visualAudit.requested, mode: visualAudit.mode, coverage: visualAudit.coverage,
+                inspected: visualAudit.inspected, available: visualAudit.available, skipped: visualAudit.skipped,
+                model: visualAudit.model, verdict: visualAudit.verdict
+            }).slice(0, 1000), inline: false });
+            const refs = [...(visualAudit.evidence || []).filter(e => e.citationUrl),
+                ...(visualAudit.evidence || []).filter(e => !e.citationUrl)];
+            for (const [index, ref] of refs.slice(0, 3).entries()) {
+                const safe = { id: ref.id, bookId: ref.bookId, messageId: ref.messageId,
+                    attachmentId: ref.attachmentId, source: ref.source, page: ref.page, status: ref.status, hash: ref.hash };
+                fields.push({ name: `Image Source ${index + 1}`, value: JSON.stringify(safe).slice(0, 1000), inline: false });
+            }
         }
 
         const embed = {

@@ -112,25 +112,19 @@ const DISCORD = {
   THREAD_PAGINATION_LIMIT: 100     // Messages per fetch (Discord max: 100)
 };
 
-// ==================== Groq API URLs ====================
-const GROQ_API_URL   = 'https://api.groq.com/openai/v1/chat/completions';
-const GROQ_AUDIO_URL = 'https://api.groq.com/openai/v1/audio/transcriptions';
+// ==================== Application LLM Provider ====================
+const { LLM_MODEL, LLM_API_URL } = require('./llm');
+// Compatibility names for existing callers; every application role uses Meta
+// Muse Ember through OpenRouter, including audio via chat input_audio.
+const GROQ_API_URL   = LLM_API_URL;
+const GROQ_AUDIO_URL = LLM_API_URL;
 
-// ==================== LLM Backend Router ====================
-// Drafter  → Groq openai/gpt-oss-120b (replaced llama-3.3-70b-versatile 2026-08-19:
-//            Groq retired their entire Llama lineup; gpt-oss-120b is the heaviest
-//            available text model on the new lineup)
-// Fast     → Groq openai/gpt-oss-20b (replaced llama-3.1-8b-instant)
-// Auditor  → DeepSeek R1 if DEEPSEEK_API set (reasoning chain catches confabulation),
-//            else falls back to Groq drafter (graceful degradation, same timeouts)
-// Both are OpenAI-compatible; swap URL + model + token at the call site.
+// Legacy role names retained with their role-specific deadlines. Every role
+// uses the one model selected in config/llm.js; none selects a fallback provider.
 const LLM_BACKENDS = {
   drafter: {
     url: GROQ_API_URL,
-    // @source: Groq API
-    // @ref: https://console.groq.com/docs/models
-    // @verified: 2026-08-19
-    model: 'openai/gpt-oss-120b',
+    model: LLM_MODEL,
     timeouts: {
       reasoning: 15000,
       toolCall:  30000,
@@ -140,10 +134,7 @@ const LLM_BACKENDS = {
   },
   fast: {
     url: GROQ_API_URL,
-    // @source: Groq API
-    // @ref: https://console.groq.com/docs/models
-    // @verified: 2026-08-19
-    model: 'openai/gpt-oss-20b',
+    model: LLM_MODEL,
     timeouts: {
       reasoning:  5000,
       toolCall:  10000,
@@ -152,9 +143,9 @@ const LLM_BACKENDS = {
     }
   },
   auditor: {
-    url: 'https://api.deepseek.com/v1/chat/completions',
-    model: 'deepseek-reasoner',
-    // deepseek-reasoner generates chain-of-thought before answering — needs much longer timeouts
+    url: LLM_API_URL,
+    model: LLM_MODEL,
+    // Retain the existing audit role's maximum timeout.
     timeouts: {
       reasoning: 120000,   // S2 main reasoning (think + answer) — not used by auditor
       toolCall:   90000,   // not used by auditor
@@ -164,8 +155,8 @@ const LLM_BACKENDS = {
   },
   llamaAuditor: {
     url: 'https://openrouter.ai/api/v1/chat/completions',
-    model: 'meta-llama/llama-3.3-70b-instruct',
-    // OpenRouter Llama restores an independent auditor with reliable JSON mode.
+    model: LLM_MODEL,
+    // JSON-mode audit pass on the same model as drafting.
     timeouts: {
       reasoning: 45000,
       toolCall:  45000,
@@ -175,8 +166,8 @@ const LLM_BACKENDS = {
   },
   kimi: {
     url: 'https://openrouter.ai/api/v1/chat/completions',
-    model: 'moonshotai/kimi-k2',
-    // Kimi K2: strong multilingual reasoning, large context, via OpenRouter
+    model: LLM_MODEL,
+    // Compatibility role for older archive callers.
     timeouts: {
       reasoning:  60000,
       toolCall:   90000,
@@ -195,20 +186,17 @@ function getFastLLMBackend() {
 }
 
 function getAuditBackend() {
-  // S3 uses an independent Llama auditor through OpenRouter. GPT-OSS remains
-  // the Groq fallback in two-pass-verification when OpenRouter is unavailable.
+  // Separate audit pass, same selected model; not independent-model verification.
   return LLM_BACKENDS.llamaAuditor;
 }
 
 // ==================== AI Models ====================
-// @source: Groq API - Model availability changes with releases
-// @ref: https://console.groq.com/docs/models
-// @verified: 2026-08-19  (Groq retired Llama lineup; updated to new model IDs)
+// @source: OpenRouter live model catalogue; text/image/audio input and JSON/tools.
 const AI_MODELS = {
-  TEXT_MODEL: 'openai/gpt-oss-120b',                        // Groq drafter model (replaced llama-3.3-70b-versatile)
-  VISION_MODEL: 'groq/compound',                             // Groq vision/routing model (llama-4-scout retired 2026-08-19)
-  VISION: 'groq/compound',                                   // Alias for backward compatibility
-  AUDIO_MODEL: 'whisper-large-v3-turbo',                     // Groq Whisper model (unchanged)
+  TEXT_MODEL: LLM_MODEL,
+  VISION_MODEL: LLM_MODEL,
+  VISION: LLM_MODEL,
+  AUDIO_MODEL: LLM_MODEL,
   
   // Temperature routing (H₀ protocol — centralized, never hardcode at call sites)
   TEMPERATURE_DETERMINISTIC: 0,    // Tool calls, stock data, structured extraction — zero hallucination

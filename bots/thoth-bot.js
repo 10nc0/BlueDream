@@ -3,7 +3,6 @@
 // Permissions: READ_MESSAGE_HISTORY only (NO WRITE)
 // Security: Can only read messages, cannot create/modify/delete
 
-const { Client, GatewayIntentBits } = require('discord.js');
 const logger = require('../lib/logger');
 
 class ThothBot {
@@ -25,6 +24,7 @@ class ThothBot {
         }
 
         try {
+            const { Client, GatewayIntentBits } = require('discord.js');
             this.client = new Client({
                 intents: [
                     GatewayIntentBits.Guilds,
