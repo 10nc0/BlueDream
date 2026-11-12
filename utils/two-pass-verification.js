@@ -21,6 +21,36 @@ const axios = require('axios');
 const { buildAuditPrompt, buildCorrectivePrompt } = require('../prompts/audit-protocol');
 const { getAuditBackend, AI_MODELS } = require('../config/constants');
 const { BRAND } = require('../config/brand');
+const { completionMetadata } = require('../lib/llm-completion');
+
+const AUDIT_SCHEMA = {
+  type: 'object', additionalProperties: false,
+  required: ['verdict', 'confidence', 'checksPass', 'issues', 'suggestedFixes', 'dialecticalAnalysis'],
+  properties: {
+    verdict: { type: 'string', enum: ['APPROVED', 'FIXABLE', 'REJECTED'] },
+    confidence: { type: 'number', minimum: 0, maximum: 100 },
+    checksPass: { type: 'array', items: { type: 'string' } },
+    issues: { type: 'array', items: {
+      type: 'object', additionalProperties: false,
+      required: ['severity', 'layer', 'check', 'quote', 'reason'],
+      properties: {
+        severity: { type: 'string', enum: ['CRITICAL', 'HIGH', 'MAJOR', 'MINOR'] },
+        layer: { type: 'string', enum: ['THESIS', 'ANTITHESIS', 'SYNTHESIS'] },
+        check: { type: 'string' }, quote: { type: 'string' }, reason: { type: 'string' }
+      }
+    } },
+    suggestedFixes: { type: 'array', items: { type: 'string' } },
+    dialecticalAnalysis: {
+      type: 'object', additionalProperties: false,
+      required: ['thesisGrounding', 'antithesisResolution', 'synthesisIntegrity'],
+      properties: {
+        thesisGrounding: { type: 'string', enum: ['STRONG', 'WEAK', 'NONE'] },
+        antithesisResolution: { type: 'string', enum: ['COMPLETE', 'PARTIAL', 'NONE'] },
+        synthesisIntegrity: { type: 'string', enum: ['SOUND', 'FLAWED'] }
+      }
+    }
+  }
+};
 
 
 async function runAuditPass(groqToken, draftAnswer, originalQuery, userContext, extensions, timeout) {
@@ -67,9 +97,9 @@ Perform the dialectical audit and output JSON only.`;
     auditContent = `ORIGINAL QUERY:\n${originalQuery}\n\nCONTEXT PROVIDED:\n${userContext || 'None'}\n\nDRAFT ANSWER TO AUDIT:\n${draftAnswer}\n\nPerform the audit and output JSON only.`;
   }
 
-  const auditMessages = [
-    { role: 'system', content: auditPrompt },
-    { role: 'user', content: auditContent }
+    const auditMessages = [
+    { role: 'system', content: auditPrompt.replace(/[═─]{3,}/g, '---').replace(/\n{3,}/g, '\n\n') },
+    { role: 'user', content: auditContent.replace(/[═─]{3,}/g, '---') }
   ];
 
   try {
@@ -89,12 +119,17 @@ Perform the dialectical audit and output JSON only.`;
       model: auditBackend.model,
       messages: auditMessages,
       max_tokens: 800,
+      // Keep the existing spend ceiling; max reasoning otherwise consumes it.
+      ...(isOpenRouter ? { reasoning: { effort: 'minimal' } } : {}),
       ...(isReasoner
         ? { temperature: AI_MODELS.TEMPERATURE_DEEPSEEK }
         : usesTextJson
           ? { temperature: AI_MODELS.TEMPERATURE_PRECISE }
-          : { temperature: AI_MODELS.TEMPERATURE_PRECISE, response_format: { type: 'json_object' } }
-      )
+          : { temperature: AI_MODELS.TEMPERATURE_PRECISE, response_format: isOpenRouter
+            ? { type: 'json_schema', json_schema: { name: 'answer_audit', strict: true, schema: AUDIT_SCHEMA } }
+            : { type: 'json_object' } }
+      ),
+      ...(extensions.provider ? { provider: extensions.provider } : {})
     };
 
     const auditHeaders = {
@@ -121,7 +156,15 @@ Perform the dialectical audit and output JSON only.`;
         auditBackend.url, requestBody, auditHeaders,
         timeout || auditBackend.timeouts.audit
       );
+      extensions.onProviderResponse?.({
+        model: response.data?.model || auditBackend.model,
+        usage: response.data?.usage || null
+      });
+      if (response.data?.usage) logger.debug(`AI audit usage ${JSON.stringify({
+        promptTokens: response.data.usage.prompt_tokens, completionTokens: response.data.usage.completion_tokens
+      })}`);
     } catch (primaryErr) {
+      if (extensions.noFallback) throw primaryErr;
       // Fallback: if the primary backend (Kimi/OpenRouter) failed for any
       // non-timeout reason, retry once on Groq Llama so the audit still runs.
       // Timeouts propagate as-is (user already waiting long enough).
@@ -156,10 +199,35 @@ Perform the dialectical audit and output JSON only.`;
         fallbackBackend.url, fallbackBody, fallbackHeaders,
         timeout || fallbackBackend.timeouts.audit
       );
+      extensions.onProviderResponse?.({
+        model: response.data?.model || fallbackBackend.model,
+        usage: response.data?.usage || null
+      });
       responseUsesTextJson = fallbackUsesTextJson;
     }
 
-    let rawContent = response.data.choices?.[0]?.message?.content || '{}';
+    const metadata = completionMetadata(response.data);
+    logger.debug(`AI audit completion ${JSON.stringify(metadata)}`);
+    if (metadata.finishReason === 'length') {
+      return {
+        verdict: 'REJECTED', confidence: 0, checksPass: [], suggestedFixes: [],
+        issues: [{ severity: 'CRITICAL', reason: 'Audit response was truncated' }],
+        providerContractValid: false, error: 'AUDIT_TRUNCATED'
+      };
+    }
+    let rawContent = response.data?.choices?.[0]?.message?.content;
+    if (typeof rawContent !== 'string' || !rawContent.trim()) {
+      logger.warn('⚠️ Audit JSON response was empty');
+      return {
+        verdict: 'REJECTED',
+        confidence: 0,
+        checksPass: [],
+        issues: [{ severity: 'CRITICAL', reason: 'Audit response was empty' }],
+        suggestedFixes: [],
+        providerContractValid: false,
+        error: 'JSON_PARSE_ERROR'
+      };
+    }
 
     // For non-JSON-mode providers extract the
     // JSON block from the text — they may wrap it in markdown fences.
@@ -175,44 +243,63 @@ Perform the dialectical audit and output JSON only.`;
     try {
       parsed = JSON.parse(auditContent);
     } catch (parseError) {
-      console.warn('⚠️ Audit JSON parse failed');
+      logger.warn('⚠️ Audit JSON parse failed');
       return {
         verdict: 'REJECTED',
         confidence: 0,
         checksPass: [],
         issues: [{ severity: 'CRITICAL', reason: 'Failed to parse audit results' }],
         suggestedFixes: [],
+        providerContractValid: false,
         error: 'JSON_PARSE_ERROR'
       };
     }
 
     // Verdict Validation: Ensure verdict is one of the allowed types
-    const allowedVerdicts = ['APPROVED', 'FIXABLE', 'REJECTED', 'BYPASS'];
-    const verdict = (parsed.verdict || 'REJECTED').toUpperCase();
+    const allowedVerdicts = ['APPROVED', 'FIXABLE', 'REJECTED'];
+    const verdict = typeof parsed?.verdict === 'string' ? parsed.verdict.toUpperCase() : 'REJECTED';
     
     if (!allowedVerdicts.includes(verdict)) {
-      console.warn(`⚠️ Invalid audit verdict detected: "${verdict}" - falling back to REJECTED`);
+      logger.warn(`⚠️ Invalid audit verdict detected: "${verdict}" - falling back to REJECTED`);
       return {
         verdict: 'REJECTED',
-        confidence: parsed.confidence ?? 0,
-        checksPass: parsed.checksPass || [],
-        issues: [...(parsed.issues || []), { severity: 'CRITICAL', reason: 'Invalid verification verdict returned' }],
-        suggestedFixes: parsed.suggestedFixes || [],
+        confidence: 0, checksPass: [],
+        issues: [{ severity: 'CRITICAL', reason: 'Invalid verification verdict returned' }],
+        suggestedFixes: [],
+        providerContractValid: false,
         error: 'INVALID_VERDICT'
       };
     }
 
+    const providerContractValid = !!parsed && typeof parsed === 'object' && !Array.isArray(parsed) &&
+      typeof parsed.verdict === 'string' && Number.isFinite(parsed.confidence) &&
+      parsed.confidence >= 0 && parsed.confidence <= 100 &&
+      Array.isArray(parsed.checksPass) && Array.isArray(parsed.issues) &&
+      parsed.checksPass.every(check => typeof check === 'string') &&
+      parsed.issues.every(issue => issue && typeof issue === 'object' &&
+        ['CRITICAL', 'HIGH', 'MAJOR', 'MINOR'].includes(issue.severity) &&
+        typeof issue.reason === 'string') &&
+      Array.isArray(parsed.suggestedFixes) && parsed.suggestedFixes.every(fix => typeof fix === 'string');
+    if (!providerContractValid) {
+      return {
+        verdict: 'REJECTED', confidence: 0, checksPass: [], suggestedFixes: [],
+        issues: [{ severity: 'CRITICAL', reason: 'Invalid verification fields returned' }],
+        providerContractValid: false, error: 'INVALID_AUDIT_FIELDS'
+      };
+    }
     return {
       verdict: verdict,
       confidence: parsed.confidence ?? 80,
       checksPass: parsed.checksPass || [],
       issues: parsed.issues || [],
       suggestedFixes: parsed.suggestedFixes || [],
-      dialecticalAnalysis: parsed.dialecticalAnalysis || null
+      dialecticalAnalysis: parsed.dialecticalAnalysis || null,
+      providerContractValid
     };
   } catch (err) {
+    if (err.code === 'AI_CAPACITY') throw err;
     if (err.code === 'ECONNABORTED' || err.message.includes('timeout') || err.message === 'aborted' || err.code === 'ECONNRESET') {
-      console.error(`⏱️ Audit Pass Timeout/Reset - Bypassing verification`);
+      logger.warn({ code: err.code || 'timeout' }, '⏱️ Audit Pass Timeout/Reset - Bypassing verification');
       return { 
         verdict: 'BYPASS', 
         confidence: null, 
@@ -221,7 +308,7 @@ Perform the dialectical audit and output JSON only.`;
         error: 'AUDIT_TIMEOUT'
       };
     }
-    console.error(`❌ Audit Pass Error: ${err.message}`);
+    logger.error({ code: err.code || 'AUDIT_NETWORK_ERROR' }, '❌ Audit Pass Error');
     // Error Propagation: Skip safely with BYPASS instead of defaulting to APPROVED
     return { 
       verdict: 'BYPASS', 

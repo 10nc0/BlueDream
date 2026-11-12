@@ -7,6 +7,7 @@ const test = require('node:test');
 const axios = require('axios');
 const usage = require('../utils/playground-usage');
 const { groqWithRetry, kimiFirst, resolveAIToken } = require('../utils/groq-client');
+const { callWithTools, runToolCall } = require('../utils/llm-tool-runner');
 const { LLM_MODEL, LLM_API_URL } = require('../config/llm');
 const { AI_MODELS, getLLMBackend, getFastLLMBackend, getAuditBackend, LLM_BACKENDS } = require('../config/constants');
 
@@ -52,6 +53,7 @@ test('Muse Ember provider contracts (offline)', async t => {
             axios.post = async (_url, body, options) => {
                 signals.push(options.signal);
                 assert.equal(body.model, LLM_MODEL);
+                assert.deepEqual(body.reasoning, { effort: 'low' });
                 if (signals.length === 1) throw Object.assign(new Error('busy'), {
                     response: { status: 429, headers: { 'retry-after': '0' } }
                 });
@@ -105,6 +107,37 @@ test('Muse Ember provider contracts (offline)', async t => {
             axios.post = async () => { calls++; throw Object.assign(new Error('unavailable'), { response: { status: 503 } }); };
             await assert.rejects(groqWithRetry(request(), 0), /unavailable/);
             assert.equal(calls, 1);
+        });
+        await t.test('malformed tool arguments fail explicitly instead of becoming an empty object', async () => {
+            await assert.rejects(runToolCall({
+                function: { name: 'add_numbers', arguments: '{"a":' }
+            }, () => ({ name: 'add-numbers', parameters: {}, execute: () => 42 })),
+            error => error.code === 'LLM_TOOL_ARGUMENTS_INVALID');
+            await assert.rejects(runToolCall({
+                function: { name: 'add_numbers', arguments: '[]' }
+            }, () => ({ name: 'add-numbers', parameters: {}, execute: () => 42 })),
+            error => error.code === 'LLM_TOOL_ARGUMENTS_INVALID');
+        });
+        await t.test('tool requests preserve bounded retries, output and provider routing', async () => {
+            let requestArgs;
+            const result = await callWithTools({
+                groqCall: async (...args) => {
+                    requestArgs = args;
+                    return { data: { model: LLM_MODEL, choices: [{ message: { tool_calls: [] } }] } };
+                },
+                url: LLM_API_URL,
+                model: LLM_MODEL,
+                messages: [{ role: 'user', content: 'synthetic fixture' }],
+                tools: [],
+                toolChoice: 'required',
+                maxTokens: 96,
+                maxRetries: 0,
+                provider: { allow_fallbacks: false }
+            });
+            assert.equal(requestArgs[1], 0, 'live smoke can cap provider attempts at one per call');
+            assert.equal(requestArgs[0].data.max_tokens, 96);
+            assert.deepEqual(requestArgs[0].data.provider, { allow_fallbacks: false });
+            assert.equal(result.model, LLM_MODEL);
         });
         await t.test('audio uses input_audio chat content and returns the transcription contract', async () => {
             const { transcribeAudio } = require('../utils/attachment-cascade');

@@ -3,6 +3,7 @@
 const { AsyncLocalStorage } = require('node:async_hooks');
 const { createHash, createHmac, randomUUID } = require('node:crypto');
 const { CAPACITY } = require('../config/constants');
+const { capacityTransaction } = require('../lib/ai-capacity-transaction');
 const context = new AsyncLocalStorage();
 const POLICY = {
     text: { poolPerHour: CAPACITY.TEXT_REQUESTS_PER_HOUR, costMultiplier: 1 },
@@ -12,7 +13,8 @@ const POLICY = {
 let pool;
 let installed = false;
 function problem(message, status = 429) {
-    return Object.assign(new Error(message), { status, code: 'AI_CAPACITY', retryAfter: 60 });
+    return Object.assign(new Error(message), { status, code: 'AI_CAPACITY', retryAfter: 60,
+        capacityReason: status === 429 ? 'limit' : 'unavailable' });
 }
 function configuration() {
     // Non-secret operator policy. No model is enabled implicitly.
@@ -62,26 +64,21 @@ function identity() {
     return { principal, tenant, ctx: context.getStore() };
 }
 function middleware(req, res, next) {
-    context.run({ req, id: randomUUID(), admitted: false, calls: 0, tokens: 0, outputs: 0 }, next);
+    const controller = new AbortController();
+    const close = () => { controller.abort(); cleanup(); };
+    const cleanup = () => {
+        res.removeListener('close', close);
+        res.removeListener('finish', cleanup);
+    };
+    res.once('close', close);
+    res.once('finish', cleanup);
+    context.run({ req, id: randomUUID(), signal: controller.signal,
+        admitted: false, calls: 0, tokens: 0, outputs: 0 }, next);
 }
 function withContext(value, fn) { return context.run(value, fn); }
-async function transaction(fn) {
-    if (!pool) throw problem('Shared AI capacity is unavailable. Please try later.', 503);
-    const client = await pool.connect();
-    try {
-        await client.query('BEGIN');
-        await client.query("SET LOCAL lock_timeout = '3s'");
-        await client.query("SET LOCAL statement_timeout = '5s'");
-        // One short admission transaction, no network/model work inside the lock.
-        await client.query('SELECT pg_advisory_xact_lock(708282)');
-        const value = await fn(client);
-        await client.query('COMMIT');
-        return value;
-    } catch (err) {
-        await client.query('ROLLBACK').catch(() => {});
-        if (err.code === 'AI_CAPACITY') throw err;
-        throw problem('Shared AI capacity could not be checked. Please try later.', 503);
-    } finally { client.release(); }
+function transaction(fn, operation, options = {}) {
+    return capacityTransaction({ pool, ctx: context.getStore(), operation, fn,
+        signal: options.signal, deadline: options.deadline });
 }
 async function state(client, key, initial) {
     const result = await client.query('SELECT state FROM core.ai_capacity WHERE key=$1', [key]);
@@ -91,13 +88,28 @@ async function save(client, key, value) {
     await client.query(`INSERT INTO core.ai_capacity(key,state) VALUES($1,$2)
         ON CONFLICT(key) DO UPDATE SET state=EXCLUDED.state,updated_at=NOW()`, [key, value]);
 }
+// All callers hold the same transaction-scoped advisory lock. Batch the
+// independent ledger reads/writes, not the checks: cross-instance limits and
+// rollback semantics stay unchanged while avoiding one WAN round trip per key.
+async function states(client, keys) {
+    if (!keys.length) return new Map();
+    const result = await client.query('SELECT key,state FROM core.ai_capacity WHERE key = ANY($1::text[])', [keys]);
+    return new Map(result.rows.map(row => [row.key, row.state]));
+}
+async function saveStates(client, values) {
+    if (!values.size) return;
+    await client.query(`INSERT INTO core.ai_capacity(key,state)
+        SELECT key,state FROM jsonb_to_recordset($1::jsonb) AS v(key text,state jsonb)
+        ON CONFLICT(key) DO UPDATE SET state=EXCLUDED.state,updated_at=NOW()`,
+    [JSON.stringify([...values].map(([key, state]) => ({ key, state })))]);
+}
 function consumeBucket(bucket, rate, capacity, cost, now) {
     const available = Math.min(capacity, (bucket?.tokens ?? capacity) +
         Math.max(0, now - (bucket?.at ?? now)) * rate / 3600000);
     if (available < cost) throw problem('Shared AI capacity is resting. Try again shortly.');
     return { tokens: available - cost, at: now };
 }
-async function admission(service = 'text') {
+async function admission(service = 'text', options = {}) {
     const { principal, ctx } = identity();
     if (ctx?.admitted) return;
     let denialReason = 'Too many rapid requests. Please pause before retrying.';
@@ -146,7 +158,7 @@ async function admission(service = 'text') {
         actor.at = now;
         await save(client, key, actor);
         return true;
-    }).then(allowed => { if (!allowed) throw problem(denialReason); });
+    }, 'admission', options).then(allowed => { if (!allowed) throw problem(denialReason); });
     if (ctx) ctx.admitted = true;
 }
 function estimate(body, profile = {}) {
@@ -169,12 +181,17 @@ function estimate(body, profile = {}) {
     return { input, output, tokens: input + output, images };
 }
 async function reserve(body = {}, service = 'text', options = {}) {
-    await admission(service);
+    const ctx = context.getStore();
+    if (ctx?.accountingUncertain) throw Object.assign(problem('AI usage could not be recorded. Please try later.', 503),
+        { capacityOperation: 'settlement', providerCompleted: true });
+    await admission(service, options);
+    if (ctx?.requestMaxCalls && ctx.calls >= ctx.requestMaxCalls)
+        throw problem('The approved call limit for this test has been reached.');
     const cfg = configuration();
     const profile = cfg.models?.[body.model] || {};
     const amount = options.tokens !== undefined ? { tokens: options.tokens, output: 0 } :
         service === 'brave' ? { tokens: 0, input: 0, output: 0, images: 0 } : estimate(body, profile);
-    const { principal, tenant, ctx } = identity();
+    const { principal, tenant } = identity();
     if (!options.reserveOnly && ctx?.audit && (ctx.calls >= 3 || ctx.tokens + amount.tokens > 24000 ||
         ctx.outputs + amount.output > 4000 || Date.now() > ctx.deadline))
         throw problem('Audit budget reached. Narrow the date range or select fewer attachments.');
@@ -186,7 +203,8 @@ async function reserve(body = {}, service = 'text', options = {}) {
         throw problem('This provider/model has no approved price in the shared budget policy.', 503);
     const cost = options.cost ?? servicePrice ?? (((amount.input || 0) * (profile.inputUsdPerMillion || 0) +
         amount.output * (profile.outputUsdPerMillion || 0)) / 1e6);
-    if (ctx?.requestMaxUsd && (options.reserveOnly ? cost : (ctx.envelopeCost || 0) + cost) > ctx.requestMaxUsd)
+    const requestCost = ctx?.requestCostUsd ?? 0;
+    if (ctx?.requestMaxUsd && (options.reserveOnly ? cost : requestCost + cost) > ctx.requestMaxUsd)
         throw problem('The approved spend ceiling for this test has been reached.');
     const parent = !options.reserveOnly ? ctx?.envelope : null;
     const scopes = parent ? [] : ['global', `tenant:${tenant}`, `principal:${hash(principal)}`,
@@ -196,72 +214,93 @@ async function reserve(body = {}, service = 'text', options = {}) {
         const now = Date.now();
         const policy = POLICY[service] || POLICY.text;
         const key = `pool:${service}`;
+        const day = new Date().toISOString().slice(0, 10);
+        const metricKey = `metrics:${day}`;
+        const values = await states(client, [...scopes.map(scope => `spend:${day}:${scope}`),
+            ...(!options.reserveOnly ? [key, metricKey] : [])]);
         if (!options.reserveOnly) {
-            const global = await state(client, key, {});
-            await save(client, key, consumeBucket(global, policy.poolPerHour, policy.poolPerHour, policy.costMultiplier, now));
+            const global = values.get(key) || {};
+            values.set(key, consumeBucket(global, policy.poolPerHour, policy.poolPerHour, policy.costMultiplier, now));
         }
         const active = await client.query(`SELECT COUNT(*)::int AS n FROM core.ai_reservations
             WHERE settled=FALSE AND expires_at>NOW()`);
         if (active.rows[0].n >= (cfg.maxConcurrency || 4)) throw problem('AI capacity is busy. Please try shortly.');
-        const day = new Date().toISOString().slice(0, 10);
         for (const scope of scopes) {
             const cap = scope === 'global' ? cfg.global : scope.startsWith('tenant:') ? cfg.tenant :
                 scope.startsWith('provider:') ? cfg.providers?.[scope.slice(9)] : cfg.principal;
             const usageKey = `spend:${day}:${scope}`;
-            const usage = await state(client, usageKey, { tokens: 0, cost: 0 });
+            const usage = values.get(usageKey) || { tokens: 0, cost: 0 };
             if ((cap?.tokens && usage.tokens + amount.tokens > cap.tokens) ||
                 (cap?.usd && usage.cost + cost > cap.usd)) throw problem('Shared daily AI budget exhausted.');
-            await save(client, usageKey, { tokens: usage.tokens + amount.tokens, cost: usage.cost + cost });
+            values.set(usageKey, { tokens: usage.tokens + amount.tokens, cost: usage.cost + cost });
         }
         await client.query(`INSERT INTO core.ai_reservations(id,principal,scopes,tokens,cost,expires_at)
             VALUES($1,$2,$3,$4,$5,NOW()+INTERVAL '120 seconds')`,
         [id, principal, { keys: scopes.map(s => `spend:${day}:${s}`) }, amount.tokens, cost]);
         if (!options.reserveOnly) {
-            const metricKey = `metrics:${day}`;
-            const metrics = await state(client, metricKey, {});
+            const metrics = values.get(metricKey) || {};
             metrics.calls = (metrics.calls || 0) + 1;
             metrics.estimatedTokens = (metrics.estimatedTokens || 0) + amount.tokens;
             metrics.estimatedUsd = (metrics.estimatedUsd || 0) + cost;
             metrics.unpricedCalls = (metrics.unpricedCalls || 0) + (priced ? 0 : 1);
-            await save(client, metricKey, metrics);
+            values.set(metricKey, metrics);
         }
-    });
+        await saveStates(client, values);
+    }, 'reservation', options);
     if (ctx && !options.reserveOnly) {
         ctx.calls++; ctx.tokens += amount.tokens; ctx.outputs += amount.output;
+        if (ctx.requestMaxUsd) ctx.requestCostUsd = (ctx.requestCostUsd || 0) + cost;
         if (parent) { ctx.envelopeTokens += amount.tokens; ctx.envelopeCost += cost; }
     }
     return { id, ...amount, cost, profile, parent, priced, funded: options.funded };
 }
-async function settle(reservation, usage) {
+async function settle(reservation, usage, options = {}) {
     if (reservation.funded === false) usage = undefined;
     // Ambiguous errors/absent usage retain the whole charge; no automatic refund.
     const reported = Number(usage?.total_tokens);
     const actual = usage && Number.isFinite(reported) && reported >= 0 ? reported : reservation.tokens;
-    const actualCost = usage && Number.isFinite(usage.cost) ? usage.cost : usage && reservation.profile?.inputUsdPerMillion >= 0
-        ? ((Number(usage.prompt_tokens || 0) * reservation.profile.inputUsdPerMillion +
-            Number(usage.completion_tokens || 0) * reservation.profile.outputUsdPerMillion) / 1e6)
+    const hasTokenUsage = Number.isFinite(Number(usage?.prompt_tokens)) &&
+        Number.isFinite(Number(usage?.completion_tokens));
+    const actualCost = usage && Number.isFinite(usage.cost) ? usage.cost : usage && hasTokenUsage &&
+        reservation.profile?.inputUsdPerMillion >= 0
+        ? ((Number(usage.prompt_tokens) * reservation.profile.inputUsdPerMillion +
+            Number(usage.completion_tokens) * reservation.profile.outputUsdPerMillion) / 1e6)
         : reservation.cost;
-    await transaction(async client => {
+    const settled = await transaction(async client => {
         const row = await client.query('SELECT * FROM core.ai_reservations WHERE id=$1 FOR UPDATE', [reservation.id]);
-        if (!row.rows[0] || row.rows[0].settled) return;
+        if (!row.rows[0] || row.rows[0].settled) return false;
         const extra = actual - reservation.tokens;
         const extraCost = actualCost - reservation.cost;
+        const metricKey = `metrics:${new Date().toISOString().slice(0, 10)}`;
+        const includeMetrics = context.getStore()?.envelope?.id !== reservation.id;
+        const values = await states(client, [...row.rows[0].scopes.keys, ...(includeMetrics ? [metricKey] : [])]);
         for (const key of row.rows[0].scopes.keys) {
-            const value = await state(client, key, { tokens: 0, cost: 0 });
-            await save(client, key, { tokens: Math.max(0, value.tokens + extra), cost: Math.max(0, value.cost + extraCost) });
+            const value = values.get(key) || { tokens: 0, cost: 0 };
+            values.set(key, { tokens: Math.max(0, value.tokens + extra), cost: Math.max(0, value.cost + extraCost) });
         }
         await client.query('UPDATE core.ai_reservations SET settled=TRUE WHERE id=$1', [reservation.id]);
-        if (context.getStore()?.envelope?.id !== reservation.id) {
-            const key = `metrics:${new Date().toISOString().slice(0, 10)}`;
-            const metrics = await state(client, key, {});
+        if (includeMetrics) {
+            const metrics = values.get(metricKey) || {};
             metrics.chargedTokens = (metrics.chargedTokens || 0) + actual;
             metrics.chargedUsd = (metrics.chargedUsd || 0) + actualCost;
             metrics.reportedUsageCalls = (metrics.reportedUsageCalls || 0) + (usage ? 1 : 0);
-            await save(client, key, metrics);
+            values.set(metricKey, metrics);
         }
+        await saveStates(client, values);
+        return true;
+    }, 'settlement', options).catch(error => {
+        const ctx = context.getStore();
+        if (ctx) ctx.accountingUncertain = true;
+        // Never retry inference after a provider result was received but its
+        // usage couldn't be recorded. The original reservation stays charged.
+        error.providerCompleted = options.providerCompleted === true;
+        throw error;
     });
+    if (!settled) return;
     const ctx = context.getStore();
     if (ctx && usage) {
+        if (ctx.requestMaxUsd) ctx.requestCostUsd = Math.max(0,
+            (ctx.requestCostUsd || 0) + actualCost - reservation.cost);
         if (reservation.parent) {
             ctx.envelopeTokens += actual - reservation.tokens;
             ctx.envelopeCost += actualCost - reservation.cost;
@@ -282,7 +321,8 @@ async function reserveAuditEnvelope(profile) {
 }
 async function finishAuditEnvelope() {
     const ctx = context.getStore();
-    if (ctx?.envelope) await settle(ctx.envelope, { total_tokens: ctx.envelopeTokens, cost: ctx.envelopeCost });
+    if (ctx?.envelope) await settle(ctx.envelope, ctx.accountingUncertain ? undefined
+        : { total_tokens: ctx.envelopeTokens, cost: ctx.envelopeCost });
 }
 async function recordAudit({ inspected = 0, rejected = false }) {
     await transaction(async client => {
@@ -292,7 +332,7 @@ async function recordAudit({ inspected = 0, rejected = false }) {
         metrics.inspectedPages = (metrics.inspectedPages || 0) + inspected;
         metrics.rejectedAudits = (metrics.rejectedAudits || 0) + (rejected ? 1 : 0);
         await save(client, key, metrics);
-    });
+    }, 'audit_metrics');
 }
 async function status() {
     const cfg = configuration();
@@ -301,7 +341,7 @@ async function status() {
         policy: POLICY, visionEnabled: !!cfg.bookVision?.enabled,
         global: { limit: cfg.global || null, charged: await state(client, `spend:${day}:global`, { tokens: 0, cost: 0 }) },
         metrics: await state(client, `metrics:${day}`, {})
-    }));
+    }), 'status');
 }
 async function auditKey(key, result) {
     return transaction(async client => {
@@ -322,12 +362,12 @@ async function auditKey(key, result) {
         await client.query(`INSERT INTO core.ai_audit_requests(key,principal,state,expires_at)
             VALUES($1,$2,'pending',NOW()+INTERVAL '2 minutes')`, [key, principal]);
         return null;
-    });
+    }, 'audit_key');
 }
 async function auditFailed(key) {
     if (!key) return;
     // Keep short-lived idempotency tombstone without holding a processing slot.
-    await transaction(client => client.query("UPDATE core.ai_audit_requests SET state='failed' WHERE key=$1 AND state='pending'", [key]));
+    await transaction(client => client.query("UPDATE core.ai_audit_requests SET state='failed' WHERE key=$1 AND state='pending'", [key]), 'audit_release');
 }
 function classify(raw, method) {
     let url;
@@ -340,6 +380,12 @@ function classify(raw, method) {
     if (['api.search.brave.com', 'api.search.tinyfish.ai', 'api.exa.ai', 'api.firecrawl.dev'].includes(host)) return 'brave';
     return null;
 }
+function transportSignal(signal) {
+    const ctx = context.getStore();
+    const signals = [signal, ctx?.signal].filter(Boolean);
+    if (Number.isFinite(ctx?.deadline)) signals.push(AbortSignal.timeout(Math.max(0, ctx.deadline - Date.now())));
+    return signals.length ? AbortSignal.any(signals) : undefined;
+}
 function install(app, db) {
     pool = db;
     if (app) app.use(middleware);
@@ -351,29 +397,45 @@ function install(app, db) {
         if (service === 'text' && config.data?.messages?.some(m => Array.isArray(m.content) &&
             m.content.some(p => ['image_url', 'input_audio'].includes(p.type)))) service = 'vision';
         if (service) {
-            if (config.data?.stream) throw problem('Unbounded AI streaming transport is not supported.', 503);
+            if (config.data?.stream && (config.responseType !== 'stream' ||
+                typeof config.aiStream?.onDelta !== 'function' || service !== 'text'))
+                throw problem('Unbounded AI streaming transport is not supported.', 503);
             const ctx = context.getStore();
+            config.signal = transportSignal(config.signal);
             const byok = ctx?.req?.aiByokToken;
             const auth = config.headers?.Authorization || config.headers?.authorization;
             const operatorKeys = ['PLAYGROUND_AI_KEY', 'PLAYGROUND_GROQ_VISION_TOKEN', 'NYANBOOK_AI_KEY',
                 'OPENROUTER_API_KEY', 'DEEPSEEK_API', 'AI_INTEGRATIONS_OPENAI_API_KEY'].map(k => process.env[k]).filter(Boolean);
             const ownInference = byok && auth === `Bearer ${byok}` && !operatorKeys.includes(byok);
+            const reservationStarted = Date.now();
             config.aiReservation = await reserve(config.data, service, { provider: new URL(config.url).hostname,
+                signal: config.signal, deadline: ctx?.deadline,
                 ...(ownInference ? { tokens: 0, cost: 0, funded: false } : {}) });
+            require('../lib/logger').debug(`AI capacity timing ${JSON.stringify({ service, admissionAndReservationMs: Date.now() - reservationStarted })}`);
             if (ctx?.deadline) {
                 config.timeout = Math.max(1, Math.min(config.timeout || 30000, ctx.deadline - Date.now()));
-                config.signal = ctx.signal;
             }
+            config.signal?.throwIfAborted();
         }
         return config;
     });
     axios.interceptors.response.use(async response => {
-        if (response.config.aiReservation) await settle(response.config.aiReservation, response.data?.usage);
+        if (response.config.aiReservation && response.config.data) {
+            const body = typeof response.config.data === 'string'
+                ? JSON.parse(response.config.data) : response.config.data;
+            if (body.stream) {
+                response.data = await require('../lib/llm-stream').consumeCompletionStream(response.data, {
+                    signal: response.config.signal, onDelta: response.config.aiStream.onDelta
+                });
+            }
+        }
+        if (response.config.aiReservation) await settle(response.config.aiReservation, response.data?.usage,
+            { signal: response.config.signal, providerCompleted: true });
         return response;
     }, async error => {
         // Unknown network outcomes keep both the spend hold and concurrency lease.
         if (error.config?.aiReservation && error.response)
-            await settle(error.config.aiReservation).catch(() => {});
+            await settle(error.config.aiReservation, undefined, { signal: error.config.signal, providerCompleted: true });
         throw error;
     });
     const original = global.fetch;
@@ -383,12 +445,12 @@ function install(app, db) {
         if (!service) return original(input, init);
         let body = {};
         if (typeof init?.body === 'string') { try { body = JSON.parse(init.body); } catch {} }
-        const reservation = await reserve(body, service, { provider: new URL(String(input?.url || input)).hostname });
-        try {
-            const response = await original(input, init);
-            await settle(reservation);
-            return response;
-        } catch (err) { await settle(reservation).catch(() => {}); throw err; }
+        const signal = transportSignal(init?.signal || input?.signal);
+        const reservation = await reserve(body, service, { provider: new URL(String(input?.url || input)).hostname, signal });
+        // Network rejection skips settlement: keep the full charge AND lease.
+        const response = await original(input, { ...init, ...(signal ? { signal } : {}) });
+        await settle(reservation, undefined, { signal, providerCompleted: true });
+        return response;
     };
 }
 module.exports = { POLICY, context, identity, middleware, withContext, admission, reserve, settle, reserveAuditEnvelope, finishAuditEnvelope, recordAudit, status,

@@ -12,6 +12,7 @@ const { getTemporalContext, DEFAULT_TZ } = require('../../utils/temporal-resolve
 const capacity = require('../../utils/ai-capacity');
 const visual = require('../../utils/multimodal-book-audit');
 const originals = require('../../utils/book-evidence');
+const { requireCompletionText } = require('../../lib/llm-completion');
 
 // In-flight guard — prevents the same user from firing two identical audit
 // calls simultaneously (double-click, retry while pending, etc.).
@@ -184,7 +185,7 @@ Analyze the data and answer the user's question. Count carefully when asked abou
 
             let answer = includeImages
                 ? await visual.draft(prepared, contextPrompt, systemPrompt, { signal: controller.signal })
-                : response.data?.choices?.[0]?.message?.content || 'Sorry, I could not generate a response.';
+                : requireCompletionText(response.data);
 
             let auditCorrected = false;
             let corrections = [];
@@ -213,7 +214,7 @@ Analyze the data and answer the user's question. Count carefully when asked abou
                             }
                         }
                     }, 0);
-                    return retryResp.data?.choices?.[0]?.message?.content || null;
+                    return requireCompletionText(retryResp.data);
                 };
 
                 const pipelineResult = await runDashboardAuditPipeline({

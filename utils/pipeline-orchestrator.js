@@ -34,6 +34,8 @@
  */
 
 const logger = require('../lib/logger');
+const { publicAIError } = require('../lib/ai-errors');
+const { completionMetadata, completionError, requireCompletionText } = require('../lib/llm-completion');
 const { preflightRouter, buildSystemContext, classifyTemporalVolatility } = require('./preflight-router');
 const { extractContext, extractContextWithMemory, mergeContextForTickerDetection, isSessionFirstQuery, markSessionNyanBooted } = require('./context-extractor');
 const { NYAN_PROTOCOL_SYSTEM_PROMPT, NYAN_PROTOCOL_COMPRESSED, getNyanProtocolPrompt, getNyanProtocolCompressed } = require('../prompts/nyan-protocol');
@@ -45,7 +47,8 @@ const { detectPathogens, generateClinicalReport, generatePhysicalAuditDisclaimer
 const { DataPackage, globalPackageStore, STAGE_IDS } = require('./data-package');
 const { globalCheckpointStore, buildResumableSnapshot, applySnapshot } = require('./pipeline-checkpoint');
 const { getLLMBackend, getAuditBackend, AI_MODELS } = require('../config/constants');
-const { bridgeQuery } = require('./grammar-bridge');
+const { bridgeQuery, bridgeQueryDeterministic } = require('./grammar-bridge');
+const { RequestTiming, canStreamDraft } = require('../lib/playground-latency');
 const { CITY_EXPAND, COUNTRY_TO_CITY, CITY_TO_COUNTRY, FRED_MSA_CODES, COUNTRY_ISO2, KNOWN_CITIES_REGEX, ISO2_TO_CURRENCY } = require('./geo-data');
 const { fetchFredPerSqm, fetchFredPerSqmForYear } = require('../lib/tools/fred-series');
 const { fetchWorldBankGni, fetchWorldBankGniLcu } = require('../lib/tools/world-bank');
@@ -70,7 +73,8 @@ const { createQueryTimestamp, buildTemporalContent } = require('./time-format');
 const { buildSeedMetricTable, buildSeedMetricReading, validateSeedMetricOutput, parseTFR, injectTFRColumn, rescueDroppedSuffix, rescueTotalPrice, rescueIncome, rescuePricePerSqm, validateSeedMetricInvariants, emptyCityRecord } = require('./seed-metric-calculator');
 const { cityToExpectedCurrency, normaliseCurrency } = require('./geo-data');
 const { seedMetricCities, ensureSeedMetricCeilings, dedupPushUrl } = require('./seed-metric-resources');
-const { cleanMarkdownJson, EMPTY_TABLE_ROW_REGEX } = require('./parse-helpers');
+const { cleanMarkdownJson } = require('./parse-helpers');
+const seedOutput = require('./seed-metric-output');
 const { buildGatherPromptBlock } = require('../prompts/seed-metric');
 const { toToolDef, callWithTools, runToolCall } = require('./llm-tool-runner');
 
@@ -228,6 +232,8 @@ class PipelineOrchestrator {
   async run(input) {
     const tenantId = input.clientIp || input.sessionId || 'anonymous';
     const state = new PipelineState(tenantId);
+    const timing = new RequestTiming(input.requestStartedAt);
+    state.timing = timing;
 
     // Honest pipeline-entry signal so text-only queries get a real server
     // stage within ~1 RTT instead of waiting silently until reasoning.
@@ -546,7 +552,9 @@ class PipelineOrchestrator {
         input.onStageChange?.({ type: 'thinking', stage: 'Understanding your request...' });
         try {
           const groqToken = process.env.OPENROUTER_API_KEY;
-          state.digest = await bridgeQuery(normalizedInput.query, state.sessionLens, groqToken);
+          state.digest = await timing.measure('grammarMs', () => input.surface === 'playground'
+            ? bridgeQueryDeterministic(normalizedInput.query, state.sessionLens)
+            : bridgeQuery(normalizedInput.query, state.sessionLens, groqToken));
           // Persist updated session lens so multi-question loops compound within the turn
           if (state.digest.sessionLens) {
             state.sessionLens = state.digest.sessionLens;
@@ -576,7 +584,7 @@ class PipelineOrchestrator {
         });
         
       } else {
-        await this.stepPreflight(state, { ...input, query: contextAwareQuery, contextResult: state.contextResult });
+        await timing.measure('routingAndResearchMs', () => this.stepPreflight(state, { ...input, query: contextAwareQuery, contextResult: state.contextResult, timing }));
       }
 
       // ── Hoisted reference: income ceiling map (seed-metric mode only) ───────
@@ -656,14 +664,16 @@ class PipelineOrchestrator {
         logger.debug(`⏩ Skipping S2 (reasoning) — restored from checkpoint`);
       } else {
         globalCheckpointStore.save(checkpointQuery, tenantId, 'S1', buildResumableSnapshot(state));
-        await this.stepReasoning(state, normalizedInput);
+        await timing.measure('reasoningMs', () => this.stepReasoning(state, normalizedInput));
+        timing.mark('draftCompleteMs');
         globalCheckpointStore.save(checkpointQuery, tenantId, 'S2', buildResumableSnapshot(state));
       }
 
       if (resumeFromStage === 'S3') {
         logger.debug(`⏩ Skipping S3 (audit) — restored from checkpoint`);
       } else {
-        await this.stepAudit(state, normalizedInput);
+        await timing.measure('auditMs', () => this.stepAudit(state, normalizedInput));
+        timing.mark('auditCompleteMs');
         globalCheckpointStore.save(checkpointQuery, tenantId, 'S3', buildResumableSnapshot(state));
       }
       
@@ -681,6 +691,8 @@ class PipelineOrchestrator {
       }
       
       await this.stepOutput(state, normalizedInput);
+      timing.mark('finalDeliveryReadyMs');
+      timing.report();
       
       // Mark NYAN as booted AFTER successful completion (not during context build)
       // This ensures retries within same request still get full NYAN
@@ -716,10 +728,14 @@ class PipelineOrchestrator {
         sessionLens: state.sessionLens || {}
       };
     } catch (err) {
+      timing.mark('failedMs');
+      timing.report();
       console.error(`❌ Pipeline error at ${state.step}: ${err.message}`);
       return {
         success: false,
         error: err.message,
+        failure: publicAIError(err),
+        attempts: err.attempts,
         step: state.step,
         source: 'none',
         badge: 'unverified',
@@ -821,6 +837,7 @@ class PipelineOrchestrator {
       const tinyfishDomainType = /\b(news|headlines?|breaking|berita|kabar)\b/i.test(searchQuery)
         ? 'news'
         : 'web';
+      const searchStarted = Date.now();
       const cascadeResult = this.searchKernel
         ? await this.searchKernel.search({
             query: searchQuery,
@@ -832,6 +849,7 @@ class PipelineOrchestrator {
         : this.searchCascade
           ? await this.searchCascade({ query: searchQuery, strategy: 'ddg-first', clientIp })
           : { result: null, provider: null };
+      if (input.timing) input.timing.values.searchMs = Date.now() - searchStarted;
       
       if (cascadeResult.result) {
         readerDiscovery = cascadeResult.result;
@@ -932,6 +950,7 @@ SYNTHESIS INSTRUCTIONS:
           discovery: readerDiscovery,
           signal: input.signal,
           onProgress: input.onStageChange,
+          timing: input.timing,
           search: async terms => {
             const found = await this.searchKernel.search({ query: terms, tier: 'generic', clientIp: input.clientIp, signal: input.signal });
             return found;
@@ -1456,6 +1475,9 @@ User query: ${query}`;
       logger.info({ model: _reasoningModel, url: _reasoningUrl }, '🔑 BYOK Watchtower: S2 reasoning via caller key');
     }
 
+    const streamDraft = canStreamDraft(state, input);
+    const s2Started = Date.now();
+    let firstDelta = true;
     try {
       const response = await this.groqWithRetry({
         url: _reasoningUrl,
@@ -1464,25 +1486,38 @@ User query: ${query}`;
           messages,
           temperature: temperature || AI_MODELS.TEMPERATURE_REASONING,
           max_tokens: maxTokens || 1500,
-          top_p: 0.95
+          top_p: 0.95,
+          ...(streamDraft ? { stream: true, stream_options: { include_usage: true }, reasoning: { effort: 'minimal' } } : {})
         },
         config: {
           headers: {
             'Authorization': `Bearer ${_reasoningToken}`,
             'Content-Type': 'application/json'
           },
-          timeout: this.llmTimeouts.reasoning
+          timeout: this.llmTimeouts.reasoning,
+          signal: input.signal,
+          ...(streamDraft ? { responseType: 'stream', aiStream: { onDelta: content => {
+            if (firstDelta) {
+              firstDelta = false;
+              if (state.timing) {
+                state.timing.values.s2FirstTokenMs = Date.now() - s2Started;
+                state.timing.mark('requestFirstTokenMs');
+              }
+            }
+            input.onDraftDelta(content);
+          } } } : {})
         }
       }, 3, 'text');
       
-      state.draftAnswer = response.data.choices[0]?.message?.content || 'No response generated.';
+      logger.debug(`AI reasoning completion ${JSON.stringify(completionMetadata(response.data))}`);
+      state.draftAnswer = requireCompletionText(response.data);
       logger.debug(`🧠 Reasoning: ${state.draftAnswer.length} chars generated`);
     } catch (err) {
-      // Groq API failure after all retries - propagate error, return early to skip audit on junk
-      console.error(`❌ [stepReasoning] Groq API failed after 3 retries: ${err.message}`);
-      state.error = `Groq API failed: ${err.message}`;
-      // Throw to exit pipeline early - caught by run() which returns success:false
-      throw new Error(`Groq API exhausted: ${err.message}`);
+      // Keep capacity/provider classifications intact; retries are owned by the
+      // client and must not be fabricated here or applied to accounting errors.
+      logger.error(`AI reasoning failed: ${publicAIError(err).code}; attempts=${err.attempts ?? 'unknown'}`);
+      state.error = err.message;
+      throw err;
     }
   }
   
@@ -2592,86 +2627,27 @@ Rules:
   }
 
   _extractCitiesFromTable(tableText) {
-    const cities = [];
-    const lines = tableText.split('\n');
-    for (const line of lines) {
-      if (!/^\|/.test(line.trim())) continue;
-      const cols = line.split('|').map(c => c.trim()).filter(c => c.length > 0);
-      if (cols.length < 7) continue;
-      if (EMPTY_TABLE_ROW_REGEX.test(cols[0])) continue;
-      if (/City/i.test(cols[0])) continue;
-      const city = cols[0].replace(/\*\*/g, '').trim();
-      if (city && !cities.includes(city.toLowerCase())) {
-        cities.push(city.toLowerCase());
-      }
-    }
-    return [...new Set(cities)];
+    return seedOutput.extractCities(tableText);
   }
 
   _reattachSeedMetricSources(body, sourceUrls) {
-    if (!sourceUrls || sourceUrls.length === 0) return body;
-    if (/\*\*Sources:\*\*/i.test(body)) return body;
-    const seenUrls = new Set();
-    const lines = [];
-    for (const src of sourceUrls) {
-      if (seenUrls.has(src.url)) continue;
-      seenUrls.add(src.url);
-      lines.push(`- [${src.title}](${src.url})`);
-    }
-    if (lines.length === 0) return body;
-    return body.trimEnd() + `\n**Sources:**\n${lines.slice(0, 5).join('\n')}`;
+    return seedOutput.reattachSources(body, sourceUrls);
   }
 
   _insertSeedMetricCoda(body, coda) {
-    if (!coda) return body;
-    const sourcesHeaderIdx = body.search(/\n\*\*Sources:\*\*/m);
-    if (sourcesHeaderIdx !== -1) {
-      return body.slice(0, sourcesHeaderIdx).trimEnd()
-        + '\n\n' + coda
-        + '\n\n' + body.slice(sourcesHeaderIdx).trimStart();
-    }
-    const sourcesIdx = body.search(/\n[-*] \[|^[-*] \[/m);
-    if (sourcesIdx !== -1) {
-      return body.slice(0, sourcesIdx).trimEnd()
-        + '\n\n' + coda
-        + '\n\n**Sources:**\n' + body.slice(sourcesIdx).trimStart();
-    }
-    return body + '\n\n' + coda;
+    return seedOutput.insertCoda(body, coda);
   }
 
   // Helper: extract <!--SEED_META:{...}--> block from LLM output.
   // Returns { meta, text } — meta is the parsed JSON (or null), text has the block stripped.
   _extractSeedMetricMeta(text) {
-    const metaMatch = text.match(/<!--SEED_META:(\{[\s\S]*?\})-->/);
-    let meta = null;
-    if (metaMatch) {
-      try { meta = JSON.parse(metaMatch[1]); } catch (_) { /* malformed — ignore */ }
-    }
-    const stripped = text.replace(/\s*<!--SEED_META:[\s\S]*?-->\s*/g, '\n').trim();
-    return { meta, text: stripped };
+    return seedOutput.extractMeta(text);
   }
 
   // Helper: deterministic regime recompute — LLM often mislabels 10–25yr as FATALISM.
   // Parses every markdown table row, extracts Years integer, overwrites Regime cell.
   _normalizeSeedMetricRegimes(text) {
-    const regime = (yr) => {
-      if (isNaN(yr)) return null;
-      if (yr < 10)  return '🟢 OPTIMISM';
-      if (yr <= 25) return '🟡 EXTRACTION';
-      return '🔴 FATALISM';
-    };
-    // Match data rows: 7 or 8 pipe-delimited cells (8 when TFR column present)
-    return text.replace(/^\|([^|\n]+)\|([^|\n]+)\|([^|\n]+)\|([^|\n]+)\|([^|\n]+)\|([^|\n]+)\|([^|\n]+)\|(?:([^|\n]+)\|)?$/gm,
-      (row, c1, c2, c3, c4, c5, c6, c7, c8) => {
-        if (EMPTY_TABLE_ROW_REGEX.test(c1)) return row;
-        if (/^\s*years\s*$/i.test(c6)) return row;
-        const yearsVal = parseInt(c6.replace(/[^0-9]/g, ''), 10);
-        const correctRegime = regime(yearsVal);
-        if (!correctRegime) return row;
-        const tfrSuffix = c8 !== undefined ? `${c8}|` : '';
-        return `|${c1}|${c2}|${c3}|${c4}|${c5}|${c6}| ${correctRegime} |${tfrSuffix}`;
-      }
-    );
+    return seedOutput.normalizeRegimes(text);
   }
 
   async stepAudit(state, input) {
@@ -2853,7 +2829,7 @@ Output ONLY the corrected table and summary lines:`;
     
     // Notify the stream about who is auditing (humane disclosure while client waits)
     if (input.onStageChange) {
-      const _auditBackendLabel = getAuditBackend().model.includes('kimi') ? 'Kimi K2' : 'Llama';
+      const _auditBackendLabel = getAuditBackend().model;
       input.onStageChange({ type: 'thinking', stage: `Auditing with ${_auditBackendLabel}...` });
     }
 
@@ -2877,7 +2853,12 @@ Output ONLY the corrected table and summary lines:`;
         },
         this.auditTimeout
       );
-      const _auditLabel = getAuditBackend().model.includes('kimi') ? 'Kimi K2' : 'Llama';
+      // A broken verifier is not evidence the answer is wrong. Do not spend
+      // another search + generation + audit trying to repair its wire format.
+      if (state.auditResult.providerContractValid === false) {
+        throw completionError('AI_AUDIT_INVALID');
+      }
+      const _auditLabel = getAuditBackend().model;
       const _confStr = state.auditResult.confidence !== null && state.auditResult.confidence !== undefined
         ? `${state.auditResult.confidence}%` : 'unverified';
       logger.debug(`🔍 Audit [${_auditLabel}]: ${state.auditResult.verdict} (${_confStr})`);
@@ -2893,6 +2874,7 @@ Output ONLY the corrected table and summary lines:`;
         correctionNeeded: state.auditResult.verdict === 'REJECTED'
       });
     } catch (err) {
+      if (err.code === 'AI_AUDIT_INVALID' || err.code === 'AI_CAPACITY') throw err;
       logger.warn(`⚠️ Audit error: ${err.message}`);
       state.auditResult = { verdict: 'BYPASS', confidence: null, reason: 'Audit failed — second pass never ran' };
     }

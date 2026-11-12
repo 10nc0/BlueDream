@@ -16,10 +16,10 @@ const shared = { connect: async () => {
     return { query: (sql, params) => {
         if (process.argv.includes('--trace-fixture')) console.log('Fixture SQL:', sql.trim().split('\n')[0].slice(0, 100));
         return client.query(replace(sql), params);
-    }, release: () => client.release() };
+    }, release: destroy => client.release(destroy) };
 } };
 async function run() {
-    console.log('Capacity fixtures: isolated schema');
+    console.log('Capacity fixtures: isolated schema', schema);
     await db.query(`CREATE SCHEMA ${schema}`);
     try {
         await db.query(replace(fs.readFileSync('migrations/core/013_ai_capacity.sql', 'utf8')));
@@ -72,6 +72,35 @@ async function run() {
         fs.existsSync = path => String(path) === policyPath || originalExists(path);
         fs.readFileSync = (path, ...args) => String(path) === policyPath ? JSON.stringify(cfg) : originalRead(path, ...args);
         try {
+            await one.withContext({
+                req: { aiApplication: 'smoke-budget-fixture', body: {} },
+                id: 'request-spend-ceiling',
+                calls: 0,
+                tokens: 0,
+                outputs: 0,
+                requestMaxUsd: 0.00003
+            }, async () => {
+                await one.reserve({ model: 'fixture', messages: [], max_tokens: 10 });
+                await assert.rejects(
+                    one.reserve({ model: 'fixture', messages: [], max_tokens: 10 }),
+                    /approved spend ceiling/
+                );
+            });
+            await one.withContext({
+                req: { aiApplication: 'smoke-call-limit-fixture', body: {} },
+                id: 'request-call-ceiling',
+                calls: 0,
+                tokens: 0,
+                outputs: 0,
+                requestMaxCalls: 1
+            }, async () => {
+                await one.reserve({ model: 'fixture', messages: [], max_tokens: 10 });
+                await assert.rejects(
+                    one.reserve({ model: 'fixture', messages: [], max_tokens: 10 }),
+                    /approved call limit/
+                );
+            });
+            await db.query(`TRUNCATE ${schema}.ai_capacity,${schema}.ai_reservations,${schema}.ai_audit_requests`);
             await inContext(one, async () => {
                 Object.assign(one.context.getStore(), { audit: true, deadline: Date.now() + 60000 });
                 await one.reserveAuditEnvelope(cfg.models.fixture);

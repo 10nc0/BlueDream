@@ -1245,8 +1245,12 @@ async function initializeKernel() {
         startHealing();
 
         const { worker: outboxWorker } = require('./lib/outpipes/worker');
-        outboxWorker.setPool(pool);
-        outboxWorker.start(3000);
+        if (require('./lib/delivery-environment').isDeliveryAuthority()) {
+            outboxWorker.setPool(pool);
+            outboxWorker.start(3000);
+        } else {
+            logger.info('Development outbox delivery disabled');
+        }
 
         genesisCounter.start();
         logger.info('🔢 Genesis counter started (cat + φ breath tiers)');

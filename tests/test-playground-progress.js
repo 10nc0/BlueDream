@@ -95,7 +95,7 @@ async function main() {
     await assert.rejects(()=>new Fixture().stepPreflight({transition(){}},{
         query:'fixture',onStageChange:event=>stages.push(event.stage)
     }),/fixture stops/);
-    const bridge=pipeline.indexOf('state.digest = await bridgeQuery(');
+    const bridge=pipeline.indexOf("state.digest = await timing.measure('grammarMs'");
     assert(pipeline.lastIndexOf("stage: 'Understanding your request...'",bridge)>pipeline.indexOf('state.transition(PIPELINE_STEPS.DIGEST)'));
     console.log('Playground progress passed: honest stage ordering, no invented search, elapsed/slow-step UX, bounded history, safe text, accessible announcements and timer teardown. No live inference.');
 }

@@ -89,6 +89,7 @@ async function extractCoreQuestion(message, conversationHistory = [], urlAnchors
                     { role: 'user', content: userContent }
                 ],
                 temperature: AI_MODELS.TEMPERATURE_PRECISE,
+                reasoning: { effort: 'minimal' },
                 max_tokens: 40
             },
             {
@@ -108,7 +109,7 @@ async function extractCoreQuestion(message, conversationHistory = [], urlAnchors
         }
         return message.substring(0, 200);
     } catch (err) {
-        logger.error({ err }, '🧠 Query extraction error');
+        logger.warn({ code: err.code || 'EXTRACTION_FAILED' }, 'Query extraction unavailable');
         return message.substring(0, 200);
     }
 }
@@ -163,6 +164,13 @@ async function executeCompoundQuery(compoundParts, opts) {
         };
 
         const subResult = await orchestrator.execute(subInput);
+        // Do not hide a failed accounting gate inside a partial answer or
+        // continue starting paid sub-queries with uncertain accounting.
+        if (subResult.failure?.code === 'AI_CAPACITY') {
+            throw Object.assign(new Error(subResult.failure.message), {
+                ...subResult.failure, failure: subResult.failure
+            });
+        }
         // Compound session lens across sub-queries in the same turn
         if (subResult.sessionLens && Object.keys(subResult.sessionLens).length > 0) {
             carriedSessionLens = subResult.sessionLens;

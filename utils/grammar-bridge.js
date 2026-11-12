@@ -138,7 +138,8 @@ Respond ONLY with a JSON object, no explanation:
         { role: 'user', content: rawQuery.substring(0, 800) }
       ],
       temperature: AI_MODELS.TEMPERATURE_STRICT,
-      max_tokens: 80
+      max_tokens: 80,
+      reasoning: { effort: 'minimal' }
     },
     {
       headers: {
@@ -216,8 +217,29 @@ async function bridgeQuery(rawQuery, sessionLens = {}, groqToken = null) {
   }
 }
 
+// Playground routing needs intent and explicit hints, not a paid paraphrase of
+// every question. Keep the raw subject so unknown places/domains are not lost.
+function bridgeQueryDeterministic(rawQuery, sessionLens = {}) {
+  const text = typeof rawQuery === 'string' ? rawQuery.trim() : '';
+  const { detectLanguage } = require('./language-detector');
+  const language = detectLanguage(text).lang;
+  const geo = text.match(/\b(Indonesia|Singapore|Malaysia|Japan|Tokyo|China|India|Australia|Germany|France|Brazil|Canada|Mexico|United States|United Kingdom|South Korea|Saudi Arabia|South Africa|Argentina|Turkey|Italy|Russia)\b/i)?.[0] || null;
+  const lens = /\b(real estate|housing|property)\b/i.test(text) ? 'real-estate'
+    : /\b(medical|diagnosis|medicine)\b/i.test(text) ? 'medical'
+      : /\b(legal|lawyer|lawsuit)\b/i.test(text) ? 'legal'
+        : /\b(forex|finance|investment|stock)\b/i.test(text) ? 'finance' : null;
+  return applyGeoInference({
+    ...safeDefault(text, sessionLens),
+    intent: detectIntent(text),
+    context: { geo, language, time: /\b(current|latest|now|today|recent|sekarang|terkini)\b/i.test(text)
+      ? 'current' : /\b(historical|history|ago|dulu|sejarah)\b/i.test(text) ? 'historical' : 'any' },
+    lens, sessionLens: updateSessionLens(sessionLens, lens)
+  });
+}
+
 module.exports = {
   bridgeQuery,
+  bridgeQueryDeterministic,
   detectIntent,
   updateSessionLens,
   sessionLensWeight

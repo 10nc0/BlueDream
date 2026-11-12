@@ -185,13 +185,14 @@ async function consumeToken(ip, serviceType) {
     // Admission is shared once per logical request, not once per nested stage.
     if (dbPool) {
         const common = require('./ai-capacity');
-        const ctx = common.context.getStore();
-        if (ctx?.req) ctx.req.aiReputationMultiplier = await getReputationMultiplier(ip);
+        // Shared admission already derives reputation from actor.firstSeen.
+        // Don't queue an unused, unbounded legacy SQL lookup before its deadline.
         try {
             await common.admission(serviceType);
             return { allowed: true, shared: true };
         } catch (error) {
-            return { allowed: false, error: error.message, reason: error.message, retryAfter: error.retryAfter || 60,
+            const failure = require('../lib/ai-errors').publicAIError(error);
+            return { allowed: false, ...failure, error: failure.message, reason: failure.message,
                 replenishMinutes: 1, resetIn: 60 };
         }
     }

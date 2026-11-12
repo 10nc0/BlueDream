@@ -1523,6 +1523,7 @@ async function sendMessage(_retryPayload = null) {
         let fullContent = '';
         let auditData = null;
         let sawDone = false;
+        let draftAnswerId = null;
 
         while (true) {
             const { done, value } = await reader.read();
@@ -1540,8 +1541,28 @@ async function sendMessage(_retryPayload = null) {
                     try {
                         const data = JSON.parse(jsonStr);
                         
-                        if (data.type === 'thinking') {
+                        if (data.type === 'draft') {
+                            draftAnswerId = data.answerId;
+                            const bubble = document.getElementById('streamingMessage');
+                            if (bubble) {
+                                bubble.dataset.answerId = draftAnswerId;
+                                const badge = bubble.querySelector('.audit-badge-placeholder');
+                                if (badge) {
+                                    badge.textContent = 'Unverified draft — audit pending';
+                                    badge.setAttribute('role', 'status');
+                                }
+                            }
+                        } else if (data.type === 'draft-token') {
+                            if (draftAnswerId && data.answerId === draftAnswerId) {
+                                updateStreamingContent(data.content);
+                                fullContent += data.content;
+                            }
+                        } else if (data.type === 'thinking') {
                             updateThinkingStage(data.stage);
+                            if (draftAnswerId) {
+                                const badge = document.querySelector('#streamingMessage .audit-badge-placeholder');
+                                if (badge) badge.textContent = `Unverified draft — ${data.stage}`;
+                            }
                         } else if (data.type === 'audit') {
                             auditData = data.audit;
                         } else if (data.type === 'token') {
@@ -1550,6 +1571,7 @@ async function sendMessage(_retryPayload = null) {
                         } else if (data.type === 'done') {
                             sawDone = true;
                             fullContent = data.fullContent || fullContent;
+                            if (data.replacesDraft && data.corrected) fullContent = '**Draft revised after audit.**\n\n' + fullContent;
                             finalizeStreamingMessage(fullContent, auditData);
                             
                             conversationHistory.push({ role: 'assistant', content: fullContent, audit: auditData });
@@ -1570,16 +1592,15 @@ async function sendMessage(_retryPayload = null) {
             }
         }
 
-        // Stream ended without an explicit `done` event — finalize what we have,
-        // or tear down the empty bubble. Either way, the cat loader gets stopped.
+        // A provisional answer is never saved as a completed, audited response.
         if (!sawDone) {
-            if (fullContent) {
+            if (fullContent && !draftAnswerId) {
                 finalizeStreamingMessage(fullContent, auditData);
                 conversationHistory.push({ role: 'assistant', content: fullContent, audit: auditData });
                 saveConversationHistory();
             } else {
                 teardownStreamingMessage();
-                addMessage('assistant', 'Stream ended unexpectedly. Please try again.');
+                addMessage('assistant', 'The response ended before verification completed. The incomplete draft was discarded.');
             }
         }
 

@@ -9,14 +9,26 @@ class ThothBot {
     constructor() {
         this.client = null;
         this.ready = false;
+        this.initializing = null;
     }
 
     async initialize() {
-        if (this.client) {
+        if (this.ready && this.client) {
             logger.info('⚡ Thoth bot already initialized');
             return;
         }
+        if (this.initializing) return this.initializing;
 
+        this.initializing = this._initialize();
+        try {
+            await this.initializing;
+        } finally {
+            this.initializing = null;
+        }
+    }
+
+    async _initialize() {
+        let client = null;
         const thothToken = process.env.THOTH_TOKEN;
         if (!thothToken) {
             logger.warn('⚠️ THOTH_TOKEN not set — message reading disabled');
@@ -25,39 +37,61 @@ class ThothBot {
 
         try {
             const { Client, GatewayIntentBits } = require('discord.js');
-            this.client = new Client({
+            client = new Client({
                 intents: [
                     GatewayIntentBits.Guilds,
                     GatewayIntentBits.GuildMessages,
                     GatewayIntentBits.MessageContent
                 ]
             });
+            this.client = client;
+            this.ready = false;
 
-            this.client.on('error', (error) => {
+            client.on('error', (error) => {
                 logger.error({ err: error }, 'Thoth bot error');
             });
 
-            await Promise.race([
-                new Promise((resolve, reject) => {
-                    const timeout = setTimeout(() => {
-                        reject(new Error('Thoth login timeout (30s)'));
-                    }, 30000);
+            let timeout;
+            let onReady;
+            const ready = new Promise((resolve, reject) => {
+                onReady = () => {
+                    if (this.client !== client) {
+                        reject(new Error('Thoth client replaced before ready'));
+                        return;
+                    }
+                    if (!client.user?.tag) {
+                        reject(new Error('Thoth client ready without a user identity'));
+                        return;
+                    }
+                    this.ready = true;
+                    logger.info({ tag: client.user.tag }, '👁️ Thoth (0) logged in');
+                    resolve();
+                };
+                client.once('clientReady', onReady);
+                timeout = setTimeout(() => reject(new Error('Thoth login timeout (30s)')), 30000);
+            });
 
-                    this.client.once('clientReady', () => {
-                        clearTimeout(timeout);
-                        this.ready = true;
-                        logger.info({ tag: this.client.user.tag }, '👁️ Thoth (0) logged in');
-                        resolve();
-                    });
-                }),
-                this.client.login(thothToken)
-            ]);
+            try {
+                // Login may resolve before Discord emits clientReady; only that
+                // event proves the client identity is available for use.
+                await Promise.race([ready, client.login(thothToken).then(() => ready)]);
+            } finally {
+                clearTimeout(timeout);
+                client.off('clientReady', onReady);
+            }
 
             logger.info('👁️ Thoth bot ready for message mirroring');
         } catch (error) {
             logger.error({ err: error }, '❌ Failed to initialize Thoth bot');
-            this.client = null;
-            this.ready = false;
+            if (this.client === client) {
+                this.client = null;
+                this.ready = false;
+            }
+            if (client) {
+                await client.destroy().catch((destroyError) => {
+                    logger.warn({ code: destroyError.code }, 'Thoth failed client cleanup');
+                });
+            }
             throw error;
         }
     }
@@ -109,11 +143,14 @@ class ThothBot {
     }
 
     async shutdown() {
-        if (this.client) {
+        const client = this.client;
+        const initializing = this.initializing;
+        this.client = null;
+        this.ready = false;
+        if (initializing) await initializing.catch(() => {});
+        else if (client) {
             logger.info('🛑 Shutting down Thoth...');
-            await this.client.destroy();
-            this.client = null;
-            this.ready = false;
+            await client.destroy();
         }
     }
 }

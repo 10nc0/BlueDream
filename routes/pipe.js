@@ -10,6 +10,7 @@ const { TelegramChannel } = require('../lib/channels/telegram');
 const { VALID_SCHEMA_PATTERN, DISCORD_SNOWFLAKE_RE, ISO8601_STRICT_RE } = require('../lib/validators');
 const format = require('pg-format');
 const rateLimit = require('express-rate-limit');
+const { createHash } = require('node:crypto');
 const {
     webhookPayloadSchema,
     MAX_PHOTO_BYTES,
@@ -46,7 +47,6 @@ function registerPipeRoutes(app, deps) {
     }
 
     setPool(pool);
-    recoverStaleProcessing(logger).catch(err => logger.error({ err }, 'Queue recovery startup failed'));
     
     const twilioChannel = new TwilioChannel({ logger });
     twilioChannel.initialize().catch(err => logger.error({ err }, 'TwilioChannel init failed'));
@@ -82,20 +82,22 @@ function registerPipeRoutes(app, deps) {
     // would write ledger rows and embed breath stamps into the append-only sequence
     // from a non-authoritative instance.  Playground / AI routes are unaffected
     // (they are discretionary, stateless calls that don't touch the ledger).
-    const isProd = process.env.REPLIT_DEPLOYMENT === '1' || process.env.NODE_ENV === 'production';
+    const isProd = require('../lib/delivery-environment').isDeliveryAuthority();
     let queueProcessor = null;
     if (isProd) {
+        recoverStaleProcessing(logger).catch(err => logger.error({ err }, 'Queue recovery startup failed'));
         queueProcessor = startQueueProcessor({ ...deps, channelRegistry });
+        setInterval(() => cleanupIdempotencyCache(pool, logger), 60 * 1000);
+        setInterval(() => cleanupDoneMessages(pool, logger), 60 * 60 * 1000);
     } else {
         logger.warn('⚠️  Dev mode: inpipe queue processor DISABLED — packets will not be processed (prod only)');
     }
 
-    setInterval(() => cleanupIdempotencyCache(pool, logger), 60 * 1000);
-    setInterval(() => cleanupDoneMessages(pool, logger), 60 * 60 * 1000);
-
     const registeredRoutes = ['POST /api/twilio/webhook'];
     
     app.post('/api/twilio/webhook', async (req, res) => {
+        const started = Date.now();
+        let ref = 'unknown';
         try {
             const sigResult = twilioChannel.validateSignature(req);
             if (!sigResult.valid) {
@@ -106,30 +108,10 @@ function registerPipeRoutes(app, deps) {
             const rawPayload = twilioChannel.parsePayload(req);
             const messageSid = rawPayload.messageId;
             
-            // IDEMPOTENCY GUARD: Atomic DB insert — survives restarts, covers Twilio's 11hr retry window.
-            // INSERT ... ON CONFLICT DO NOTHING returns 0 rows if sid already exists → duplicate.
-            if (messageSid) {
-                const dedupeResult = await pool.query(
-                    `INSERT INTO core.processed_sids (sid, processed_at)
-                     VALUES ($1, NOW())
-                     ON CONFLICT (sid) DO NOTHING
-                     RETURNING sid`,
-                    [messageSid]
-                );
-                if (dedupeResult.rows.length === 0) {
-                    logger.info({ messageSid }, 'Duplicate message detected (DB) - already processed');
-                    return sendChannelResponse(res, twilioChannel);
-                }
-            }
+            if (!messageSid) return res.status(400).send('Message identity required');
+            ref = createHash('sha256').update(messageSid).digest('hex').slice(0, 16);
             
             const msg = twilioChannel.normalizeMessage(rawPayload);
-            
-            logger.info({ 
-                phone: msg.phone, 
-                body: msg.body?.substring(0, 50), 
-                joinCode: msg.joinCode,
-                queueSize: MESSAGE_QUEUE.length 
-            }, 'Twilio webhook received - queuing');
             
             // Ignore sandbox join commands immediately
             if (twilioChannel.isSandboxJoinCommand(msg.bodyLower)) {
@@ -137,14 +119,9 @@ function registerPipeRoutes(app, deps) {
                 return sendChannelResponse(res, twilioChannel);
             }
             
-            // QUEUE SIZE GUARD: Prevent memory exhaustion
-            if (await totalQueueDepth() >= MAX_QUEUE_SIZE) {
-                logger.warn({ queueSize: getCachedDepth() }, 'Queue full - rejecting message');
-                return res.status(503).send('Server busy, please retry');
-            }
-            
-            // QUEUE MESSAGE for async processing (media → priority tier)
-            await enqueueItem({
+            // Identity dedupe and acceptance commit together. Never burn a
+            // provider identity before a full/failed enqueue can roll back.
+            const accepted = await enqueueItem({
                 msg,
                 rawPayload,
                 channel: 'twilio',
@@ -152,18 +129,20 @@ function registerPipeRoutes(app, deps) {
                 queuedAt: Date.now()
             });
             
-            logger.info({ 
-                messageSid, 
-                queueDepth: getCachedDepth()
-            }, 'Message queued for processing');
+            // Keep sanitized evidence in the message: the production logger
+            // intentionally prints only msg, not structured object fields.
+            logger.info(`Twilio intake outcome=${accepted.duplicate ? 'duplicate' : 'accepted'} ref=${ref} queue=${accepted.id || 'legacy'} elapsedMs=${Date.now() - started}`);
             
             // IMMEDIATE ACK to Twilio (prevents timeout retries)
             return sendChannelResponse(res, twilioChannel);
             
         } catch (error) {
-            logger.error({ error: error.message, stack: error.stack }, 'Twilio webhook error');
+            const code = /^[A-Z0-9_]{1,40}$/.test(error.code || '') ? error.code : 'INPIPE_ADMISSION_FAILED';
+            logger.error(`Twilio intake outcome=rejected ref=${ref} code=${code} elapsedMs=${Date.now() - started}`);
             const response = twilioChannel.getEmptyResponse();
-            res.status(500).send(response.body);
+            // Twilio must have 5xx/timeout retries enabled at the provider;
+            // never acknowledge a packet that failed durable acceptance.
+            res.set('Retry-After', '2').status(503).send(response.body);
         }
     });
 
@@ -191,6 +170,7 @@ function registerPipeRoutes(app, deps) {
                 if (!msg) {
                     return res.status(200).json({});
                 }
+                if (!msg.messageId) return res.status(503).json({ error: 'Message identity required' });
 
                 logger.info({
                     userId: msg.phone,
@@ -224,7 +204,7 @@ function registerPipeRoutes(app, deps) {
 
             } catch (error) {
                 logger.error({ error: error.message, stack: error.stack }, 'Line webhook error');
-                return res.status(200).json({});  // Always 200 to Line to prevent retries
+                return res.status(503).json({ error: 'Message not accepted; retry required' });
             }
         });
     } else {

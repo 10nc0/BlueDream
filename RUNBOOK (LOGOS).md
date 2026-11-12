@@ -719,6 +719,13 @@ LINE messages carry a platform user ID in `msg.phone` (not E.164) and have no de
 
 `routes/pipe.js` checks `totalQueueDepth() >= MAX_QUEUE_SIZE` and then calls `enqueueItem()` as a separate step. This is a check-then-act pattern — another enqueue could slip in between the check and the insert, briefly exceeding `MAX_QUEUE_SIZE`.
 
-**This is intentional.** The queue depth check is a health signal, not a hard physical limit. Controlled overfill under burst (a few extra items) is an acceptable and expected failure mode — it does not cause data loss or correctness violations. The queue is drained by the worker loop and the depth self-corrects.
+The route's early depth check is advisory, but acceptance is now authoritative:
+`DeliveryCoordinator.enqueue` serializes the count, provider deduplication and
+`core.message_queue` insertion in one transaction. A rejected enqueue does not
+consume the provider identity.
 
-**Atomic enforcement would require**: changing `enqueueItem` to a single `INSERT ... WHERE (SELECT COUNT(*) FROM core.queue_items WHERE status = 'pending') < $MAX` SQL statement. This would make the limit exact but adds a subquery to every enqueue. Not warranted unless the queue ever becomes a hard physical constraint (e.g., storage-limited environment). Document the tradeoff here if that decision is ever revisited.
+All publishing inpipes and new outbox admissions share that queue's claims,
+leases and destination/chunk receipts. The legacy outbox adapter only holds
+unverifiable pending jobs; it cannot publish or prune evidence. Storage-only
+generic ingress remains storage-only. See `docs/inpipe-ordering.md` for the
+caller graph, recovery contract and mandatory old-worker drain/reconciliation.

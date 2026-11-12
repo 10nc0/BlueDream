@@ -1097,7 +1097,7 @@ const capsuleAndInpipeTests = [
         await pool.query(`DELETE FROM core.message_queue WHERE id = $1`, [result.rows[0].id]);
     }),
 
-    test('message_queue ordering: media priority sorts before text', async () => {
+    test('message_queue durable ingress identity precedes media priority', async () => {
         const marker = `order_test_${Date.now()}`;
         await pool.query(
             `INSERT INTO core.message_queue (priority, payload, status, created_at) VALUES ('text', $1, 'done', NOW() - interval '10 seconds')`,
@@ -1109,11 +1109,11 @@ const capsuleAndInpipeTests = [
         );
         const result = await pool.query(
             `SELECT payload FROM core.message_queue WHERE payload::text LIKE $1
-             ORDER BY CASE WHEN priority = 'media' THEN 0 ELSE 1 END, created_at`,
+             ORDER BY id`,
             [`%${marker}%`]
         );
         const first = typeof result.rows[0].payload === 'string' ? JSON.parse(result.rows[0].payload) : result.rows[0].payload;
-        assertEqual(first.msg.hasMedia, true, 'media should sort first');
+        assertEqual(first.msg.hasMedia, false, 'earlier text should remain before later media');
         await pool.query(`DELETE FROM core.message_queue WHERE payload::text LIKE $1`, [`%${marker}%`]);
     }),
 

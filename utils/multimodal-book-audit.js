@@ -3,6 +3,7 @@ const axios = require('axios');
 const capacity = require('./ai-capacity');
 const evidence = require('./book-evidence');
 const { LLM_API_URL: ENDPOINT, LLM_MODEL: MODEL } = require('../config/llm');
+const { requireCompletionText } = require('../lib/llm-completion');
 
 function settings() {
     const cfg = capacity.configuration();
@@ -37,6 +38,7 @@ async function call(messages, { checker = false, signal } = {}) {
     if (timeout <= 0) throw capacity.problem('Audit time budget exhausted.');
     const response = await axios.post(ENDPOINT, {
         model, messages, max_tokens: checker ? 700 : 1600, temperature: 0,
+        reasoning: { effort: checker ? 'minimal' : 'low' },
         provider: { data_collection: 'deny', zdr: true, allow_fallbacks: false,
             max_price: { prompt: pricing.inputUsdPerMillion, completion: pricing.outputUsdPerMillion } },
         ...(checker ? { response_format: { type: 'json_schema', json_schema: {
@@ -52,8 +54,7 @@ async function call(messages, { checker = false, signal } = {}) {
             }
         } } } : {})
     }, { timeout, signal, headers: { Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`, 'Content-Type': 'application/json' } });
-    const content = response.data?.choices?.[0]?.message?.content;
-    if (typeof content !== 'string' || !content.trim()) throw new Error('Vision model returned no usable answer.');
+    const content = requireCompletionText(response.data);
     return { content, model: response.data.model || model };
 }
 async function draft(prepared, prompt, systemPrompt, options) {

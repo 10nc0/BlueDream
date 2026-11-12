@@ -24,7 +24,7 @@ const FRACTAL_SALT = getFractalSalt();
  * @param {number} [opts.breatheCount=0]     - Phi breathe count at arrival time
  * @returns {object} capsule
  */
-function buildCapsule({ bookFractalId, tenantId, phone, body, media, timestamp, breatheCount = 0 }) {
+function buildCapsule({ bookFractalId, tenantId, phone, body, media, timestamp, breatheCount = 0, acceptanceId = null }) {
     const ts = timestamp || new Date().toISOString();
     const bodyText = body || '';
 
@@ -36,7 +36,7 @@ function buildCapsule({ bookFractalId, tenantId, phone, body, media, timestamp, 
         .update(bodyText)
         .digest('hex');
 
-    const messageFractalId = fractalId.generateMsg(bookFractalId, tenantId, ts, contentHash, breatheCount);
+    const messageFractalId = fractalId.generateMsg(bookFractalId, tenantId, ts, contentHash, breatheCount, acceptanceId);
 
     const attachments = [];
     if (media?.buffer) {

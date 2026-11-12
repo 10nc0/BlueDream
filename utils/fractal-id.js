@@ -117,9 +117,9 @@ function verify(fractalId, type, tenantId, dbId, createdByAdminId = null) {
  * @param {number} breatheCount  - Current phi breathe count (default 0)
  * @returns {string} Stable, unique message fractal ID
  */
-function generateMsg(bookFractalId, tenantId, timestamp, contentHash, breatheCount = 0) {
+function generateMsg(bookFractalId, tenantId, timestamp, contentHash, breatheCount = 0, acceptanceId = null) {
     const hash = crypto.createHmac('sha256', SALT)
-        .update(`${bookFractalId}:${timestamp}:${contentHash}`)
+        .update(`${bookFractalId}:${timestamp}:${contentHash}${acceptanceId ? ':' + acceptanceId : ''}`)
         .digest('hex')
         .slice(0, 12);
     return `msg_t${tenantId}_b${breatheCount}_${hash}`;

@@ -14,6 +14,7 @@ async function run() {
     // Synthetic credential only when none exists; transport is always mocked.
     if (!process.env.OPENROUTER_API_KEY) process.env.OPENROUTER_API_KEY = 'synthetic-fixture-not-a-credential';
     let visualFetches = 0, textCalls = 0, retries = false, invalidChecker = false;
+    let textFinishReason = 'stop', textContent = 'Text evidence says IDR 1000.';
     const calls = [], cache = new Map();
     const book = { id: 1, fractal_id: 'book_t183_b4', name: 'Sensus TBM — synthetic example (t183-b4)', created_at: new Date('2025-01-01') };
     const pool = { query: async () => ({ rows: [book] }) };
@@ -46,7 +47,7 @@ async function run() {
     groq.groqWithRetry = async request => {
         textCalls++;
         assert(!JSON.stringify(request.data).includes('image_url'));
-        return { data: { choices: [{ message: { content: 'Text evidence says IDR 1000.' } }] } };
+        return { data: { choices: [{ finish_reason: textFinishReason, message: { content: textContent } }] } };
     };
     pipeline.runDashboardAuditPipeline = async options => {
         if (retries) await options.llmCallFn('Correct this amount.', {});
@@ -107,6 +108,9 @@ async function run() {
         assert.equal(result.status, 200, JSON.stringify(result.data));
         assert.equal(calls.length, 2);
         for (const body of calls) {
+            assert.equal(body.model, 'meta/muse-ember');
+            assert.deepEqual(body.reasoning, { effort: body.response_format ? 'minimal' : 'low' });
+            assert.equal(body.max_tokens, body.response_format ? 700 : 1600);
             const images = body.messages.flatMap(m => Array.isArray(m.content) ? m.content : []).filter(p => p.type === 'image_url');
             assert.equal(images.length, 1, 'Draft and separate checker must each see original pixels');
             assert(images[0].image_url.url.startsWith('data:image/png;base64,'));
@@ -123,6 +127,24 @@ async function run() {
         let checked = await visual.verify(copy, 'amount?', '1000');
         assert.equal(checked.needsHumanReview, true);
         assert.equal(checked.inspected, 0);
+        const savedPost = axios.post;
+        axios.post = async () => ({ data: { choices: [{ finish_reason: 'length', message: {
+            content: JSON.stringify({ findings: [{ evidenceId: meta.id, claim: '100', status: 'supported', observed: '100' }] })
+        } }] } });
+        checked = await visual.verify(copy, 'amount?', '100');
+        assert.equal(checked.needsHumanReview, true, 'Truncated JSON must never verify a book');
+        assert.equal(checked.coverage, 'visual_check_unavailable');
+        await assert.rejects(visual.draft(copy, 'amount?', 'fixture'), /AI_RESPONSE_TRUNCATED/);
+        axios.post = async () => ({ data: { choices: [{ message: { content: '', reasoning: 'private reasoning' } }] } });
+        await assert.rejects(visual.draft(copy, 'amount?', 'fixture'), /AI_RESPONSE_EMPTY/);
+        axios.post = savedPost;
+        textFinishReason = 'length';
+        result = await post({ includeImages: false }, 'truncated text fixture');
+        assert.equal(result.status, 500, 'Truncated text must not become a successful audit');
+        textFinishReason = 'stop';
+        textContent = '';
+        result = await post({ includeImages: false }, 'empty text fixture');
+        assert.equal(result.status, 500, 'Empty text must not become a successful audit');
         assert.throws(() => visual.parseFindings('{"findings":[{"evidenceId":"poisoned","status":"supported","claim":"x","observed":"x"}]}', copy), /Invalid/);
         assert.throws(() => visual.parseFindings('{"findings":[]}', copy), /Invalid/);
         for (const url of ['http://127.0.0.1/a', 'https://localhost/a', 'https://cdn.discordapp.com.evil.test/attachments/a',

@@ -53,24 +53,27 @@ function toToolDef(tool) {
 async function callWithTools({
   groqCall, url, model, token, timeout = 30000,
   messages, tools, toolChoice = 'auto',
-  temperature = 0.15, maxTokens = 800, signal
+  temperature = 0.15, maxTokens = 800, signal, provider, maxRetries = 3
 }) {
   const response = await groqCall({
     url,
-    data: { model, messages, tools, tool_choice: toolChoice, temperature, max_tokens: maxTokens },
+    data: { model, messages, tools, tool_choice: toolChoice, temperature, max_tokens: maxTokens,
+      ...(provider ? { provider } : {}) },
     config: {
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       ...(signal && { signal }),
       timeout
     }
-  }, 3, 'text');
+  }, maxRetries, 'text');
 
   const choice = response.data?.choices?.[0] || {};
   const msg = choice.message || {};
   return {
     content: msg.content || '',
     toolCalls: msg.tool_calls || [],
-    finishReason: choice.finish_reason || null
+    finishReason: choice.finish_reason || null,
+    model: response.data?.model || model,
+    usage: response.data?.usage || null
   };
 }
 
@@ -100,9 +103,19 @@ async function runToolCall(toolCall, getTool) {
   const registryName = fnName.replace(/_/g, '-');
   const tool = getTool(registryName) || getTool(fnName);
 
-  let args = {};
-  try { args = JSON.parse(toolCall.function?.arguments || '{}'); }
-  catch (_) { args = {}; }
+  let args;
+  try {
+    args = JSON.parse(toolCall.function?.arguments || '{}');
+  } catch (cause) {
+    throw Object.assign(new Error(`Malformed arguments returned for tool "${fnName}".`), {
+      code: 'LLM_TOOL_ARGUMENTS_INVALID', cause
+    });
+  }
+  if (!args || typeof args !== 'object' || Array.isArray(args)) {
+    throw Object.assign(new Error(`Tool "${fnName}" arguments must be a JSON object.`), {
+      code: 'LLM_TOOL_ARGUMENTS_INVALID'
+    });
+  }
 
   if (!tool) {
     logger.warn({ name: fnName }, '🔧 LLM tool runner: unknown tool');

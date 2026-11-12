@@ -323,7 +323,7 @@ test('orchestrator discovers and reads a public source without a pasted URL', as
     assert.equal(state.mode, 'general');
     assert.equal(state.preflight.routingFlags.needsRealtimeSearch, true);
     assert.equal(searches, 1, 'reuse discovery instead of searching twice');
-    assert.equal(selections, 2, 'reader selection must run even after didSearch is true');
+    assert.equal(selections, 0, 'read actual discovered sources directly instead of paying for redundant selection');
     assert.equal(reader.results.length, 1);
     assert.equal(reader.results[0].ok, true);
     assert.ok(state.searchSourceUrls.includes('https://public.example/articles/start'));

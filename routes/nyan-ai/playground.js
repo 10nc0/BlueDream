@@ -11,6 +11,8 @@ const { addAnchor, tickAnchors, clearAnchors } = require('../../utils/url-anchor
 const capacityManager = require('../../utils/playground-capacity');
 const usageTracker = require('../../utils/playground-usage');
 const { PublicReader } = require('../../lib/public-reader');
+const { publicAIError } = require('../../lib/ai-errors');
+const { validatePlaygroundInput } = require('../../lib/playground-input');
 
 function requestReader(res, onProgress) {
     const controller = new AbortController();
@@ -106,6 +108,8 @@ function registerPlaygroundRoutes(app, deps) {
     });
 
     app.post('/api/playground', playgroundLimiter, async (req, res) => {
+        const inputError = validatePlaygroundInput(req.body);
+        if (inputError) return res.status(400).json({ error: inputError, code: 'PLAYGROUND_INPUT_REQUIRED' });
         const clientIp = req.ip || req.connection.remoteAddress;
         const research = requestReader(res);
 
@@ -140,8 +144,9 @@ function registerPlaygroundRoutes(app, deps) {
             const capacityCheck = await capacityManager.consumeToken(clientIp, photoList.length > 0 ? 'vision' : 'text');
             if (!capacityCheck.allowed) {
                 res.set('Retry-After', String(capacityCheck.retryAfter || 60));
-                return res.status(429).json({
+                return res.status(capacityCheck.status || 429).json({
                     error: capacityCheck.reason,
+                    code: capacityCheck.code || 'AI_CAPACITY',
                     remaining: capacityCheck.remaining,
                     resetIn: capacityCheck.resetIn
                 });
@@ -150,6 +155,7 @@ function registerPlaygroundRoutes(app, deps) {
             const perception = await AttachmentIngestion.ingest(docList, clientIp);
 
             const pipelineInput = {
+                sessionId: clientIp,
                 message: finalPrompt,
                 photos: photoList,
                 documents: docList,
@@ -165,6 +171,12 @@ function registerPlaygroundRoutes(app, deps) {
 
             const pipelineResult = await orchestrator.execute(pipelineInput);
 
+            if (!pipelineResult.success || !pipelineResult.answer) {
+                const failure = publicAIError(pipelineResult);
+                if (failure.retryAfter) res.set('Retry-After', String(failure.retryAfter));
+                return res.status(failure.status).json({ success: false, error: failure.message,
+                    code: failure.code, retryAfter: failure.retryAfter });
+            }
             if (pipelineResult.success && pipelineResult.answer) {
                 recordInMemory(clientIp, message || '', pipelineResult.answer, buildDocAttachmentMeta(docList, extractedContent));
             }
@@ -182,10 +194,9 @@ function registerPlaygroundRoutes(app, deps) {
         } catch (error) {
             if (research.signal.aborted) return;
             logger.error({ err: error }, '❌ Playground error');
-            if (error.code === 'AI_CAPACITY') res.set('Retry-After', String(error.retryAfter || 60));
-            res.status(error.code === 'AI_CAPACITY' ? error.status : 500).json({
-                error: error.code === 'AI_CAPACITY' ? error.message : 'An error occurred. Please try again.'
-            });
+            const failure = publicAIError(error);
+            if (failure.retryAfter) res.set('Retry-After', String(failure.retryAfter));
+            res.status(failure.status).json({ error: failure.message, code: failure.code, retryAfter: failure.retryAfter });
         } finally {
             await research.close();
         }
@@ -211,6 +222,9 @@ function registerPlaygroundRoutes(app, deps) {
     });
 
     app.post('/api/playground/stream', playgroundLimiter, async (req, res) => {
+        const inputError = validatePlaygroundInput(req.body);
+        if (inputError) return res.status(400).json({ error: inputError, code: 'PLAYGROUND_INPUT_REQUIRED' });
+        const requestStartedAt = Date.now();
         const clientIp = req.ip || req.connection.remoteAddress;
 
         capacityManager.recordActivity(clientIp);
@@ -259,8 +273,10 @@ function registerPlaygroundRoutes(app, deps) {
 
             const capacityCheck = await capacityManager.consumeToken(clientIp, photoList.length > 0 ? 'vision' : 'text');
             if (!capacityCheck.allowed) {
-                res.write(`data: ${JSON.stringify({ type: 'error', message: capacityCheck.reason })}\n\n`);
-                res.end();
+                sseStage({ type: 'error', message: capacityCheck.reason,
+                    code: capacityCheck.code || 'AI_CAPACITY', status: capacityCheck.status || 429,
+                    retryAfter: capacityCheck.retryAfter || 60 });
+                cleanup();
                 return;
             }
 
@@ -306,7 +322,11 @@ function registerPlaygroundRoutes(app, deps) {
 
                 logger.info({ ip: clientIp, badge: compound.worstBadge, sections: compound.sections.length }, '🌊 Compound streaming complete');
             } else {
+                const answerId = require('node:crypto').randomUUID();
+                let draftShown = false;
                 const pipelineInput = {
+                    requestStartedAt,
+                    sessionId: clientIp,
                     message: message || '',
                     photos: photoList,
                     documents: docList,
@@ -319,7 +339,14 @@ function registerPlaygroundRoutes(app, deps) {
                     onStageChange: sseStage,
                     publicReader: research.reader,
                     signal: research.signal,
-                    surface: 'playground'
+                    surface: 'playground',
+                    onDraftDelta: content => {
+                        if (!draftShown) {
+                            draftShown = true;
+                            sseStage({ type: 'draft', answerId, status: 'unverified', message: 'Unverified draft — checking sources and auditing…' });
+                        }
+                        sseStage({ type: 'draft-token', answerId, content });
+                    }
                 };
 
                 const pipelineResult = await orchestrator.execute(pipelineInput);
@@ -330,10 +357,7 @@ function registerPlaygroundRoutes(app, deps) {
                     const failStep = pipelineResult.step || 'unknown';
                     const failReason = pipelineResult.error || 'Processing failed';
                     logger.error({ step: failStep, reason: failReason }, '❌ Pipeline failed');
-                    const userMessage = failReason.includes('Groq API')
-                        ? 'The AI service is temporarily busy. Please try again in a moment.'
-                        : 'Something went wrong processing your request. Please try again.';
-                    sseStage({ type: 'error', message: userMessage });
+                    sseStage({ type: 'error', ...publicAIError(pipelineResult) });
                     cleanup();
                     return;
                 }
@@ -350,7 +374,12 @@ function registerPlaygroundRoutes(app, deps) {
                     passCount: pipelineResult.passCount || 1
                 };
 
-                if (pipelineResult.fastPath) {
+                if (draftShown) {
+                    sseStage({ type: 'audit', answerId, audit: auditMetadata });
+                    sseStage({ type: 'done', answerId, fullContent: verifiedAnswer, replacesDraft: true,
+                        corrected: !!pipelineResult.retryCount || badge === 'corrected' || badge === 'refused' });
+                    cleanup();
+                } else if (pipelineResult.fastPath) {
                     logger.debug('⚡ Fast-path: Skipping personality pass (pre-crafted message)');
                     auditMetadata.passCount = 0;
                     sseStage({ type: 'audit', audit: auditMetadata });
@@ -378,9 +407,7 @@ function registerPlaygroundRoutes(app, deps) {
         } catch (error) {
             if (research.signal.aborted) return;
             logger.error({ err: error }, '❌ Streaming error');
-            sseStage({ type: 'error', code: error.code === 'AI_CAPACITY' ? 'AI_CAPACITY' : undefined,
-                retryAfter: error.code === 'AI_CAPACITY' ? error.retryAfter : undefined,
-                message: error.code === 'AI_CAPACITY' ? error.message : 'An error occurred. Please try again.' });
+            sseStage({ type: 'error', ...publicAIError(error) });
             cleanup();
         } finally {
             await research.close();
